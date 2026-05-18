@@ -7,11 +7,14 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
+  ImageBackground,
   StatusBar,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+
+const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 import { VENUES, type Venue } from '../../data/mockData';
 
 const TIME_SLOTS = [
@@ -78,8 +81,8 @@ export default function BookScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#16a34a" />
+    <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
+      <StatusBar barStyle="light-content" backgroundColor="#14532d" />
       <SafeAreaView style={styles.safeHeader}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Book Venue</Text>
@@ -295,7 +298,7 @@ export default function BookScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ImageBackground>
   );
 }
 
@@ -338,8 +341,8 @@ function VenueCard({ venue, onBook }: { venue: Venue; onBook: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f3f4f6' },
-  safeHeader: { backgroundColor: '#16a34a' },
+  root: { flex: 1 },
+  safeHeader: { backgroundColor: 'rgba(0,0,0,0.45)' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

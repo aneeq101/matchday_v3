@@ -6,11 +6,14 @@ import {
   ScrollView,
   TouchableOpacity,
   Modal,
+  ImageBackground,
   StatusBar,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+
+const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 import { BOOKINGS, MY_MATCHES, type Booking, type MatchItem } from '../../data/mockData';
 
 export default function MyTurfScreen() {
@@ -19,8 +22,8 @@ export default function MyTurfScreen() {
   const [notifVisible, setNotifVisible] = useState(false);
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#16a34a" />
+    <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
+      <StatusBar barStyle="light-content" backgroundColor="#14532d" />
       <SafeAreaView style={styles.safeHeader}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>My Turf</Text>
@@ -197,7 +200,7 @@ export default function MyTurfScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-    </View>
+    </ImageBackground>
   );
 }
 
@@ -246,8 +249,8 @@ function MatchCard({ match, onPress }: { match: MatchItem; onPress: () => void }
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f3f4f6' },
-  safeHeader: { backgroundColor: '#16a34a' },
+  root: { flex: 1 },
+  safeHeader: { backgroundColor: 'rgba(0,0,0,0.45)' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
