@@ -9,6 +9,7 @@ import {
   TextInput,
   StatusBar,
   FlatList,
+  ImageBackground,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { PLAYERS, POSTS, type Player, type Post } from '../../data/mockData';
 import PlayerProfileModal from '../../components/PlayerProfileModal';
+
+const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 
 const SKILL_COLORS: Record<string, string> = {
   Beginner: '#3b82f6',
@@ -105,24 +108,28 @@ export default function HoodScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#16a34a" />
-      <SafeAreaView style={styles.safeHeader}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>The Hood</Text>
-          <TouchableOpacity onPress={() => router.push('/messages')}>
-            <Ionicons name="chatbubbles-outline" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.statsRow}>
-          <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
-            <Ionicons name="people" size={18} color="#fff" />
-            <Text style={styles.statText}>247 Active Players</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
-            <Ionicons name="search" size={18} color="#fff" />
-            <Text style={styles.statText}>38 Looking Today</Text>
-          </TouchableOpacity>
-        </View>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <SafeAreaView style={styles.safeHeader} edges={['top']}>
+        <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.headerBg} resizeMode="cover">
+          <View style={styles.headerOverlay}>
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>The Hood</Text>
+              <TouchableOpacity onPress={() => router.push('/messages')}>
+                <Ionicons name="chatbubbles-outline" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.statsRow}>
+              <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
+                <Ionicons name="people" size={18} color="#fff" />
+                <Text style={styles.statText}>247 Active Players</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
+                <Ionicons name="search" size={18} color="#fff" />
+                <Text style={styles.statText}>38 Looking Today</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ImageBackground>
       </SafeAreaView>
 
       <ScrollView style={styles.feed} contentContainerStyle={styles.feedContent}>
@@ -141,7 +148,11 @@ export default function HoodScreen() {
       </ScrollView>
 
       <TouchableOpacity style={styles.fab} onPress={() => setShowCreateModal(true)}>
-        <Ionicons name="add" size={28} color="#fff" />
+        <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.fabImage} resizeMode="cover">
+          <View style={styles.fabOverlay}>
+            <Ionicons name="add" size={28} color="#fff" />
+          </View>
+        </ImageBackground>
       </TouchableOpacity>
 
       {/* Players List Modal */}
@@ -476,7 +487,11 @@ function PlayerCard({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f3f4f6' },
-  safeHeader: { backgroundColor: '#16a34a' },
+  safeHeader: { overflow: 'hidden' },
+  headerBg: { width: '100%' },
+  headerOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.42)',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -507,13 +522,18 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#16a34a',
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 6,
+  },
+  fabImage: { width: 56, height: 56 },
+  fabOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   postCard: {
     backgroundColor: '#fff',
