@@ -73,9 +73,9 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.avatarSection}>
               <View style={styles.avatarCircle}>
-                <Text style={styles.avatarInitials}>AH</Text>
+                <Text style={styles.avatarInitials}>AA</Text>
               </View>
-              <Text style={styles.profileName}>Ali Hassan</Text>
+              <Text style={styles.profileName}>Aneeq Ahmad</Text>
               <View style={styles.locationRow}>
                 <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.8)" />
                 <Text style={styles.profileLocation}>Model Town, Lahore</Text>

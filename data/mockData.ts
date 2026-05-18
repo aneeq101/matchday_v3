@@ -47,6 +47,7 @@ export interface Venue {
   distance: string;
   pricePerHour: number;
   imageColor: string;
+  coordinates: { latitude: number; longitude: number };
 }
 
 export interface Tournament {
@@ -284,6 +285,7 @@ export const VENUES: Venue[] = [
     distance: '1.2 km',
     pricePerHour: 2500,
     imageColor: '#16a34a',
+    coordinates: { latitude: 31.4834, longitude: 74.3293 },
   },
   {
     id: '2',
@@ -294,6 +296,7 @@ export const VENUES: Venue[] = [
     distance: '2.8 km',
     pricePerHour: 3000,
     imageColor: '#3b82f6',
+    coordinates: { latitude: 31.5176, longitude: 74.3339 },
   },
   {
     id: '3',
@@ -304,6 +307,29 @@ export const VENUES: Venue[] = [
     distance: '5.4 km',
     pricePerHour: 4000,
     imageColor: '#f59e0b',
+    coordinates: { latitude: 31.4697, longitude: 74.4077 },
+  },
+  {
+    id: '4',
+    name: 'Johar Town Basketball Court',
+    rating: 4.0,
+    address: 'Block E, Johar Town, Lahore',
+    sports: ['Basketball', 'Badminton'],
+    distance: '4.1 km',
+    pricePerHour: 1800,
+    imageColor: '#8b5cf6',
+    coordinates: { latitude: 31.4702, longitude: 74.2823 },
+  },
+  {
+    id: '5',
+    name: 'Wapda Town Football Ground',
+    rating: 4.3,
+    address: 'Main Boulevard, Wapda Town, Lahore',
+    sports: ['Football', 'Cricket'],
+    distance: '6.2 km',
+    pricePerHour: 2000,
+    imageColor: '#ef4444',
+    coordinates: { latitude: 31.4469, longitude: 74.2741 },
   },
 ];
 
