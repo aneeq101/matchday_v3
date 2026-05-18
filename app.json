@@ -28,8 +28,7 @@
       "output": "static"
     },
     "plugins": [
-      "expo-router",
-      "react-native-maps"
+      "expo-router"
     ],
     "experiments": {
       "typedRoutes": true
