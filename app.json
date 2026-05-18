@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "MatchDay",
+    "slug": "matchday-v3",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "matchday",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#16a34a"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
