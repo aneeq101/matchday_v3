@@ -6,10 +6,10 @@ import {
   ScrollView,
   TouchableOpacity,
   Modal,
-  SafeAreaView,
   StatusBar,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BOOKINGS, MY_MATCHES, type Booking, type MatchItem } from '../../data/mockData';
 

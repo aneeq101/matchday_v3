@@ -7,11 +7,11 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
-  SafeAreaView,
   StatusBar,
   FlatList,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { PLAYERS, POSTS, type Player, type Post } from '../../data/mockData';
