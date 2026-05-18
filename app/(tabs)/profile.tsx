@@ -57,13 +57,14 @@ export default function ProfileScreen() {
   };
 
   return (
-    <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
-      <StatusBar barStyle="light-content" backgroundColor="#14532d" />
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor="#16a34a" />
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         {/* Header */}
-        <View style={styles.profileHeader}>
-          <SafeAreaView>
+        <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.profileHeader} resizeMode="cover">
+          <View style={styles.profileHeaderOverlay}>
+          <SafeAreaView edges={['top']}>
             <View style={styles.headerTop}>
               <Text style={styles.headerTitle}>Profile</Text>
               <TouchableOpacity onPress={() => router.push('/messages')}>
@@ -81,7 +82,8 @@ export default function ProfileScreen() {
               </View>
             </View>
           </SafeAreaView>
-        </View>
+          </View>
+        </ImageBackground>
 
         {/* Stats Card (overlapping header) */}
         <View style={styles.statsCard}>
@@ -285,17 +287,20 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
-    </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: '#f3f4f6' },
   scroll: { flex: 1 },
   content: { paddingBottom: 32 },
   profileHeader: {
-    backgroundColor: 'rgba(0,0,0,0.45)',
     paddingBottom: 48,
+    overflow: 'hidden',
+  },
+  profileHeaderOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.40)',
   },
   headerTop: {
     flexDirection: 'row',

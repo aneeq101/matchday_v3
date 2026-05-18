@@ -81,19 +81,23 @@ export default function BookScreen() {
   };
 
   return (
-    <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
-      <StatusBar barStyle="light-content" backgroundColor="#14532d" />
-      <SafeAreaView style={styles.safeHeader}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Book Venue</Text>
-          <TouchableOpacity onPress={() => setViewMode(viewMode === 'list' ? 'map' : 'list')}>
-            <Ionicons
-              name={viewMode === 'list' ? 'map-outline' : 'list-outline'}
-              size={24}
-              color="#fff"
-            />
-          </TouchableOpacity>
-        </View>
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor="#16a34a" />
+      <SafeAreaView style={styles.safeHeader} edges={['top']}>
+        <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.headerBg} resizeMode="cover">
+          <View style={styles.headerOverlay}>
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>Book Venue</Text>
+              <TouchableOpacity onPress={() => setViewMode(viewMode === 'list' ? 'map' : 'list')}>
+                <Ionicons
+                  name={viewMode === 'list' ? 'map-outline' : 'list-outline'}
+                  size={24}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ImageBackground>
       </SafeAreaView>
 
       {/* Search */}
@@ -298,7 +302,7 @@ export default function BookScreen() {
           </View>
         </View>
       </Modal>
-    </ImageBackground>
+    </View>
   );
 }
 
@@ -341,8 +345,10 @@ function VenueCard({ venue, onBook }: { venue: Venue; onBook: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  safeHeader: { backgroundColor: 'rgba(0,0,0,0.45)' },
+  root: { flex: 1, backgroundColor: '#f3f4f6' },
+  safeHeader: { overflow: 'hidden' },
+  headerBg: { width: '100%' },
+  headerOverlay: { backgroundColor: 'rgba(0,0,0,0.40)' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

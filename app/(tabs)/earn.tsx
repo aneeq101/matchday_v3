@@ -93,15 +93,19 @@ export default function EarnScreen() {
   };
 
   return (
-    <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
-      <StatusBar barStyle="light-content" backgroundColor="#14532d" />
-      <SafeAreaView style={styles.safeHeader}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Play to Earn</Text>
-          <TouchableOpacity onPress={() => setShowCreateModal(true)}>
-            <Ionicons name="add-circle-outline" size={26} color="#fff" />
-          </TouchableOpacity>
-        </View>
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor="#16a34a" />
+      <SafeAreaView style={styles.safeHeader} edges={['top']}>
+        <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.headerBg} resizeMode="cover">
+          <View style={styles.headerOverlay}>
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>Play to Earn</Text>
+              <TouchableOpacity onPress={() => setShowCreateModal(true)}>
+                <Ionicons name="add-circle-outline" size={26} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ImageBackground>
       </SafeAreaView>
 
       {/* Filter Tabs */}
@@ -304,7 +308,7 @@ export default function EarnScreen() {
           </SafeAreaView>
         </View>
       </Modal>
-    </ImageBackground>
+    </View>
   );
 }
 
@@ -378,8 +382,10 @@ function EventCard({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  safeHeader: { backgroundColor: 'rgba(0,0,0,0.45)' },
+  root: { flex: 1, backgroundColor: '#f3f4f6' },
+  safeHeader: { overflow: 'hidden' },
+  headerBg: { width: '100%' },
+  headerOverlay: { backgroundColor: 'rgba(0,0,0,0.40)' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

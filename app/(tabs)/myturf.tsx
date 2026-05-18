@@ -22,18 +22,22 @@ export default function MyTurfScreen() {
   const [notifVisible, setNotifVisible] = useState(false);
 
   return (
-    <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
-      <StatusBar barStyle="light-content" backgroundColor="#14532d" />
-      <SafeAreaView style={styles.safeHeader}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>My Turf</Text>
-          <TouchableOpacity onPress={() => setNotifVisible(true)}>
-            <View>
-              <Ionicons name="notifications-outline" size={24} color="#fff" />
-              <View style={styles.notifDot} />
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor="#16a34a" />
+      <SafeAreaView style={styles.safeHeader} edges={['top']}>
+        <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.headerBg} resizeMode="cover">
+          <View style={styles.headerOverlay}>
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>My Turf</Text>
+              <TouchableOpacity onPress={() => setNotifVisible(true)}>
+                <View>
+                  <Ionicons name="notifications-outline" size={24} color="#fff" />
+                  <View style={styles.notifDot} />
+                </View>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-        </View>
+          </View>
+        </ImageBackground>
       </SafeAreaView>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
@@ -200,7 +204,7 @@ export default function MyTurfScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-    </ImageBackground>
+    </View>
   );
 }
 
@@ -249,8 +253,10 @@ function MatchCard({ match, onPress }: { match: MatchItem; onPress: () => void }
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  safeHeader: { backgroundColor: 'rgba(0,0,0,0.45)' },
+  root: { flex: 1, backgroundColor: '#f3f4f6' },
+  safeHeader: { overflow: 'hidden' },
+  headerBg: { width: '100%' },
+  headerOverlay: { backgroundColor: 'rgba(0,0,0,0.40)' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

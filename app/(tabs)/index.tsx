@@ -107,25 +107,29 @@ export default function HoodScreen() {
   };
 
   return (
-    <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
-      <StatusBar barStyle="light-content" backgroundColor="#14532d" />
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor="#16a34a" />
       <SafeAreaView style={styles.safeHeader} edges={['top']}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>The Hood</Text>
-          <TouchableOpacity onPress={() => router.push('/messages')}>
-            <Ionicons name="chatbubbles-outline" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.statsRow}>
-          <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
-            <Ionicons name="people" size={18} color="#fff" />
-            <Text style={styles.statText}>247 Active Players</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
-            <Ionicons name="search" size={18} color="#fff" />
-            <Text style={styles.statText}>38 Looking Today</Text>
-          </TouchableOpacity>
-        </View>
+        <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.headerBg} resizeMode="cover">
+          <View style={styles.headerOverlay}>
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>The Hood</Text>
+              <TouchableOpacity onPress={() => router.push('/messages')}>
+                <Ionicons name="chatbubbles-outline" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.statsRow}>
+              <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
+                <Ionicons name="people" size={18} color="#fff" />
+                <Text style={styles.statText}>247 Active Players</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
+                <Ionicons name="search" size={18} color="#fff" />
+                <Text style={styles.statText}>38 Looking Today</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ImageBackground>
       </SafeAreaView>
 
       <ScrollView style={styles.feed} contentContainerStyle={styles.feedContent}>
@@ -344,7 +348,7 @@ export default function HoodScreen() {
           router.push('/messages');
         }}
       />
-    </ImageBackground>
+    </View>
   );
 }
 
@@ -482,8 +486,10 @@ function PlayerCard({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  safeHeader: { backgroundColor: 'rgba(0,0,0,0.45)' },
+  root: { flex: 1, backgroundColor: '#f3f4f6' },
+  safeHeader: { overflow: 'hidden' },
+  headerBg: { width: '100%' },
+  headerOverlay: { backgroundColor: 'rgba(0,0,0,0.40)' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
