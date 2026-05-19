@@ -50,6 +50,7 @@ export interface Venue {
   imageColor: string;
   offsetKm?: { dx: number; dy: number };
   coord?: { latitude: number; longitude: number };
+  source?: 'mock' | 'live';
 }
 
 export interface Tournament {
