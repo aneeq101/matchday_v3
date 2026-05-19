@@ -22,6 +22,7 @@ export interface Player {
   joinDate: string;
   stats: { matches: number; wins: number; rank: string };
   avatarColor: string;
+  offsetKm: { dx: number; dy: number };
 }
 
 export interface Post {
@@ -47,7 +48,7 @@ export interface Venue {
   distance: string;
   pricePerHour: number;
   imageColor: string;
-  coordinates: { latitude: number; longitude: number };
+  offsetKm: { dx: number; dy: number };
 }
 
 export interface Tournament {
@@ -131,6 +132,7 @@ export const PLAYERS: Player[] = [
     joinDate: 'Jan 2024',
     stats: { matches: 47, wins: 32, rank: 'Gold' },
     avatarColor: '#16a34a',
+    offsetKm: { dx: 0.5, dy: 1.1 },
   },
   {
     id: '2',
@@ -148,6 +150,7 @@ export const PLAYERS: Player[] = [
     joinDate: 'Mar 2024',
     stats: { matches: 31, wins: 22, rank: 'Silver' },
     avatarColor: '#8b5cf6',
+    offsetKm: { dx: -2.0, dy: 2.0 },
   },
   {
     id: '3',
@@ -162,6 +165,7 @@ export const PLAYERS: Player[] = [
     joinDate: 'Feb 2024',
     stats: { matches: 63, wins: 45, rank: 'Platinum' },
     avatarColor: '#f59e0b',
+    offsetKm: { dx: 3.0, dy: -2.8 },
   },
   {
     id: '4',
@@ -176,6 +180,7 @@ export const PLAYERS: Player[] = [
     joinDate: 'Apr 2024',
     stats: { matches: 19, wins: 11, rank: 'Bronze' },
     avatarColor: '#ec4899',
+    offsetKm: { dx: -5.5, dy: -4.8 },
   },
   {
     id: '5',
@@ -190,6 +195,7 @@ export const PLAYERS: Player[] = [
     joinDate: 'Dec 2023',
     stats: { matches: 28, wins: 15, rank: 'Silver' },
     avatarColor: '#3b82f6',
+    offsetKm: { dx: -2.5, dy: -2.4 },
   },
   {
     id: '6',
@@ -204,6 +210,7 @@ export const PLAYERS: Player[] = [
     joinDate: 'Jun 2024',
     stats: { matches: 54, wins: 41, rank: 'Gold' },
     avatarColor: '#06b6d4',
+    offsetKm: { dx: -1.5, dy: 1.5 },
   },
 ];
 
@@ -285,7 +292,7 @@ export const VENUES: Venue[] = [
     distance: '1.2 km',
     pricePerHour: 2500,
     imageColor: '#16a34a',
-    coordinates: { latitude: 31.4834, longitude: 74.3293 },
+    offsetKm: { dx: 0.5, dy: 1.1 },
   },
   {
     id: '2',
@@ -296,7 +303,7 @@ export const VENUES: Venue[] = [
     distance: '2.8 km',
     pricePerHour: 3000,
     imageColor: '#3b82f6',
-    coordinates: { latitude: 31.5176, longitude: 74.3339 },
+    offsetKm: { dx: -2.0, dy: 2.0 },
   },
   {
     id: '3',
@@ -307,7 +314,7 @@ export const VENUES: Venue[] = [
     distance: '5.4 km',
     pricePerHour: 4000,
     imageColor: '#f59e0b',
-    coordinates: { latitude: 31.4697, longitude: 74.4077 },
+    offsetKm: { dx: 4.0, dy: -3.6 },
   },
   {
     id: '4',
@@ -318,7 +325,7 @@ export const VENUES: Venue[] = [
     distance: '4.1 km',
     pricePerHour: 1800,
     imageColor: '#8b5cf6',
-    coordinates: { latitude: 31.4702, longitude: 74.2823 },
+    offsetKm: { dx: -3.0, dy: -2.8 },
   },
   {
     id: '5',
@@ -329,7 +336,7 @@ export const VENUES: Venue[] = [
     distance: '6.2 km',
     pricePerHour: 2000,
     imageColor: '#ef4444',
-    coordinates: { latitude: 31.4469, longitude: 74.2741 },
+    offsetKm: { dx: -5.0, dy: -3.7 },
   },
 ];
 
@@ -502,3 +509,22 @@ export const CHAT_MESSAGES: Record<string, Message[]> = {
     { id: '2', conversationId: '4', text: 'Yes! Already registered. Looking forward to the match!', sent: false, time: '2d ago' },
   ],
 };
+
+import { offsetCoord, distanceKm } from '../utils/geo';
+import type { Coord } from '../utils/geo';
+
+export function getVenueCoord(base: Coord, venue: Venue) {
+  return offsetCoord(base, venue.offsetKm.dx, venue.offsetKm.dy);
+}
+
+export function getPlayerCoord(base: Coord, player: Player) {
+  return offsetCoord(base, player.offsetKm.dx, player.offsetKm.dy);
+}
+
+export function venueDistanceKm(base: Coord, venue: Venue) {
+  return distanceKm(base, getVenueCoord(base, venue));
+}
+
+export function playerDistanceKm(base: Coord, player: Player) {
+  return distanceKm(base, getPlayerCoord(base, player));
+}

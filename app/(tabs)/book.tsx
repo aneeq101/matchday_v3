@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { VENUES, type Venue } from '../../data/mockData';
+import { VENUES, getVenueCoord, type Venue } from '../../data/mockData';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 const USER_LOCATION = { latitude: 31.5204, longitude: 74.3587 };
@@ -169,7 +169,7 @@ export default function BookScreen() {
           {VENUES.map((venue) => (
             <Marker
               key={venue.id}
-              coordinate={venue.coordinates}
+              coordinate={getVenueCoord(USER_LOCATION, venue)}
               pinColor={venue.imageColor}
             >
               <Callout
