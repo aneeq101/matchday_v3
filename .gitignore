@@ -10,3 +10,5 @@ web-build/
 
 expo-env.d.ts
 # @end expo-cli
+# Local Claude Code settings (contains secrets)
+.claude/settings.local.json
