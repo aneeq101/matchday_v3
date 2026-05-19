@@ -223,14 +223,31 @@ Leaflet accesses `window` at module load time, which breaks with SSR pre-renderi
 `@react-native-community/slider` uses `ReactDOM.findDOMNode` (removed in React 19) on web. Solution: `RadiusSlider.native.tsx` wraps the community slider; `RadiusSlider.web.tsx` uses `<input type="range">` directly.
 
 ### Mobile marker tap — bottom card overlay (replaces Callout)
-`Callout tooltip onPress` is unreliable on Android with react-native-maps (touches don't always register). Fix: removed `<Callout>` entirely. `Marker` now uses `onPress` to set a `selectedVenue` state in `BookMap.native.tsx`. A floating bottom card (absolutely positioned) renders over the map when a marker is selected, showing venue details and a Book Now button. Tapping the map background (`MapView onPress`) dismisses it. Selected marker highlights green via `tracksViewChanges`.
+`Callout tooltip onPress` is unreliable on Android with react-native-maps (touches don't always register). Fix: removed `<Callout>` entirely. `Marker` now uses `onPress` to set a `selectedVenue` state in `BookMap.native.tsx`. A floating bottom card (absolutely positioned) renders over the map when a marker is selected, showing venue details and a Book Now button. Tapping the map background (`MapView onPress`) dismisses it. Selected marker highlights green.
+
+### No GPS fallback — return null, not a hardcoded city
+`useUserLocation` returns `null` when location permission is denied or GPS fails (no FALLBACK coordinate). All consumers already guard with `!location`, so: the radius filter is skipped (all venues shown), the map centres on the venue centroid, and the live-search bar shows "Enable location" rather than firing an API call for the wrong city.
+
+### Mobile map — uncontrolled region + programmatic sync
+`BookMap.native.tsx` uses `initialRegion` (uncontrolled) instead of `region` (controlled). The controlled prop caused the map to snap back to the calculated region on every re-render, preventing user zoom/pan. The slider and GPS location now drive the map via `mapRef.current.animateToRegion()`. Two ref flags break the feedback loop:
+- `programmaticRef` — set before `animateToRegion`; suppresses the resulting `onRegionChangeComplete` so it doesn't echo back to the slider
+- `mapDrivenRef` — set in `onRegionChangeComplete`; suppresses the `useEffect` from re-animating when the radius change originated from the map
+
+### Native marker rendering (`tracksViewChanges`)
+All native markers use `tracksViewChanges={true}` unconditionally. On Android, starting a custom-view marker with `tracksViewChanges={false}` can prevent it from rendering at all.
 
 ### Overpass API live venue search
-When a sport filter is active and GPS is available, `book.tsx` fires a debounced (800 ms) POST to the Overpass API. The query targets `sport=<tag>` nodes and ways within the current radius. Results are mapped to the `Venue` interface (`source: 'live'`, `pricePerHour: 0`) and merged with filtered mock venues. A cancellation flag prevents stale responses from landing when the filter or location changes mid-flight. The API is CORS-enabled so it works from both browser (web) and React Native (native) without a proxy.
+When a sport filter is active and GPS is available, `book.tsx` fires a debounced (800 ms) POST to the Overpass API. The query targets `sport=<tag>` nodes and ways within the current radius. Results are mapped to the `Venue` interface (`source: 'live'`, `pricePerHour: 0`) and merged with filtered mock venues. A cancellation flag prevents stale responses from landing when the filter or location changes mid-flight.
+
+Three endpoints are tried in order with a 12-second `AbortController` timeout each; if all fail the error banner is shown:
+1. `https://overpass-api.de/api/interpreter` (primary)
+2. `https://overpass.kumi.systems/api/interpreter`
+3. `https://overpass.openstreetmap.ru/api/interpreter`
 
 ### Zoom ↔ Slider bidirectional sync
-- **Native**: `onRegionChangeComplete` on MapView → `km = round(latitudeDelta * 111 / 2.6)` → calls `onRadiusChange`
+- **Native**: `onRegionChangeComplete` on MapView → `km = round(latitudeDelta * 111 / 2.6)` → calls `onRadiusChange`; `programmaticRef` + `mapDrivenRef` prevent feedback loops (see above)
 - **Web**: `MapZoomSync` component uses `useMapEvents` (`zoomend` event) to update slider; slider prop change triggers `map.setZoom` via `useEffect` with a `programmaticRef` flag to avoid feedback loops
+- **Web `RecenterMap`**: only re-centres the Leaflet map when the user's real GPS location changes; venue-list changes no longer cause the map to jump
 
 ---
 
@@ -252,16 +269,18 @@ When a sport filter is active and GPS is available, `book.tsx` fires a debounced
 - Messages + Chat fully built
 - PlayerProfileModal reusable component complete
 - Interactive map working on iOS, Android, and Web
-- Map markers: sport-specific emoji + venue name label
+- Map markers: sport-specific emoji + venue name label — render correctly on Android (`tracksViewChanges` always true)
 - Map tap → booking modal working on all platforms (native uses bottom card overlay, no Callout)
+- Native map uses uncontrolled `initialRegion` + `mapRef` — user can freely zoom/pan; slider syncs bidirectionally without feedback loops
 - Radius slider syncs bidirectionally with map zoom
 - 13 real GPS venues in Toronto GTA area (stadiums + public tennis courts)
 - Only real-GPS venues shown on Book screen (no dummy data)
-- Map centers on Toronto venue centroid when no GPS available
+- Map centres on Toronto venue centroid when no GPS available (no hardcoded fallback city)
 - Google Maps API key configured in `app.json` for iOS/Android
 - Sport filter pills on Book screen — filters mock venues and triggers live Overpass search
-- Live nearby venue discovery via OpenStreetMap Overpass API (no API key required)
+- Live nearby venue discovery via OpenStreetMap Overpass API with 3-endpoint fallback chain (no API key required)
 - Live venues shown with "Live" badge; "Contact Venue" shown in place of unknown prices
+- Live search status bar shows "Enable location" when GPS unavailable (not an error)
 - All UI functional with mock data
 - TypeScript compiles with zero errors
 - Main branch: `main` on `aneeq101/matchday_v3`
