@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react';
 import { Platform } from 'react-native';
 import type { Coord } from '../utils/geo';
 
-const FALLBACK: Coord = { latitude: 51.5074, longitude: -0.1278 }; // London as neutral fallback
-
 export function useUserLocation() {
   const [location, setLocation] = useState<Coord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -18,14 +16,12 @@ export function useUserLocation() {
             setLoading(false);
           },
           () => {
-            setLocation(FALLBACK);
             setPermissionDenied(true);
             setLoading(false);
           },
           { timeout: 8000 }
         );
       } else {
-        setLocation(FALLBACK);
         setLoading(false);
       }
       return;
@@ -38,7 +34,6 @@ export function useUserLocation() {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           setPermissionDenied(true);
-          setLocation(FALLBACK);
           setLoading(false);
           return;
         }
@@ -47,7 +42,7 @@ export function useUserLocation() {
         });
         setLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
       } catch {
-        setLocation(FALLBACK);
+        // location stays null
       } finally {
         setLoading(false);
       }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
 import MapView, { Marker, Circle } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +29,11 @@ interface Props {
 
 export default function BookMap({ location, venues, radius, onBookVenue, onRadiusChange }: Props) {
   const [selected, setSelected] = useState<Venue | null>(null);
+  const mapRef = useRef<MapView>(null);
+  // Prevents onRegionChangeComplete from firing during a programmatic animateToRegion
+  const programmaticRef = useRef(false);
+  // Prevents animateToRegion from firing when the radius change originated from the map
+  const mapDrivenRef = useRef(false);
 
   const venueCenter =
     venues.length > 0
@@ -41,11 +46,32 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
   const center = location ?? venueCenter ?? { latitude: 43.6565, longitude: -79.38 };
   const delta = latDeltaForRadius(location ? radius : radius * 2);
 
+  // Sync map view when radius slider or GPS location changes
+  useEffect(() => {
+    if (mapDrivenRef.current) {
+      mapDrivenRef.current = false;
+      return;
+    }
+    if (!mapRef.current) return;
+    programmaticRef.current = true;
+    mapRef.current.animateToRegion(
+      {
+        latitude: center.latitude,
+        longitude: center.longitude,
+        latitudeDelta: delta,
+        longitudeDelta: delta,
+      },
+      300,
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location?.latitude, location?.longitude, radius]);
+
   return (
     <View style={{ flex: 1 }}>
       <MapView
+        ref={mapRef}
         style={StyleSheet.absoluteFill}
-        region={{
+        initialRegion={{
           latitude: center.latitude,
           longitude: center.longitude,
           latitudeDelta: delta,
@@ -55,8 +81,13 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
         showsMyLocationButton
         onPress={() => setSelected(null)}
         onRegionChangeComplete={(region) => {
+          if (programmaticRef.current) {
+            programmaticRef.current = false;
+            return;
+          }
           if (!onRadiusChange) return;
           const km = Math.max(1, Math.min(20, Math.round((region.latitudeDelta * 111) / 2.6)));
+          mapDrivenRef.current = true;
           onRadiusChange(km);
         }}
       >
@@ -79,7 +110,7 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
               key={venue.id}
               coordinate={coord}
               anchor={{ x: 0.5, y: 1 }}
-              tracksViewChanges={isSelected}
+              tracksViewChanges
               onPress={() => setSelected(venue)}
             >
               <View style={[styles.markerWrapper, isSelected && styles.markerWrapperSelected]}>

@@ -69,11 +69,12 @@ const userIcon = L.divIcon({
   iconAnchor: [8, 8],
 });
 
-function RecenterMap({ center }: { center: [number, number] }) {
+function RecenterMap({ location }: { location: [number, number] | null }) {
   const map = useMap();
   useEffect(() => {
-    map.setView(center, map.getZoom());
-  }, [center[0], center[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!location) return;
+    map.setView(location, map.getZoom());
+  }, [location?.[0], location?.[1]]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
 }
 
@@ -148,7 +149,7 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
         style={{ width: '100%', height: mapHeight || 500 }}
         zoomControl
       >
-        <RecenterMap center={center} />
+        <RecenterMap location={location ? [location.latitude, location.longitude] : null} />
         <MapZoomSync radius={radius} onRadiusChange={onRadiusChange} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

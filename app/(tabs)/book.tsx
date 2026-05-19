@@ -55,6 +55,12 @@ function osmToDisplaySport(osmSport: string): string {
   return osmSport.charAt(0).toUpperCase() + osmSport.slice(1);
 }
 
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.openstreetmap.ru/api/interpreter',
+];
+
 async function fetchOverpassVenues(
   location: Coord,
   radiusKm: number,
@@ -63,7 +69,7 @@ async function fetchOverpassVenues(
   const radiusM = Math.min(radiusKm * 1000, 10000);
   const { latitude: lat, longitude: lon } = location;
 
-  const query = `[out:json][timeout:15];
+  const query = `[out:json][timeout:12];
 (
   node["sport"="${osmSport}"](around:${radiusM},${lat},${lon});
   way["sport"="${osmSport}"](around:${radiusM},${lat},${lon});
@@ -72,35 +78,49 @@ async function fetchOverpassVenues(
 );
 out center;`;
 
-  const resp = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `data=${encodeURIComponent(query)}`,
-  });
-  if (!resp.ok) throw new Error('Overpass API error');
-
-  const json = await resp.json();
   const sport = osmToDisplaySport(osmSport);
   const color = SPORT_COLORS[osmSport] ?? '#6b7280';
 
-  return (json.elements as any[])
-    .filter((el) => el.lat || el.center?.lat)
-    .slice(0, 30)
-    .map((el): Venue => ({
-      id: `live_${el.id}`,
-      name: el.tags?.name || el.tags?.['name:en'] || `${sport} Venue`,
-      rating: 0,
-      address:
-        [el.tags?.['addr:street'], el.tags?.['addr:city']]
-          .filter(Boolean)
-          .join(', ') || 'Address unknown',
-      sports: [sport],
-      distance: '',
-      pricePerHour: 0,
-      imageColor: color,
-      coord: { latitude: el.lat ?? el.center.lat, longitude: el.lon ?? el.center.lon },
-      source: 'live',
-    }));
+  const body = `data=${encodeURIComponent(query)}`;
+
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!resp.ok) continue;
+
+      const json = await resp.json();
+      return (json.elements as any[])
+        .filter((el) => el.lat || el.center?.lat)
+        .slice(0, 30)
+        .map((el): Venue => ({
+          id: `live_${el.id}`,
+          name: el.tags?.name || el.tags?.['name:en'] || `${sport} Venue`,
+          rating: 0,
+          address:
+            [el.tags?.['addr:street'], el.tags?.['addr:city']]
+              .filter(Boolean)
+              .join(', ') || 'Address unknown',
+          sports: [sport],
+          distance: '',
+          pricePerHour: 0,
+          imageColor: color,
+          coord: { latitude: el.lat ?? el.center.lat, longitude: el.lon ?? el.center.lon },
+          source: 'live',
+        }));
+    } catch {
+      // try next endpoint
+    }
+  }
+
+  throw new Error('All Overpass endpoints failed');
 }
 
 function StarRating({ rating }: { rating: number }) {
