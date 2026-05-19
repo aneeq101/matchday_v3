@@ -1,0 +1,5 @@
+{
+  "name": "MatchDay",
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code",
+  "forwardPorts": [8081, 3000]
+}
