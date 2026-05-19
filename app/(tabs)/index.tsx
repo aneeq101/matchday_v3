@@ -108,29 +108,31 @@ export default function HoodScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#16a34a" />
-      <SafeAreaView style={styles.safeHeader} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <View style={styles.safeHeader}>
         <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.headerBg} resizeMode="cover">
           <View style={styles.headerOverlay}>
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>The Hood</Text>
-              <TouchableOpacity onPress={() => router.push('/messages')}>
-                <Ionicons name="chatbubbles-outline" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.statsRow}>
-              <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
-                <Ionicons name="people" size={18} color="#fff" />
-                <Text style={styles.statText}>247 Active Players</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
-                <Ionicons name="search" size={18} color="#fff" />
-                <Text style={styles.statText}>38 Looking Today</Text>
-              </TouchableOpacity>
-            </View>
+            <SafeAreaView edges={['top']}>
+              <View style={styles.header}>
+                <Text style={styles.headerTitle}>The Hood</Text>
+                <TouchableOpacity onPress={() => router.push('/messages')}>
+                  <Ionicons name="chatbubbles-outline" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.statsRow}>
+                <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
+                  <Ionicons name="people" size={18} color="#fff" />
+                  <Text style={styles.statText}>247 Active Players</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
+                  <Ionicons name="search" size={18} color="#fff" />
+                  <Text style={styles.statText}>38 Looking Today</Text>
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
           </View>
         </ImageBackground>
-      </SafeAreaView>
+      </View>
 
       <ScrollView style={styles.feed} contentContainerStyle={styles.feedContent}>
         {posts.map((post) => (

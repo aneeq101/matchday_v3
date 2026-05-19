@@ -93,23 +93,25 @@ export default function BookScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#16a34a" />
-      <SafeAreaView style={styles.safeHeader} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <View style={styles.safeHeader}>
         <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.headerBg} resizeMode="cover">
           <View style={styles.headerOverlay}>
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>Book Venue</Text>
-              <TouchableOpacity onPress={() => setViewMode(viewMode === 'list' ? 'map' : 'list')}>
-                <Ionicons
-                  name={viewMode === 'list' ? 'map-outline' : 'list-outline'}
-                  size={24}
-                  color="#fff"
-                />
-              </TouchableOpacity>
-            </View>
+            <SafeAreaView edges={['top']}>
+              <View style={styles.header}>
+                <Text style={styles.headerTitle}>Book Venue</Text>
+                <TouchableOpacity onPress={() => setViewMode(viewMode === 'list' ? 'map' : 'list')}>
+                  <Ionicons
+                    name={viewMode === 'list' ? 'map-outline' : 'list-outline'}
+                    size={24}
+                    color="#fff"
+                  />
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
           </View>
         </ImageBackground>
-      </SafeAreaView>
+      </View>
 
       {/* Search */}
       <View style={styles.searchWrapper}>

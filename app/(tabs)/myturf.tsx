@@ -23,22 +23,24 @@ export default function MyTurfScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#16a34a" />
-      <SafeAreaView style={styles.safeHeader} edges={['top']}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <View style={styles.safeHeader}>
         <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.headerBg} resizeMode="cover">
           <View style={styles.headerOverlay}>
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>My Turf</Text>
-              <TouchableOpacity onPress={() => setNotifVisible(true)}>
-                <View>
-                  <Ionicons name="notifications-outline" size={24} color="#fff" />
-                  <View style={styles.notifDot} />
-                </View>
-              </TouchableOpacity>
-            </View>
+            <SafeAreaView edges={['top']}>
+              <View style={styles.header}>
+                <Text style={styles.headerTitle}>My Turf</Text>
+                <TouchableOpacity onPress={() => setNotifVisible(true)}>
+                  <View>
+                    <Ionicons name="notifications-outline" size={24} color="#fff" />
+                    <View style={styles.notifDot} />
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
           </View>
         </ImageBackground>
-      </SafeAreaView>
+      </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         {/* Stats */}
