@@ -89,9 +89,18 @@ interface Props {
 export default function BookMap({ location, venues, radius, onBookVenue }: Props) {
   const [mapHeight, setMapHeight] = useState(500);
 
+  // When no GPS, center on the centroid of visible venues (e.g. Toronto area)
+  const venueCenter: [number, number] | null =
+    venues.length > 0
+      ? [
+          venues.reduce((s, v) => s + (v.coord?.latitude ?? 0), 0) / venues.length,
+          venues.reduce((s, v) => s + (v.coord?.longitude ?? 0), 0) / venues.length,
+        ]
+      : null;
+
   const center: [number, number] = location
     ? [location.latitude, location.longitude]
-    : [51.5074, -0.1278];
+    : venueCenter ?? [43.6565, -79.38]; // Toronto fallback
 
   return (
     <View
@@ -100,7 +109,7 @@ export default function BookMap({ location, venues, radius, onBookVenue }: Props
     >
       <MapContainer
         center={center}
-        zoom={13}
+        zoom={location ? 13 : 11}
         style={{ width: '100%', height: mapHeight || 500 }}
         zoomControl
       >
@@ -129,7 +138,7 @@ export default function BookMap({ location, venues, radius, onBookVenue }: Props
         )}
 
         {venues.map((venue) => {
-          const coord = getVenueCoord(location, venue);
+          const coord = venue.coord; // all venues here have real GPS coords
           if (!coord) return null;
           return (
             <Marker

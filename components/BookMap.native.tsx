@@ -26,8 +26,17 @@ interface Props {
 }
 
 export default function BookMap({ location, venues, radius, onBookVenue }: Props) {
-  const center = location ?? { latitude: 51.5074, longitude: -0.1278 };
-  const delta = latDeltaForRadius(radius);
+  // When no GPS, center on venue centroid so real venues are visible
+  const venueCenter =
+    venues.length > 0
+      ? {
+          latitude: venues.reduce((s, v) => s + (v.coord?.latitude ?? 0), 0) / venues.length,
+          longitude: venues.reduce((s, v) => s + (v.coord?.longitude ?? 0), 0) / venues.length,
+        }
+      : null;
+
+  const center = location ?? venueCenter ?? { latitude: 43.6565, longitude: -79.38 };
+  const delta = latDeltaForRadius(location ? radius : radius * 2); // zoom out more when no GPS
 
   return (
     <MapView
@@ -51,7 +60,7 @@ export default function BookMap({ location, venues, radius, onBookVenue }: Props
         />
       )}
       {venues.map((venue) => {
-        const coord = getVenueCoord(location, venue);
+        const coord = venue.coord; // all venues here have real GPS coords
         if (!coord) return null;
         const emoji = sportEmoji(venue.sports);
         return (

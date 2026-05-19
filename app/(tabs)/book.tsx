@@ -63,11 +63,13 @@ export default function BookScreen() {
   const [specialRequests, setSpecialRequests] = useState('');
 
   const filteredVenues = VENUES.filter((v) => {
+    if (!v.coord) return false; // exclude offset-based dummy venues
     const matchSearch =
       searchText === '' ||
       v.name.toLowerCase().includes(searchText.toLowerCase()) ||
       v.address.toLowerCase().includes(searchText.toLowerCase()) ||
       v.sports.some((s) => s.toLowerCase().includes(searchText.toLowerCase()));
+    // When no GPS yet, show all real venues for discovery
     const matchRadius = !location || venueDistanceKm(location, v) <= radius;
     return matchSearch && matchRadius;
   }).sort((a, b) => {
@@ -182,7 +184,7 @@ export default function BookScreen() {
               distance={
                 location
                   ? formatDistance(venueDistanceKm(location, venue))
-                  : venue.distance
+                  : '–'
               }
               onBook={() => setBookingVenue(venue)}
             />
