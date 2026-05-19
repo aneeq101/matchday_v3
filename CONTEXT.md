@@ -97,12 +97,15 @@ Tournament and event discovery.
 Venue search and booking.
 
 - **Search bar** — filters venue list in real time by name, address, or sport
+- **Sport filter pills** — horizontal scrollable row (All / Football / Cricket / Tennis / Basketball / Badminton / Baseball); selecting a sport filters mock venues and triggers a live Overpass API search for real nearby venues
 - **List / Map toggle** — switches between list view and interactive map
 - **Radius slider** — adjusts search radius (1–20 km); syncs bidirectionally with map zoom
-- **Venue cards** — coloured image header, star rating, address, sport tags, price per hour, Book Now button
+- **Live search status bar** — shown when a sport filter is active; displays loading spinner, result count, API error, or "enable location" prompt as appropriate
+- **Venue cards** — coloured image header, star rating, address, sport tags, price per hour, Book Now button; live (Overpass) venues show a blue "Live" badge and "Contact Venue" instead of a price
 - **Interactive map (native)** — `react-native-maps` MapView with:
   - Sport-specific emoji markers (⚽🏏🏀🎾🏸⚾🏟️) with venue name label
-  - Tap marker → Callout with venue info and "Book Now" button (TouchableOpacity inside Callout)
+  - Tap marker → `Marker onPress` sets selected venue; floating bottom card overlay shows venue details + Book Now button (selected marker turns green)
+  - Tapping map background dismisses the card
   - User location circle (green, radius-sized)
   - `onRegionChangeComplete` → updates radius slider from map zoom level
   - Centers on venue centroid (Toronto area) when no GPS
@@ -112,13 +115,14 @@ Venue search and booking.
   - `MapZoomSync` component: `zoomend` event → updates radius slider; slider change → calls `map.setZoom`
   - Leaflet CSS injected from CDN at module load
   - `RecenterMap` component keeps map centered on user
-- **Booking modal** — date, time slot grid, duration, sport, players count, special requests, total price calculation
+- **Booking modal** — date, time slot grid, duration, sport (pre-filled from active filter), players count, special requests, total price (hidden for contact-only venues)
 - **Booking Confirmed screen** — success state shown after booking
 
 **Venue filtering rules:**
 - Only venues with `coord` (real GPS) are shown — offset-based dummy venues are excluded
-- When GPS unavailable: all real venues shown (no radius filter)
-- When GPS available: radius filter applied, sorted by distance
+- When GPS unavailable: all real venues shown (no radius filter); live search disabled
+- When GPS available: radius filter applied, sorted by distance; sport filter triggers live Overpass search
+- Mock and live venues are merged in both list and map views; live results are deduped by index (max 30 from API)
 
 ### Tab 5 — Profile (`profile.tsx`)
 User profile and settings.
@@ -166,8 +170,16 @@ All data is local mock data — no API or database connected yet.
 **Venue data model:**
 - `offsetKm?: { dx, dy }` — relative to user's GPS (mock venues, excluded from Book screen)
 - `coord?: { latitude, longitude }` — absolute GPS (real venues, shown on map and list)
+- `source?: 'mock' | 'live'` — `'live'` for Overpass API results; undefined/`'mock'` for local data
 - Helper: `getVenueCoord(base, venue)` — prefers `venue.coord`, falls back to offset
 - Helper: `venueDistanceKm(base, venue)` — handles both absolute and offset venues
+
+**Live venue data (Overpass API):**
+- Fetched at runtime from `https://overpass-api.de/api/interpreter` (OpenStreetMap)
+- Triggered when a sport filter is selected and user location is available
+- Query uses `sport=<osm-tag>` within current radius (capped at 10 km for API); returns up to 30 results
+- OSM sport tag mapping: Football → `soccer`, Tennis → `tennis`, Cricket → `cricket`, Basketball → `basketball`, Badminton → `badminton`, Baseball → `baseball`
+- Live venues have `pricePerHour: 0` (pricing unknown) and `source: 'live'`
 
 **Real GPS venues (GTA Toronto area):**
 
@@ -210,8 +222,11 @@ Leaflet accesses `window` at module load time, which breaks with SSR pre-renderi
 ### Platform-specific slider
 `@react-native-community/slider` uses `ReactDOM.findDOMNode` (removed in React 19) on web. Solution: `RadiusSlider.native.tsx` wraps the community slider; `RadiusSlider.web.tsx` uses `<input type="range">` directly.
 
-### Mobile Callout tap fix
-`Callout tooltip onPress` is unreliable on react-native-maps. Fix: wrap callout content in `<TouchableOpacity>` inside `<Callout tooltip>`.
+### Mobile marker tap — bottom card overlay (replaces Callout)
+`Callout tooltip onPress` is unreliable on Android with react-native-maps (touches don't always register). Fix: removed `<Callout>` entirely. `Marker` now uses `onPress` to set a `selectedVenue` state in `BookMap.native.tsx`. A floating bottom card (absolutely positioned) renders over the map when a marker is selected, showing venue details and a Book Now button. Tapping the map background (`MapView onPress`) dismisses it. Selected marker highlights green via `tracksViewChanges`.
+
+### Overpass API live venue search
+When a sport filter is active and GPS is available, `book.tsx` fires a debounced (800 ms) POST to the Overpass API. The query targets `sport=<tag>` nodes and ways within the current radius. Results are mapped to the `Venue` interface (`source: 'live'`, `pricePerHour: 0`) and merged with filtered mock venues. A cancellation flag prevents stale responses from landing when the filter or location changes mid-flight. The API is CORS-enabled so it works from both browser (web) and React Native (native) without a proxy.
 
 ### Zoom ↔ Slider bidirectional sync
 - **Native**: `onRegionChangeComplete` on MapView → `km = round(latitudeDelta * 111 / 2.6)` → calls `onRadiusChange`
@@ -238,15 +253,18 @@ Leaflet accesses `window` at module load time, which breaks with SSR pre-renderi
 - PlayerProfileModal reusable component complete
 - Interactive map working on iOS, Android, and Web
 - Map markers: sport-specific emoji + venue name label
-- Map tap → booking modal working on all platforms
+- Map tap → booking modal working on all platforms (native uses bottom card overlay, no Callout)
 - Radius slider syncs bidirectionally with map zoom
 - 13 real GPS venues in Toronto GTA area (stadiums + public tennis courts)
 - Only real-GPS venues shown on Book screen (no dummy data)
 - Map centers on Toronto venue centroid when no GPS available
 - Google Maps API key configured in `app.json` for iOS/Android
+- Sport filter pills on Book screen — filters mock venues and triggers live Overpass search
+- Live nearby venue discovery via OpenStreetMap Overpass API (no API key required)
+- Live venues shown with "Live" badge; "Contact Venue" shown in place of unknown prices
 - All UI functional with mock data
 - TypeScript compiles with zero errors
-- Deployed branch: `claude/review-app-code-9OtPO` on `aneeq101/matchday_v3`
+- Main branch: `main` on `aneeq101/matchday_v3`
 
 ---
 
@@ -271,9 +289,11 @@ Leaflet accesses `window` at module load time, which breaks with SSR pre-renderi
 - [x] Radius-based player filtering in The Hood tab
 - [x] Interactive map on web and mobile
 - [x] Sport-specific emoji markers with venue name labels
-- [x] Mobile marker tap opens booking modal
+- [x] Mobile marker tap opens booking modal (bottom card overlay, no Callout)
 - [x] Map zoom ↔ slider bidirectional sync
 - [x] Real GPS venues (Toronto GTA stadiums + public tennis courts)
+- [x] Sport filter on Book screen (All / Football / Cricket / Tennis / Basketball / Badminton / Baseball)
+- [x] Live nearby venue search via Overpass API (OpenStreetMap) — no API key required
 - [ ] Post comments and shares (currently counters only, no interaction)
 - [ ] Player follow / friend system
 - [ ] Broadcast to Nearby — real geofenced push
