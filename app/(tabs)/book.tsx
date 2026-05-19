@@ -14,23 +14,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { VENUES, getVenueCoord, venueDistanceKm, type Venue } from '../../data/mockData';
-import { latDeltaForRadius, formatDistance } from '../../utils/geo';
+import { VENUES, venueDistanceKm, type Venue } from '../../data/mockData';
+import { formatDistance } from '../../utils/geo';
 import { useUserLocation } from '../../hooks/useUserLocation';
+import BookMap from '../../components/BookMap';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
-
-let MapView: any = null;
-let Marker: any = null;
-let Callout: any = null;
-let Circle: any = null;
-if (Platform.OS !== 'web') {
-  const RNMaps = require('react-native-maps');
-  MapView = RNMaps.default;
-  Marker = RNMaps.Marker;
-  Callout = RNMaps.Callout;
-  Circle = RNMaps.Circle;
-}
 
 const TIME_SLOTS = [
   '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
@@ -102,8 +91,6 @@ export default function BookScreen() {
     setPlayersCount('10');
     setSpecialRequests('');
   };
-
-  const mapCenter = location ?? { latitude: 51.5074, longitude: -0.1278 };
 
   return (
     <View style={styles.root}>
@@ -194,57 +181,14 @@ export default function BookScreen() {
           ))}
           <View style={{ height: 20 }} />
         </ScrollView>
-      ) : Platform.OS === 'web' ? (
-        <View style={styles.mapPlaceholder}>
-          <Ionicons name="map-outline" size={64} color="#d1d5db" />
-          <Text style={styles.mapTitle}>Map View</Text>
-          <Text style={styles.mapSub}>Interactive map is available on iOS & Android</Text>
-          <TouchableOpacity style={styles.switchBtn} onPress={() => setViewMode('list')}>
-            <Text style={styles.switchBtnText}>Switch to List View</Text>
-          </TouchableOpacity>
-        </View>
       ) : (
-        <MapView
-          style={styles.map}
-          initialRegion={{
-            latitude: mapCenter.latitude,
-            longitude: mapCenter.longitude,
-            latitudeDelta: latDeltaForRadius(radius),
-            longitudeDelta: latDeltaForRadius(radius),
-          }}
-          showsUserLocation
-          showsMyLocationButton
-        >
-          {location && Circle && (
-            <Circle
-              center={location}
-              radius={radius * 1000}
-              fillColor="rgba(22,163,74,0.08)"
-              strokeColor="#16a34a"
-              strokeWidth={1.5}
-            />
-          )}
-          {VENUES.map((venue) => (
-            <Marker
-              key={venue.id}
-              coordinate={location ? getVenueCoord(location, venue) : { latitude: mapCenter.latitude, longitude: mapCenter.longitude }}
-              pinColor={venue.imageColor}
-            >
-              <Callout
-                tooltip
-                onPress={() => setBookingVenue(venue)}
-              >
-                <View style={styles.callout}>
-                  <Text style={styles.calloutName}>{venue.name}</Text>
-                  <Text style={styles.calloutPrice}>Rs {venue.pricePerHour}/hr</Text>
-                  <View style={styles.calloutBtn}>
-                    <Text style={styles.calloutBtnText}>Book Now</Text>
-                  </View>
-                </View>
-              </Callout>
-            </Marker>
-          ))}
-        </MapView>
+        <BookMap
+          location={location}
+          venues={filteredVenues}
+          radius={radius}
+          onBookVenue={setBookingVenue}
+          onSwitchToList={() => setViewMode('list')}
+        />
       )}
 
       {/* Booking Modal */}
@@ -501,37 +445,6 @@ const styles = StyleSheet.create({
   content: { padding: 14, gap: 14 },
   emptyState: { alignItems: 'center', paddingVertical: 60 },
   emptyText: { color: '#9ca3af', fontSize: 14, marginTop: 12 },
-  map: { flex: 1 },
-  callout: {
-    width: 200,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  calloutName: { fontWeight: '700', fontSize: 14, color: '#111827', marginBottom: 2 },
-  calloutPrice: { color: '#6b7280', fontSize: 12, marginBottom: 8 },
-  calloutBtn: {
-    backgroundColor: '#16a34a',
-    borderRadius: 8,
-    paddingVertical: 7,
-    alignItems: 'center',
-  },
-  calloutBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  mapPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  mapTitle: { fontSize: 20, fontWeight: '700', color: '#374151' },
-  mapSub: { color: '#9ca3af', fontSize: 14, textAlign: 'center', paddingHorizontal: 24 },
-  switchBtn: {
-    marginTop: 8,
-    backgroundColor: '#16a34a',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  switchBtnText: { color: '#fff', fontWeight: '700' },
   venueCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
