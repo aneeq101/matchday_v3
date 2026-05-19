@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Slider from '@react-native-community/slider';
 import {
   View,
   Text,
@@ -28,7 +29,6 @@ const TIME_SLOTS = [
 ];
 const SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton'];
 const DURATIONS = [1, 2, 3];
-const RADIUS_OPTIONS = [1, 3, 5, 10, 20];
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -138,26 +138,34 @@ export default function BookScreen() {
         </View>
       </View>
 
-      {/* Radius selector */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.radiusBar}
-        contentContainerStyle={styles.radiusBarContent}
-      >
-        {RADIUS_OPTIONS.map((r) => (
-          <TouchableOpacity
-            key={r}
-            style={[styles.radiusPill, radius === r && styles.radiusPillActive]}
-            onPress={() => setRadius(r)}
-          >
-            <Ionicons name="radio-button-on" size={12} color={radius === r ? '#fff' : '#6b7280'} />
-            <Text style={[styles.radiusPillText, radius === r && styles.radiusPillTextActive]}>
-              {r} km
+      {/* Radius slider */}
+      <View style={styles.sliderSection}>
+        <View style={styles.sliderLabelRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="radio-button-on-outline" size={15} color="#16a34a" />
+            <Text style={styles.sliderLabel}>Search Radius</Text>
+          </View>
+          <Text style={styles.sliderValue}>{radius} km</Text>
+        </View>
+        <Slider
+          style={styles.slider}
+          minimumValue={1}
+          maximumValue={20}
+          step={1}
+          value={radius}
+          onValueChange={(v) => setRadius(Math.round(v))}
+          minimumTrackTintColor="#16a34a"
+          maximumTrackTintColor="#e5e7eb"
+          thumbTintColor="#16a34a"
+        />
+        <View style={styles.sliderTicks}>
+          {[1, 5, 10, 15, 20].map((v) => (
+            <Text key={v} style={[styles.sliderTick, radius === v && styles.sliderTickActive]}>
+              {v}km
             </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+          ))}
+        </View>
+      </View>
 
       {viewMode === 'list' ? (
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
@@ -425,22 +433,31 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   searchInput: { flex: 1, fontSize: 14, color: '#111827' },
-  radiusBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  radiusBarContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 8, flexDirection: 'row' },
-  radiusPill: {
+  sliderSection: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  sliderLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    justifyContent: 'space-between',
+    marginBottom: 2,
   },
-  radiusPillActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  radiusPillText: { fontSize: 13, color: '#374151', fontWeight: '500' },
-  radiusPillTextActive: { color: '#fff' },
+  sliderLabel: { fontSize: 13, color: '#374151', fontWeight: '600' },
+  sliderValue: { fontSize: 14, color: '#16a34a', fontWeight: '800' },
+  slider: { width: '100%', height: 36 },
+  sliderTicks: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2,
+    marginBottom: 4,
+  },
+  sliderTick: { fontSize: 10, color: '#9ca3af' },
+  sliderTickActive: { color: '#16a34a', fontWeight: '700' },
   scroll: { flex: 1 },
   content: { padding: 14, gap: 14 },
   emptyState: { alignItems: 'center', paddingVertical: 60 },
