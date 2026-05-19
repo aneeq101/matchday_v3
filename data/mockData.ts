@@ -48,7 +48,8 @@ export interface Venue {
   distance: string;
   pricePerHour: number;
   imageColor: string;
-  offsetKm: { dx: number; dy: number };
+  offsetKm?: { dx: number; dy: number };
+  coord?: { latitude: number; longitude: number };
 }
 
 export interface Tournament {
@@ -338,6 +339,95 @@ export const VENUES: Venue[] = [
     imageColor: '#ef4444',
     offsetKm: { dx: -5.0, dy: -3.7 },
   },
+  // ── GTA Toronto – real GPS coordinates ─────────────────────────────────
+  {
+    id: 't1',
+    name: 'Scotiabank Arena',
+    rating: 4.9,
+    address: '40 Bay St, Toronto, ON',
+    sports: ['Basketball', 'Hockey'],
+    distance: '',
+    pricePerHour: 85000,
+    imageColor: '#1a1a2e',
+    coord: { latitude: 43.6435, longitude: -79.3791 },
+  },
+  {
+    id: 't2',
+    name: 'Rogers Centre',
+    rating: 4.7,
+    address: '1 Blue Jays Way, Toronto, ON',
+    sports: ['Baseball'],
+    distance: '',
+    pricePerHour: 60000,
+    imageColor: '#003087',
+    coord: { latitude: 43.6414, longitude: -79.3894 },
+  },
+  {
+    id: 't3',
+    name: 'BMO Field',
+    rating: 4.6,
+    address: '170 Princes Blvd, Toronto, ON',
+    sports: ['Football'],
+    distance: '',
+    pricePerHour: 45000,
+    imageColor: '#e31837',
+    coord: { latitude: 43.6335, longitude: -79.4179 },
+  },
+  {
+    id: 't4',
+    name: 'Sobeys Stadium',
+    rating: 4.8,
+    address: '1 Shoreham Dr, North York, ON',
+    sports: ['Tennis'],
+    distance: '',
+    pricePerHour: 12000,
+    imageColor: '#00843d',
+    coord: { latitude: 43.7729, longitude: -79.4988 },
+  },
+  {
+    id: 't5',
+    name: 'Varsity Centre',
+    rating: 4.3,
+    address: '299 Bloor St W, Toronto, ON',
+    sports: ['Football', 'Athletics'],
+    distance: '',
+    pricePerHour: 8000,
+    imageColor: '#002a5c',
+    coord: { latitude: 43.6664, longitude: -79.3993 },
+  },
+  {
+    id: 't6',
+    name: 'Lamport Stadium',
+    rating: 4.1,
+    address: '1155 King St W, Toronto, ON',
+    sports: ['Football'],
+    distance: '',
+    pricePerHour: 6500,
+    imageColor: '#c8102e',
+    coord: { latitude: 43.6412, longitude: -79.4278 },
+  },
+  {
+    id: 't7',
+    name: 'Toronto Cricket Club',
+    rating: 4.4,
+    address: '141 Wilson Ave, North York, ON',
+    sports: ['Cricket'],
+    distance: '',
+    pricePerHour: 9000,
+    imageColor: '#006b3c',
+    coord: { latitude: 43.7326, longitude: -79.4264 },
+  },
+  {
+    id: 't8',
+    name: 'Etobicoke Olympium',
+    rating: 4.2,
+    address: '590 Rathburn Rd W, Etobicoke, ON',
+    sports: ['Basketball', 'Badminton'],
+    distance: '',
+    pricePerHour: 5500,
+    imageColor: '#ff6b35',
+    coord: { latitude: 43.6477, longitude: -79.5620 },
+  },
 ];
 
 export const TOURNAMENTS: Tournament[] = [
@@ -513,7 +603,9 @@ export const CHAT_MESSAGES: Record<string, Message[]> = {
 import { offsetCoord, distanceKm } from '../utils/geo';
 import type { Coord } from '../utils/geo';
 
-export function getVenueCoord(base: Coord, venue: Venue) {
+export function getVenueCoord(base: Coord | null, venue: Venue): Coord | null {
+  if (venue.coord) return venue.coord;
+  if (!base || !venue.offsetKm) return null;
   return offsetCoord(base, venue.offsetKm.dx, venue.offsetKm.dy);
 }
 
@@ -521,8 +613,10 @@ export function getPlayerCoord(base: Coord, player: Player) {
   return offsetCoord(base, player.offsetKm.dx, player.offsetKm.dy);
 }
 
-export function venueDistanceKm(base: Coord, venue: Venue) {
-  return distanceKm(base, getVenueCoord(base, venue));
+export function venueDistanceKm(base: Coord, venue: Venue): number {
+  if (venue.coord) return distanceKm(base, venue.coord);
+  if (!venue.offsetKm) return Infinity;
+  return distanceKm(base, offsetCoord(base, venue.offsetKm.dx, venue.offsetKm.dy));
 }
 
 export function playerDistanceKm(base: Coord, player: Player) {

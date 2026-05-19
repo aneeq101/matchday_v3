@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Slider from '@react-native-community/slider';
+import RadiusSlider from '../../components/RadiusSlider';
 import {
   View,
   Text,
@@ -147,7 +147,7 @@ export default function BookScreen() {
           </View>
           <Text style={styles.sliderValue}>{radius} km</Text>
         </View>
-        <Slider
+        <RadiusSlider
           style={styles.slider}
           minimumValue={1}
           maximumValue={20}

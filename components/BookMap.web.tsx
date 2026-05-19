@@ -129,7 +129,7 @@ export default function BookMap({ location, venues, radius, onBookVenue }: Props
         )}
 
         {venues.map((venue) => {
-          const coord = location ? getVenueCoord(location, venue) : null;
+          const coord = getVenueCoord(location, venue);
           if (!coord) return null;
           return (
             <Marker
