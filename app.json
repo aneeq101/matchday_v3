@@ -28,7 +28,10 @@
       "output": "static"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      ["expo-location", {
+        "locationAlwaysAndWhenInUsePermission": "MatchDay needs your location to show venues and players near you."
+      }]
     ],
     "experiments": {
       "typedRoutes": true

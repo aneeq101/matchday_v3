@@ -10,22 +10,26 @@ import {
   ImageBackground,
   StatusBar,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { VENUES, getVenueCoord, type Venue } from '../../data/mockData';
+import { VENUES, getVenueCoord, venueDistanceKm, type Venue } from '../../data/mockData';
+import { latDeltaForRadius, formatDistance } from '../../utils/geo';
+import { useUserLocation } from '../../hooks/useUserLocation';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
-const USER_LOCATION = { latitude: 31.5204, longitude: 74.3587 };
 
 let MapView: any = null;
 let Marker: any = null;
 let Callout: any = null;
+let Circle: any = null;
 if (Platform.OS !== 'web') {
   const RNMaps = require('react-native-maps');
   MapView = RNMaps.default;
   Marker = RNMaps.Marker;
   Callout = RNMaps.Callout;
+  Circle = RNMaps.Circle;
 }
 
 const TIME_SLOTS = [
@@ -35,6 +39,7 @@ const TIME_SLOTS = [
 ];
 const SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton'];
 const DURATIONS = [1, 2, 3];
+const RADIUS_OPTIONS = [1, 3, 5, 10, 20];
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -53,8 +58,10 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 export default function BookScreen() {
+  const { location, loading: locationLoading } = useUserLocation();
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [searchText, setSearchText] = useState('');
+  const [radius, setRadius] = useState(5);
   const [bookingVenue, setBookingVenue] = useState<Venue | null>(null);
   const [confirmed, setConfirmed] = useState(false);
 
@@ -66,13 +73,18 @@ export default function BookScreen() {
   const [playersCount, setPlayersCount] = useState('10');
   const [specialRequests, setSpecialRequests] = useState('');
 
-  const filteredVenues = VENUES.filter(
-    (v) =>
+  const filteredVenues = VENUES.filter((v) => {
+    const matchSearch =
       searchText === '' ||
       v.name.toLowerCase().includes(searchText.toLowerCase()) ||
       v.address.toLowerCase().includes(searchText.toLowerCase()) ||
-      v.sports.some((s) => s.toLowerCase().includes(searchText.toLowerCase()))
-  );
+      v.sports.some((s) => s.toLowerCase().includes(searchText.toLowerCase()));
+    const matchRadius = !location || venueDistanceKm(location, v) <= radius;
+    return matchSearch && matchRadius;
+  }).sort((a, b) => {
+    if (!location) return 0;
+    return venueDistanceKm(location, a) - venueDistanceKm(location, b);
+  });
 
   const totalPrice = bookingVenue ? bookingVenue.pricePerHour * selectedDuration : 0;
 
@@ -91,6 +103,8 @@ export default function BookScreen() {
     setSpecialRequests('');
   };
 
+  const mapCenter = location ?? { latitude: 51.5074, longitude: -0.1278 };
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -99,7 +113,12 @@ export default function BookScreen() {
           <View style={styles.headerOverlay}>
             <SafeAreaView edges={['top']}>
               <View style={styles.header}>
-                <Text style={styles.headerTitle}>Book Venue</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={styles.headerTitle}>Book Venue</Text>
+                  {locationLoading && (
+                    <ActivityIndicator size="small" color="rgba(255,255,255,0.8)" />
+                  )}
+                </View>
                 <TouchableOpacity onPress={() => setViewMode(viewMode === 'list' ? 'map' : 'list')}>
                   <Ionicons
                     name={viewMode === 'list' ? 'map-outline' : 'list-outline'}
@@ -132,6 +151,27 @@ export default function BookScreen() {
         </View>
       </View>
 
+      {/* Radius selector */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.radiusBar}
+        contentContainerStyle={styles.radiusBarContent}
+      >
+        {RADIUS_OPTIONS.map((r) => (
+          <TouchableOpacity
+            key={r}
+            style={[styles.radiusPill, radius === r && styles.radiusPillActive]}
+            onPress={() => setRadius(r)}
+          >
+            <Ionicons name="radio-button-on" size={12} color={radius === r ? '#fff' : '#6b7280'} />
+            <Text style={[styles.radiusPillText, radius === r && styles.radiusPillTextActive]}>
+              {r} km
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
       {viewMode === 'list' ? (
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
           {filteredVenues.length === 0 && (
@@ -141,7 +181,16 @@ export default function BookScreen() {
             </View>
           )}
           {filteredVenues.map((venue) => (
-            <VenueCard key={venue.id} venue={venue} onBook={() => setBookingVenue(venue)} />
+            <VenueCard
+              key={venue.id}
+              venue={venue}
+              distance={
+                location
+                  ? formatDistance(venueDistanceKm(location, venue))
+                  : venue.distance
+              }
+              onBook={() => setBookingVenue(venue)}
+            />
           ))}
           <View style={{ height: 20 }} />
         </ScrollView>
@@ -158,18 +207,27 @@ export default function BookScreen() {
         <MapView
           style={styles.map}
           initialRegion={{
-            latitude: USER_LOCATION.latitude,
-            longitude: USER_LOCATION.longitude,
-            latitudeDelta: 0.12,
-            longitudeDelta: 0.12,
+            latitude: mapCenter.latitude,
+            longitude: mapCenter.longitude,
+            latitudeDelta: latDeltaForRadius(radius),
+            longitudeDelta: latDeltaForRadius(radius),
           }}
           showsUserLocation
           showsMyLocationButton
         >
+          {location && Circle && (
+            <Circle
+              center={location}
+              radius={radius * 1000}
+              fillColor="rgba(22,163,74,0.08)"
+              strokeColor="#16a34a"
+              strokeWidth={1.5}
+            />
+          )}
           {VENUES.map((venue) => (
             <Marker
               key={venue.id}
-              coordinate={getVenueCoord(USER_LOCATION, venue)}
+              coordinate={location ? getVenueCoord(location, venue) : { latitude: mapCenter.latitude, longitude: mapCenter.longitude }}
               pinColor={venue.imageColor}
             >
               <Callout
@@ -352,7 +410,15 @@ export default function BookScreen() {
   );
 }
 
-function VenueCard({ venue, onBook }: { venue: Venue; onBook: () => void }) {
+function VenueCard({
+  venue,
+  distance,
+  onBook,
+}: {
+  venue: Venue;
+  distance: string;
+  onBook: () => void;
+}) {
   return (
     <View style={styles.venueCard}>
       <View style={[styles.venueImage, { backgroundColor: venue.imageColor }]}>
@@ -364,7 +430,7 @@ function VenueCard({ venue, onBook }: { venue: Venue; onBook: () => void }) {
           <Text style={styles.venueName} numberOfLines={1}>{venue.name}</Text>
           <View style={styles.distanceBadge}>
             <Ionicons name="navigate-outline" size={11} color="#6b7280" />
-            <Text style={styles.distanceText}>{venue.distance}</Text>
+            <Text style={styles.distanceText}>{distance}</Text>
           </View>
         </View>
         <StarRating rating={venue.rating} />
@@ -415,6 +481,22 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   searchInput: { flex: 1, fontSize: 14, color: '#111827' },
+  radiusBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  radiusBarContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 8, flexDirection: 'row' },
+  radiusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  radiusPillActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  radiusPillText: { fontSize: 13, color: '#374151', fontWeight: '500' },
+  radiusPillTextActive: { color: '#fff' },
   scroll: { flex: 1 },
   content: { padding: 14, gap: 14 },
   emptyState: { alignItems: 'center', paddingVertical: 60 },

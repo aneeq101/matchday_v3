@@ -15,7 +15,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { PLAYERS, POSTS, type Player, type Post } from '../../data/mockData';
+import { PLAYERS, POSTS, playerDistanceKm, type Player, type Post } from '../../data/mockData';
+import { formatDistance } from '../../utils/geo';
+import { useUserLocation } from '../../hooks/useUserLocation';
 import PlayerProfileModal from '../../components/PlayerProfileModal';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
@@ -38,9 +40,19 @@ const LOOKING_FOR_OPTIONS = [
 const SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Hockey', 'Badminton'];
 const SKILL_LEVELS: Array<'Beginner' | 'Intermediate' | 'Advanced'> = ['Beginner', 'Intermediate', 'Advanced'];
 const RADII = ['1 km', '3 km', '5 km', '10 km', '15 km'];
+const PLAYER_RADIUS_OPTIONS = [1, 3, 5, 10, 20];
 
 export default function HoodScreen() {
   const router = useRouter();
+  const { location } = useUserLocation();
+  const [playerRadius, setPlayerRadius] = useState(5);
+
+  const nearbyCount = location
+    ? PLAYERS.filter((p) => playerDistanceKm(location, p) <= playerRadius).length
+    : PLAYERS.length;
+  const lookingCount = location
+    ? PLAYERS.filter((p) => p.privacy === 'public' && playerDistanceKm(location, p) <= playerRadius).length
+    : PLAYERS.filter((p) => p.privacy === 'public').length;
 
   const [showPlayersModal, setShowPlayersModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -67,7 +79,8 @@ export default function HoodScreen() {
       p.area.toLowerCase().includes(playerSearch.toLowerCase());
     const matchSport =
       sportFilter === 'All' || p.sports.some((s) => s.name === sportFilter);
-    return matchSearch && matchSport;
+    const matchRadius = !location || playerDistanceKm(location, p) <= playerRadius;
+    return matchSearch && matchSport && matchRadius;
   });
 
   const toggleLike = (postId: string) => {
@@ -122,11 +135,11 @@ export default function HoodScreen() {
               <View style={styles.statsRow}>
                 <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
                   <Ionicons name="people" size={18} color="#fff" />
-                  <Text style={styles.statText}>247 Active Players</Text>
+                  <Text style={styles.statText}>{nearbyCount} Near You</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
                   <Ionicons name="search" size={18} color="#fff" />
-                  <Text style={styles.statText}>38 Looking Today</Text>
+                  <Text style={styles.statText}>{lookingCount} Looking</Text>
                 </TouchableOpacity>
               </View>
             </SafeAreaView>
@@ -179,6 +192,29 @@ export default function HoodScreen() {
               />
             </View>
 
+            {/* Radius selector */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.radiusBar}
+              contentContainerStyle={styles.radiusBarContent}
+            >
+              {PLAYER_RADIUS_OPTIONS.map((r) => (
+                <TouchableOpacity
+                  key={r}
+                  style={[styles.radiusPill, playerRadius === r && styles.radiusPillActive]}
+                  onPress={() => setPlayerRadius(r)}
+                >
+                  <Ionicons name="radio-button-on" size={12} color={playerRadius === r ? '#fff' : '#6b7280'} />
+                  <Text style={[styles.radiusPillText, playerRadius === r && styles.radiusPillTextActive]}>
+                    {r} km
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <View style={styles.pillDivider} />
+
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillRow}>
               {allSports.map((s) => (
                 <TouchableOpacity
@@ -198,6 +234,7 @@ export default function HoodScreen() {
               renderItem={({ item }) => (
                 <PlayerCard
                   player={item}
+                  distance={location ? formatDistance(playerDistanceKm(location, item)) : item.distance}
                   expanded={expandedPlayerId === item.id}
                   onExpand={() =>
                     setExpandedPlayerId(expandedPlayerId === item.id ? null : item.id)
@@ -417,12 +454,14 @@ function PostCard({
 
 function PlayerCard({
   player,
+  distance,
   expanded,
   onExpand,
   onProfile,
   onMessage,
 }: {
   player: Player;
+  distance: string;
   expanded: boolean;
   onExpand: () => void;
   onProfile: () => void;
@@ -445,7 +484,7 @@ function PlayerCard({
           </View>
           <View style={styles.playerLocRow}>
             <Ionicons name="location-outline" size={12} color="#9ca3af" />
-            <Text style={styles.playerLoc}>{player.area} · {player.distance}</Text>
+            <Text style={styles.playerLoc}>{player.area} · {distance}</Text>
           </View>
           <Text style={styles.playerBio} numberOfLines={2}>{player.bio}</Text>
         </View>
@@ -743,4 +782,21 @@ const styles = StyleSheet.create({
   radiusTextActive: { color: '#16a34a', fontWeight: '700' },
   sentRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sentText: { color: '#16a34a', fontWeight: '700', fontSize: 15 },
+  radiusBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  radiusBarContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 8, flexDirection: 'row' },
+  radiusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  radiusPillActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  radiusPillText: { fontSize: 13, color: '#374151', fontWeight: '500' },
+  radiusPillTextActive: { color: '#fff' },
+  pillDivider: { height: 1, backgroundColor: '#f3f4f6', marginHorizontal: 12 },
 });

@@ -2,7 +2,7 @@
 
 ## What is MatchDay?
 
-MatchDay is a sports social network and venue booking mobile app built for Lahore, Pakistan. It lets players find other players nearby, organise matches, register for tournaments, book sports venues, and message each other — all in one place. The target audience is recreational and semi-professional sports players in Lahore.
+MatchDay is a sports social network and venue booking mobile app that works for any city globally. It lets players find other players nearby, organise matches, register for tournaments, book sports venues, and message each other — all in one place. The app uses the device's real GPS location to show venues and players relative to wherever the user actually is. The target audience is recreational and semi-professional sports players anywhere in the world.
 
 ---
 
@@ -18,6 +18,7 @@ MatchDay is a sports social network and venue booking mobile app built for Lahor
 | Icons | `@expo/vector-icons` — Ionicons only |
 | Safe area | `react-native-safe-area-context` 4.14.0 |
 | Maps | `react-native-maps` 1.20.1 |
+| GPS | `expo-location` ~18.0.0 |
 | Animations | `react-native-reanimated` 3.16.x |
 | Styling | `StyleSheet.create` (no external UI lib) |
 | Data | Local mock data (`data/mockData.ts`) — no backend yet |
@@ -196,7 +197,10 @@ All data is local mock data — no API or database connected yet.
 - [ ] My Tournaments screen (registered events, brackets)
 - [ ] Statistics screen (match history charts)
 - [ ] My Teams screen (create/join teams)
-- [ ] Venue search with real location-based filtering
+- [x] User location detection (GPS with permission handling)
+- [x] Radius-based venue filtering in Book tab
+- [x] Radius-based player filtering in The Hood tab
+- [x] Dummy data positioned relative to user's real location
 - [ ] Post comments and shares (currently counters only, no interaction)
 - [ ] Player follow / friend system
 - [ ] Broadcast to Nearby — real geofenced push
