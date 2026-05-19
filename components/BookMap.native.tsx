@@ -1,7 +1,7 @@
 import React from 'react';
-import { StyleSheet, View, Text } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import MapView, { Marker, Callout, Circle } from 'react-native-maps';
-import { getVenueCoord, type Venue } from '../data/mockData';
+import type { Venue } from '../data/mockData';
 import { latDeltaForRadius, type Coord } from '../utils/geo';
 
 function sportEmoji(sports: string[]): string {
@@ -23,10 +23,10 @@ interface Props {
   radius: number;
   onBookVenue: (venue: Venue) => void;
   onSwitchToList: () => void;
+  onRadiusChange?: (km: number) => void;
 }
 
-export default function BookMap({ location, venues, radius, onBookVenue }: Props) {
-  // When no GPS, center on venue centroid so real venues are visible
+export default function BookMap({ location, venues, radius, onBookVenue, onRadiusChange }: Props) {
   const venueCenter =
     venues.length > 0
       ? {
@@ -36,7 +36,7 @@ export default function BookMap({ location, venues, radius, onBookVenue }: Props
       : null;
 
   const center = location ?? venueCenter ?? { latitude: 43.6565, longitude: -79.38 };
-  const delta = latDeltaForRadius(location ? radius : radius * 2); // zoom out more when no GPS
+  const delta = latDeltaForRadius(location ? radius : radius * 2);
 
   return (
     <MapView
@@ -49,6 +49,11 @@ export default function BookMap({ location, venues, radius, onBookVenue }: Props
       }}
       showsUserLocation
       showsMyLocationButton
+      onRegionChangeComplete={(region) => {
+        if (!onRadiusChange) return;
+        const km = Math.max(1, Math.min(20, Math.round((region.latitudeDelta * 111) / 2.6)));
+        onRadiusChange(km);
+      }}
     >
       {location && (
         <Circle
@@ -60,7 +65,7 @@ export default function BookMap({ location, venues, radius, onBookVenue }: Props
         />
       )}
       {venues.map((venue) => {
-        const coord = venue.coord; // all venues here have real GPS coords
+        const coord = venue.coord;
         if (!coord) return null;
         const emoji = sportEmoji(venue.sports);
         return (
@@ -77,23 +82,25 @@ export default function BookMap({ location, venues, radius, onBookVenue }: Props
               </View>
               <View style={styles.markerTip} />
             </View>
-            <Callout tooltip onPress={() => onBookVenue(venue)}>
-              <View style={styles.callout}>
-                <Text style={styles.calloutEmoji}>{emoji}</Text>
-                <Text style={styles.calloutName}>{venue.name}</Text>
-                <Text style={styles.calloutAddr} numberOfLines={1}>{venue.address}</Text>
-                <View style={styles.calloutSports}>
-                  {venue.sports.map((s) => (
-                    <View key={s} style={styles.sportTag}>
-                      <Text style={styles.sportTagText}>{s}</Text>
-                    </View>
-                  ))}
+            <Callout tooltip>
+              <TouchableOpacity activeOpacity={0.85} onPress={() => onBookVenue(venue)}>
+                <View style={styles.callout}>
+                  <Text style={styles.calloutEmoji}>{emoji}</Text>
+                  <Text style={styles.calloutName}>{venue.name}</Text>
+                  <Text style={styles.calloutAddr} numberOfLines={1}>{venue.address}</Text>
+                  <View style={styles.calloutSports}>
+                    {venue.sports.map((s) => (
+                      <View key={s} style={styles.sportTag}>
+                        <Text style={styles.sportTagText}>{s}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <Text style={styles.calloutPrice}>PKR {venue.pricePerHour.toLocaleString()}/hr</Text>
+                  <View style={styles.calloutBtn}>
+                    <Text style={styles.calloutBtnText}>Book Now</Text>
+                  </View>
                 </View>
-                <Text style={styles.calloutPrice}>PKR {venue.pricePerHour.toLocaleString()}/hr</Text>
-                <View style={styles.calloutBtn}>
-                  <Text style={styles.calloutBtnText}>Book Now</Text>
-                </View>
-              </View>
+              </TouchableOpacity>
             </Callout>
           </Marker>
         );

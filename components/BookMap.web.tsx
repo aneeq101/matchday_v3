@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import type { Venue } from '../data/mockData';
-import { getVenueCoord } from '../data/mockData';
 import type { Coord } from '../utils/geo';
 
 // Inject Leaflet CSS from CDN (runs once at module load)
@@ -78,18 +77,54 @@ function RecenterMap({ center }: { center: [number, number] }) {
   return null;
 }
 
+function MapZoomSync({
+  radius,
+  onRadiusChange,
+}: {
+  radius: number;
+  onRadiusChange?: (km: number) => void;
+}) {
+  const map = useMap();
+  const programmaticRef = useRef(false);
+
+  // Zoom map when slider changes
+  useEffect(() => {
+    const targetZoom = Math.round(14 - Math.log2(Math.max(1, radius)));
+    if (Math.abs(map.getZoom() - targetZoom) >= 1) {
+      programmaticRef.current = true;
+      map.setZoom(targetZoom);
+    }
+  }, [radius]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useMapEvents({
+    zoomend: () => {
+      if (programmaticRef.current) {
+        programmaticRef.current = false;
+        return;
+      }
+      if (!onRadiusChange) return;
+      const zoom = map.getZoom();
+      // Inverse of: zoom ≈ 14 - log2(radius)
+      const km = Math.max(1, Math.min(20, Math.round(Math.pow(2, 14 - zoom))));
+      onRadiusChange(km);
+    },
+  });
+
+  return null;
+}
+
 interface Props {
   location: Coord | null;
   venues: Venue[];
   radius: number;
   onBookVenue: (venue: Venue) => void;
   onSwitchToList: () => void;
+  onRadiusChange?: (km: number) => void;
 }
 
-export default function BookMap({ location, venues, radius, onBookVenue }: Props) {
+export default function BookMap({ location, venues, radius, onBookVenue, onRadiusChange }: Props) {
   const [mapHeight, setMapHeight] = useState(500);
 
-  // When no GPS, center on the centroid of visible venues (e.g. Toronto area)
   const venueCenter: [number, number] | null =
     venues.length > 0
       ? [
@@ -100,7 +135,7 @@ export default function BookMap({ location, venues, radius, onBookVenue }: Props
 
   const center: [number, number] = location
     ? [location.latitude, location.longitude]
-    : venueCenter ?? [43.6565, -79.38]; // Toronto fallback
+    : venueCenter ?? [43.6565, -79.38];
 
   return (
     <View
@@ -114,6 +149,7 @@ export default function BookMap({ location, venues, radius, onBookVenue }: Props
         zoomControl
       >
         <RecenterMap center={center} />
+        <MapZoomSync radius={radius} onRadiusChange={onRadiusChange} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -138,7 +174,7 @@ export default function BookMap({ location, venues, radius, onBookVenue }: Props
         )}
 
         {venues.map((venue) => {
-          const coord = venue.coord; // all venues here have real GPS coords
+          const coord = venue.coord;
           if (!coord) return null;
           return (
             <Marker

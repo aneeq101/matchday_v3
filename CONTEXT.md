@@ -11,15 +11,17 @@ MatchDay is a sports social network and venue booking mobile app that works for 
 | Layer | Choice |
 |---|---|
 | Framework | Expo SDK 54 (managed workflow) |
-| Routing | expo-router v5 (file-based) |
+| Routing | expo-router v6 (file-based) |
 | Language | TypeScript (strict) |
-| React | React 19 / React Native 0.79.2 |
+| React | React 19.1.0 / React Native 0.81.5 |
 | Navigation | expo-router `Tabs` + `Stack` |
 | Icons | `@expo/vector-icons` — Ionicons only |
-| Safe area | `react-native-safe-area-context` 4.14.0 |
-| Maps | `react-native-maps` 1.20.1 |
-| GPS | `expo-location` ~18.0.0 |
-| Animations | `react-native-reanimated` 3.16.x |
+| Safe area | `react-native-safe-area-context` |
+| Maps (native) | `react-native-maps` 1.20.1 |
+| Maps (web) | `react-leaflet` 4.x + `leaflet` 1.9.4 |
+| GPS | `expo-location` |
+| Radius slider | `@react-native-community/slider` (native), custom `<input type="range">` (web) |
+| Animations | `react-native-reanimated` ~4.1.1 |
 | Styling | `StyleSheet.create` (no external UI lib) |
 | Data | Local mock data (`data/mockData.ts`) — no backend yet |
 | Primary colour | `#16a34a` (green) |
@@ -42,10 +44,19 @@ matchday_v3/
 │   ├── messages.tsx             # Messages inbox
 │   └── chat.tsx                 # 1-on-1 chat screen
 ├── components/
-│   └── PlayerProfileModal.tsx   # Reusable player profile bottom sheet
+│   ├── BookMap.native.tsx        # Interactive map (iOS/Android) — react-native-maps
+│   ├── BookMap.web.tsx           # Interactive map (web) — react-leaflet / Leaflet.js
+│   ├── RadiusSlider.native.tsx   # Slider for native (wraps @react-native-community/slider)
+│   ├── RadiusSlider.web.tsx      # Slider for web (custom <input type="range"> — React 19 safe)
+│   └── PlayerProfileModal.tsx    # Reusable player profile bottom sheet
 ├── data/
-│   └── mockData.ts              # All types + mock data
-├── app.json                     # Expo config (Google Maps API key wired)
+│   └── mockData.ts              # All types + mock data + helper functions
+├── hooks/
+│   └── useUserLocation.ts        # GPS hook: expo-location (native) / navigator.geolocation (web)
+├── utils/
+│   └── geo.ts                   # Coord, offsetCoord, distanceKm, latDeltaForRadius, formatDistance
+├── babel.config.js              # { worklets: false, reanimated: false } to skip broken Babel plugins
+├── app.json                     # Expo config; web output: "single" (prevents SSR window errors)
 └── package.json
 ```
 
@@ -85,16 +96,29 @@ Tournament and event discovery.
 ### Tab 4 — Book Venue (`book.tsx`)
 Venue search and booking.
 
-- **Search bar** — filters venue list in real time
+- **Search bar** — filters venue list in real time by name, address, or sport
 - **List / Map toggle** — switches between list view and interactive map
+- **Radius slider** — adjusts search radius (1–20 km); syncs bidirectionally with map zoom
 - **Venue cards** — coloured image header, star rating, address, sport tags, price per hour, Book Now button
-- **Interactive map** — `react-native-maps` MapView with:
-  - All 5 venues shown as colour-coded markers
-  - Tap marker → Callout shows venue name, price, and "Book Now" button that opens the booking modal
-  - User location shown (default: 31.5204, 74.3587 — central Lahore)
-  - Web platform shows a graceful fallback message
+- **Interactive map (native)** — `react-native-maps` MapView with:
+  - Sport-specific emoji markers (⚽🏏🏀🎾🏸⚾🏟️) with venue name label
+  - Tap marker → Callout with venue info and "Book Now" button (TouchableOpacity inside Callout)
+  - User location circle (green, radius-sized)
+  - `onRegionChangeComplete` → updates radius slider from map zoom level
+  - Centers on venue centroid (Toronto area) when no GPS
+- **Interactive map (web)** — `react-leaflet` + Leaflet.js with:
+  - Same emoji markers via `L.divIcon`
+  - Popup with venue info and "Book Now" button
+  - `MapZoomSync` component: `zoomend` event → updates radius slider; slider change → calls `map.setZoom`
+  - Leaflet CSS injected from CDN at module load
+  - `RecenterMap` component keeps map centered on user
 - **Booking modal** — date, time slot grid, duration, sport, players count, special requests, total price calculation
 - **Booking Confirmed screen** — success state shown after booking
+
+**Venue filtering rules:**
+- Only venues with `coord` (real GPS) are shown — offset-based dummy venues are excluded
+- When GPS unavailable: all real venues shown (no radius filter)
+- When GPS available: radius filter applied, sorted by distance
 
 ### Tab 5 — Profile (`profile.tsx`)
 User profile and settings.
@@ -139,19 +163,59 @@ All data is local mock data — no API or database connected yet.
 
 **Types:** `Player`, `Post`, `Venue`, `Tournament`, `Booking`, `MatchItem`, `Conversation`, `Message`, `Sport`, `Skill`, `Gender`, `Privacy`, `EventType`
 
-**Mock datasets:**
-- 5 Players (mixed gender, various sports/skills, public/private)
-- 4 Posts
-- 5 Venues with coordinates:
-  - Model Town Sports Complex — `31.4834, 74.3293`
-  - Gulberg Sports Arena — `31.5176, 74.3339`
-  - DHA Cricket Ground — `31.4697, 74.4077`
-  - Johar Town Basketball Court — `31.4702, 74.2823`
-  - Wapda Town Football Ground — `31.4469, 74.2741`
-- 3 Tournaments
-- 3 Bookings
-- 3 My Matches
-- 4 Conversations + associated chat messages
+**Venue data model:**
+- `offsetKm?: { dx, dy }` — relative to user's GPS (mock venues, excluded from Book screen)
+- `coord?: { latitude, longitude }` — absolute GPS (real venues, shown on map and list)
+- Helper: `getVenueCoord(base, venue)` — prefers `venue.coord`, falls back to offset
+- Helper: `venueDistanceKm(base, venue)` — handles both absolute and offset venues
+
+**Real GPS venues (GTA Toronto area):**
+
+| ID | Name | Sport(s) | Coords |
+|----|------|---------|--------|
+| t1 | Scotiabank Arena | Basketball, Hockey | 43.6435, -79.3791 |
+| t2 | Rogers Centre | Baseball | 43.6414, -79.3894 |
+| t3 | BMO Field | Football | 43.6335, -79.4179 |
+| t4 | Sobeys Stadium | Tennis | 43.7729, -79.4988 |
+| t5 | Varsity Centre | Football, Athletics | 43.6664, -79.3993 |
+| t6 | Lamport Stadium | Football | 43.6412, -79.4278 |
+| t7 | Toronto Cricket Club | Cricket | 43.7326, -79.4264 |
+| t8 | Etobicoke Olympium | Basketball, Badminton | 43.6477, -79.5620 |
+| tc1 | High Park Tennis Courts | Tennis | 43.6464, -79.4637 |
+| tc2 | Trinity Bellwoods Tennis Courts | Tennis | 43.6454, -79.4218 |
+| tc3 | Ramsden Park Tennis Courts | Tennis | 43.6754, -79.3907 |
+| tc4 | Christie Pits Tennis Courts | Tennis | 43.6632, -79.4197 |
+| tc5 | Sunnybrook Park Tennis Courts | Tennis | 43.7196, -79.3619 |
+
+**Mock-only datasets (not shown on Book screen):**
+- 5 offset-based Lahore venues (ids 1–5)
+- 6 Players, 5 Posts, 4 Tournaments, 3 Bookings, 3 Matches, 4 Conversations + messages
+
+---
+
+## Key Technical Decisions & Fixes
+
+### Babel config (`babel.config.js`)
+`react-native-reanimated` 4.x's plugin requires `react-native-worklets/plugin` which is not installed. Both are disabled:
+```js
+presets: [['babel-preset-expo', { worklets: false, reanimated: false }]]
+```
+
+### Web output: `"single"` (not `"static"`)
+Leaflet accesses `window` at module load time, which breaks with SSR pre-rendering. Setting `"output": "single"` in `app.json` makes Expo build a client-side SPA.
+
+### Platform-specific map components
+`react-native-maps` imports native-only modules that break Metro's web bundle. Solution: Metro resolves `BookMap.native.tsx` for iOS/Android and `BookMap.web.tsx` for web automatically.
+
+### Platform-specific slider
+`@react-native-community/slider` uses `ReactDOM.findDOMNode` (removed in React 19) on web. Solution: `RadiusSlider.native.tsx` wraps the community slider; `RadiusSlider.web.tsx` uses `<input type="range">` directly.
+
+### Mobile Callout tap fix
+`Callout tooltip onPress` is unreliable on react-native-maps. Fix: wrap callout content in `<TouchableOpacity>` inside `<Callout tooltip>`.
+
+### Zoom ↔ Slider bidirectional sync
+- **Native**: `onRegionChangeComplete` on MapView → `km = round(latitudeDelta * 111 / 2.6)` → calls `onRadiusChange`
+- **Web**: `MapZoomSync` component uses `useMapEvents` (`zoomend` event) to update slider; slider prop change triggers `map.setZoom` via `useEffect` with a `programmaticRef` flag to avoid feedback loops
 
 ---
 
@@ -172,11 +236,16 @@ All data is local mock data — no API or database connected yet.
 - All 5 tabs fully built and navigable
 - Messages + Chat fully built
 - PlayerProfileModal reusable component complete
-- Interactive map working on iOS and Android (web shows fallback)
-- Google Maps API key configured in `app.json` for both platforms
-- All UI is functional with mock data
+- Interactive map working on iOS, Android, and Web
+- Map markers: sport-specific emoji + venue name label
+- Map tap → booking modal working on all platforms
+- Radius slider syncs bidirectionally with map zoom
+- 13 real GPS venues in Toronto GTA area (stadiums + public tennis courts)
+- Only real-GPS venues shown on Book screen (no dummy data)
+- Map centers on Toronto venue centroid when no GPS available
+- Google Maps API key configured in `app.json` for iOS/Android
+- All UI functional with mock data
 - TypeScript compiles with zero errors
-- Safe area and status bar handled correctly on Android (translucent status bar, soft nav buttons)
 - Deployed branch: `claude/review-app-code-9OtPO` on `aneeq101/matchday_v3`
 
 ---
@@ -200,7 +269,11 @@ All data is local mock data — no API or database connected yet.
 - [x] User location detection (GPS with permission handling)
 - [x] Radius-based venue filtering in Book tab
 - [x] Radius-based player filtering in The Hood tab
-- [x] Dummy data positioned relative to user's real location
+- [x] Interactive map on web and mobile
+- [x] Sport-specific emoji markers with venue name labels
+- [x] Mobile marker tap opens booking modal
+- [x] Map zoom ↔ slider bidirectional sync
+- [x] Real GPS venues (Toronto GTA stadiums + public tennis courts)
 - [ ] Post comments and shares (currently counters only, no interaction)
 - [ ] Player follow / friend system
 - [ ] Broadcast to Nearby — real geofenced push

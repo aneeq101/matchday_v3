@@ -198,6 +198,7 @@ export default function BookScreen() {
           radius={radius}
           onBookVenue={setBookingVenue}
           onSwitchToList={() => setViewMode('list')}
+          onRadiusChange={setRadius}
         />
       )}
 
