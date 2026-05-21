@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import RadiusSlider from '../../components/RadiusSlider';
 import {
   View,
@@ -9,8 +9,9 @@ import {
   Modal,
   TextInput,
   StatusBar,
-  Platform,
   ActivityIndicator,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,8 +20,8 @@ import { formatDistance, type Coord } from '../../utils/geo';
 import { useUserLocation } from '../../hooks/useUserLocation';
 import BookMap from '../../components/BookMap';
 
-// Set to true to re-enable live Overpass API venue search
 const LIVE_SEARCH_ENABLED = false;
+const PEEK_HEIGHT = 168; // px visible when sheet is at its lowest snap
 
 const TIME_SLOTS = [
   '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
@@ -79,7 +80,6 @@ async function fetchOverpassVenues(
 ): Promise<Venue[]> {
   const radiusM = Math.min(radiusKm * 1000, 10000);
   const { latitude: lat, longitude: lon } = location;
-
   const query = `[out:json][timeout:12];
 (
   node["sport"="${osmSport}"](around:${radiusM},${lat},${lon});
@@ -88,11 +88,9 @@ async function fetchOverpassVenues(
   way["leisure"="pitch"]["sport"="${osmSport}"](around:${radiusM},${lat},${lon});
 );
 out center;`;
-
   const sport = osmToDisplaySport(osmSport);
   const color = SPORT_COLORS[osmSport] ?? '#6b7280';
   const body = `data=${encodeURIComponent(query)}`;
-
   for (const endpoint of OVERPASS_ENDPOINTS) {
     try {
       const controller = new AbortController();
@@ -105,7 +103,6 @@ out center;`;
       });
       clearTimeout(timeoutId);
       if (!resp.ok) continue;
-
       const json = await resp.json();
       return (json.elements as any[])
         .filter((el) => el.lat || el.center?.lat)
@@ -116,8 +113,7 @@ out center;`;
           rating: 0,
           address:
             [el.tags?.['addr:street'], el.tags?.['addr:city']]
-              .filter(Boolean)
-              .join(', ') || 'Address unknown',
+              .filter(Boolean).join(', ') || 'Address unknown',
           sports: [sport],
           distance: '',
           pricePerHour: 0,
@@ -125,59 +121,123 @@ out center;`;
           coord: { latitude: el.lat ?? el.center.lat, longitude: el.lon ?? el.center.lon },
           source: 'live',
         }));
-    } catch {
-      // try next endpoint
-    }
+    } catch { /* try next */ }
   }
   throw new Error('All Overpass endpoints failed');
 }
 
 export default function BookScreen() {
   const { location, loading: locationLoading } = useUserLocation();
-  const [mapExpanded, setMapExpanded] = useState(false);
-  const [searchText, setSearchText] = useState('');
-  const [radius, setRadius] = useState(5);
+  const [searchText, setSearchText]       = useState('');
+  const [radius, setRadius]               = useState(5);
   const [selectedFilter, setSelectedFilter] = useState<SportFilter>(SPORT_FILTERS[0]);
-  const [liveVenues, setLiveVenues] = useState<Venue[]>([]);
-  const [liveLoading, setLiveLoading] = useState(false);
-  const [liveError, setLiveError] = useState(false);
-  const [bookingVenue, setBookingVenue] = useState<Venue | null>(null);
-  const [confirmed, setConfirmed] = useState(false);
+  const [liveVenues, setLiveVenues]       = useState<Venue[]>([]);
+  const [liveLoading, setLiveLoading]     = useState(false);
+  const [liveError, setLiveError]         = useState(false);
+  const [bookingVenue, setBookingVenue]   = useState<Venue | null>(null);
+  const [confirmed, setConfirmed]         = useState(false);
 
-  // Booking form state
-  const [selectedDate, setSelectedDate] = useState('');
-  const [selectedTime, setSelectedTime] = useState('');
+  // Booking form
+  const [selectedDate, setSelectedDate]         = useState('');
+  const [selectedTime, setSelectedTime]         = useState('');
   const [selectedDuration, setSelectedDuration] = useState(1);
-  const [selectedSport, setSelectedSport] = useState('Football');
-  const [playersCount, setPlayersCount] = useState('10');
-  const [specialRequests, setSpecialRequests] = useState('');
+  const [selectedSport, setSelectedSport]       = useState('Football');
+  const [playersCount, setPlayersCount]         = useState('10');
+  const [specialRequests, setSpecialRequests]   = useState('');
 
-  // Live venue search via Overpass API — gated by LIVE_SEARCH_ENABLED
+  // ── Bottom sheet animation ──
+  const [bodyH, setBodyH] = useState(0);
+  const sheetAnim  = useRef(new Animated.Value(9999)).current;
+  const currentY   = useRef(9999);
+  const dragStartY = useRef(9999);
+
+  // Snap point refs — updated when bodyH is measured
+  const snapFull = useRef(12);
+  const snapHalf = useRef(400);
+  const snapPeek = useRef(600);
+
+  useEffect(() => {
+    const id = sheetAnim.addListener(({ value }) => { currentY.current = value; });
+    return () => sheetAnim.removeListener(id);
+  }, []);
+
+  useEffect(() => {
+    if (bodyH <= 0) return;
+    snapFull.current = 12;
+    snapHalf.current = Math.round(bodyH * 0.36);
+    snapPeek.current = bodyH - PEEK_HEIGHT;
+    // Open to half on first measure
+    Animated.spring(sheetAnim, {
+      toValue: snapHalf.current,
+      useNativeDriver: true,
+      damping: 22,
+      stiffness: 220,
+    }).start();
+    currentY.current = snapHalf.current;
+  }, [bodyH]);
+
+  const snapTo = (target: number) =>
+    Animated.spring(sheetAnim, {
+      toValue: target,
+      useNativeDriver: true,
+      damping: 24,
+      stiffness: 280,
+      mass: 1,
+    }).start();
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  (_, g) => Math.abs(g.dy) > 4,
+      onPanResponderGrant: () => {
+        dragStartY.current = currentY.current;
+        sheetAnim.stopAnimation();
+      },
+      onPanResponderMove: (_, g) => {
+        const next = Math.max(
+          snapFull.current,
+          Math.min(snapPeek.current, dragStartY.current + g.dy),
+        );
+        sheetAnim.setValue(next);
+      },
+      onPanResponderRelease: (_, g) => {
+        const cur = currentY.current;
+        const vel = g.vy;
+        let target: number;
+        if (vel > 0.5) {
+          target = cur < snapHalf.current ? snapHalf.current : snapPeek.current;
+        } else if (vel < -0.5) {
+          target = cur > snapHalf.current ? snapHalf.current : snapFull.current;
+        } else {
+          const snaps = [snapFull.current, snapHalf.current, snapPeek.current];
+          target = snaps.reduce((prev, curr) =>
+            Math.abs(curr - cur) < Math.abs(prev - cur) ? curr : prev,
+          );
+        }
+        snapTo(target);
+      },
+    }),
+  ).current;
+
+  // ── Live venue search ──
   useEffect(() => {
     if (!LIVE_SEARCH_ENABLED) return;
     const { osmSport } = selectedFilter;
     if (!location || !osmSport) {
-      setLiveVenues([]);
-      setLiveLoading(false);
-      setLiveError(false);
+      setLiveVenues([]); setLiveLoading(false); setLiveError(false);
       return;
     }
     let cancelled = false;
-    setLiveLoading(true);
-    setLiveError(false);
+    setLiveLoading(true); setLiveError(false);
     const timer = setTimeout(() => {
       fetchOverpassVenues(location, radius, osmSport)
-        .then((venues) => {
-          if (!cancelled) { setLiveVenues(venues); setLiveLoading(false); }
-        })
-        .catch(() => {
-          if (!cancelled) { setLiveVenues([]); setLiveLoading(false); setLiveError(true); }
-        });
+        .then((v) => { if (!cancelled) { setLiveVenues(v); setLiveLoading(false); } })
+        .catch(() => { if (!cancelled) { setLiveVenues([]); setLiveLoading(false); setLiveError(true); } });
     }, 800);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [location?.latitude, location?.longitude, radius, selectedFilter.osmSport]);
 
-  // Mock venues: search + sport filter, no radius (so map markers never vanish on zoom)
+  // ── Venue filtering ──
   const searchSportMockVenues = VENUES.filter((v) => {
     if (!v.coord) return false;
     const matchSearch =
@@ -189,56 +249,45 @@ export default function BookScreen() {
       selectedFilter.label === 'All' ||
       v.sports.some((s) => s.toLowerCase() === selectedFilter.label.toLowerCase());
     return matchSearch && matchSport;
-  }).sort((a, b) => {
-    if (!location) return 0;
-    return venueDistanceKm(location, a) - venueDistanceKm(location, b);
-  });
+  }).sort((a, b) => (!location ? 0 : venueDistanceKm(location, a) - venueDistanceKm(location, b)));
 
-  // Radius filter for list only
   const filteredMockVenues = searchSportMockVenues.filter(
     (v) => !location || venueDistanceKm(location, v) <= radius,
   );
-
   const filteredLiveVenues = liveVenues.filter(
     (lv) =>
       searchText === '' ||
       lv.name.toLowerCase().includes(searchText.toLowerCase()) ||
       lv.address.toLowerCase().includes(searchText.toLowerCase()),
   );
-
   const listVenues = [...filteredMockVenues, ...filteredLiveVenues];
   const mapVenues  = [...searchSportMockVenues, ...filteredLiveVenues];
 
   const handleBookVenue = (venue: Venue) => {
     setBookingVenue(venue);
     const sport =
-      venue.sports.length === 1
-        ? venue.sports[0]
-        : selectedFilter.label !== 'All'
-        ? selectedFilter.label
-        : 'Football';
+      venue.sports.length === 1 ? venue.sports[0]
+      : selectedFilter.label !== 'All' ? selectedFilter.label
+      : 'Football';
     if (BOOKING_SPORTS.includes(sport)) setSelectedSport(sport);
   };
 
   const totalPrice = bookingVenue ? bookingVenue.pricePerHour * selectedDuration : 0;
   const handleConfirm = () => setConfirmed(true);
-  const resetBooking = () => {
-    setConfirmed(false);
-    setBookingVenue(null);
-    setSelectedDate('');
-    setSelectedTime('');
-    setSelectedDuration(1);
-    setSelectedSport('Football');
-    setPlayersCount('10');
-    setSpecialRequests('');
+  const resetBooking  = () => {
+    setConfirmed(false); setBookingVenue(null);
+    setSelectedDate(''); setSelectedTime('');
+    setSelectedDuration(1); setSelectedSport('Football');
+    setPlayersCount('10'); setSpecialRequests('');
   };
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
-      {/* ── Top section: title + search + sport filters ── */}
-      <SafeAreaView edges={['top']} style={styles.topSection}>
+      {/* ── Top bar: search + sport filters ── */}
+      <SafeAreaView edges={['top']} style={styles.topBar}>
+        {/* Title row */}
         <View style={styles.titleRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Text style={styles.pageTitle}>Book Venue</Text>
@@ -246,11 +295,12 @@ export default function BookScreen() {
               <ActivityIndicator size="small" color="#16a34a" />
             )}
           </View>
-          <View style={styles.venueCountBadge}>
-            <Text style={styles.venueCountText}>{listVenues.length} venues</Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{listVenues.length} venues</Text>
           </View>
         </View>
 
+        {/* Search */}
         <View style={styles.searchRow}>
           <View style={styles.searchBox}>
             <Ionicons name="search" size={16} color="#9ca3af" />
@@ -269,19 +319,20 @@ export default function BookScreen() {
           </View>
         </View>
 
+        {/* Sport filter pills */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterContent}
+          contentContainerStyle={styles.filterRow}
         >
           {SPORT_FILTERS.map((f) => (
             <TouchableOpacity
               key={f.label}
-              style={[styles.filterPill, selectedFilter.label === f.label && styles.filterPillActive]}
+              style={[styles.pill, selectedFilter.label === f.label && styles.pillActive]}
               onPress={() => setSelectedFilter(f)}
             >
-              <Text style={styles.filterEmoji}>{f.emoji}</Text>
-              <Text style={[styles.filterLabel, selectedFilter.label === f.label && styles.filterLabelActive]}>
+              <Text style={styles.pillEmoji}>{f.emoji}</Text>
+              <Text style={[styles.pillLabel, selectedFilter.label === f.label && styles.pillLabelActive]}>
                 {f.label}
               </Text>
             </TouchableOpacity>
@@ -289,72 +340,66 @@ export default function BookScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* ── Map + List split area ── */}
-      <View style={styles.splitArea}>
-
-        {/* Map */}
-        <View style={mapExpanded ? styles.mapFull : styles.mapHalf}>
+      {/* ── Map area + bottom sheet ── */}
+      <View
+        style={styles.body}
+        onLayout={(e) => setBodyH(e.nativeEvent.layout.height)}
+      >
+        {/* Full-screen map */}
+        <View style={StyleSheet.absoluteFill}>
           <BookMap
             location={location}
             venues={mapVenues}
             radius={radius}
             onBookVenue={handleBookVenue}
-            onSwitchToList={() => setMapExpanded(false)}
+            onSwitchToList={() => snapTo(snapHalf.current)}
             onRadiusChange={setRadius}
           />
-
-          {/* Floating radius indicator */}
-          <View style={styles.radiusBubble} pointerEvents="none">
-            <Ionicons name="radio-button-on-outline" size={12} color="#16a34a" />
-            <Text style={styles.radiusBubbleText}>{radius} km</Text>
-          </View>
-
-          {/* Expand / collapse button */}
-          <TouchableOpacity
-            style={styles.expandBtn}
-            onPress={() => setMapExpanded((e) => !e)}
-          >
-            <Ionicons
-              name={mapExpanded ? 'contract-outline' : 'expand-outline'}
-              size={18}
-              color="#374151"
-            />
-          </TouchableOpacity>
         </View>
 
-        {/* List */}
-        {!mapExpanded && (
-          <View style={styles.listSection}>
-            {/* List header: venue count + compact radius slider */}
-            <View style={styles.listHeader}>
-              <Text style={styles.listCount}>
-                {listVenues.length} venue{listVenues.length !== 1 ? 's' : ''}
-              </Text>
-              <View style={styles.sliderRow}>
-                <Ionicons name="radio-button-on-outline" size={12} color="#16a34a" />
-                <RadiusSlider
-                  style={styles.compactSlider}
-                  minimumValue={1}
-                  maximumValue={20}
-                  step={1}
-                  value={radius}
-                  onValueChange={(v: number) => setRadius(Math.round(v))}
-                  minimumTrackTintColor="#16a34a"
-                  maximumTrackTintColor="#e5e7eb"
-                  thumbTintColor="#16a34a"
-                />
-                <Text style={styles.sliderValue}>{radius} km</Text>
+        {/* Bottom sheet */}
+        {bodyH > 0 && (
+          <Animated.View
+            style={[
+              styles.sheet,
+              { height: bodyH, transform: [{ translateY: sheetAnim }] },
+            ]}
+          >
+            {/* Drag handle + header — panHandlers live here */}
+            <View style={styles.handleArea} {...panResponder.panHandlers}>
+              <View style={styles.dragHandle} />
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetCount}>
+                  {listVenues.length} venue{listVenues.length !== 1 ? 's' : ''}
+                </Text>
+                <View style={styles.sliderRow}>
+                  <Ionicons name="radio-button-on-outline" size={12} color="#16a34a" />
+                  <RadiusSlider
+                    style={styles.compactSlider}
+                    minimumValue={1}
+                    maximumValue={20}
+                    step={1}
+                    value={radius}
+                    onValueChange={(v: number) => setRadius(Math.round(v))}
+                    minimumTrackTintColor="#16a34a"
+                    maximumTrackTintColor="#e5e7eb"
+                    thumbTintColor="#16a34a"
+                  />
+                  <Text style={styles.radiusLabel}>{radius} km</Text>
+                </View>
               </View>
             </View>
 
+            {/* Venue list */}
             <ScrollView
               style={styles.listScroll}
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
               {listVenues.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <Ionicons name="search-outline" size={40} color="#d1d5db" />
+                  <Ionicons name="search-outline" size={44} color="#d1d5db" />
                   <Text style={styles.emptyText}>No venues match your search</Text>
                   {selectedFilter.osmSport && !location && (
                     <Text style={styles.emptySubText}>Enable location for more results</Text>
@@ -374,25 +419,25 @@ export default function BookScreen() {
                   />
                 ))
               )}
-              <View style={{ height: 16 }} />
+              <View style={{ height: 24 }} />
             </ScrollView>
-          </View>
+          </Animated.View>
         )}
       </View>
 
-      {/* ── Booking Modal ── */}
+      {/* ── Booking modal ── */}
       <Modal visible={!!bookingVenue && !confirmed} animationType="slide" transparent>
         <View style={styles.sheetOverlay}>
-          <SafeAreaView style={styles.sheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Book Venue</Text>
+          <SafeAreaView style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Book Venue</Text>
               <TouchableOpacity onPress={() => setBookingVenue(null)}>
                 <Ionicons name="close" size={24} color="#111827" />
               </TouchableOpacity>
             </View>
             {bookingVenue && (
-              <ScrollView contentContainerStyle={styles.sheetContent}>
+              <ScrollView contentContainerStyle={styles.modalContent}>
                 <View style={[styles.venueSummary, { backgroundColor: bookingVenue.imageColor + '15' }]}>
                   <View style={[styles.venueIconBig, { backgroundColor: bookingVenue.imageColor }]}>
                     <Ionicons name="location" size={28} color="#fff" />
@@ -514,13 +559,11 @@ export default function BookScreen() {
         </View>
       </Modal>
 
-      {/* ── Booking Confirmed ── */}
+      {/* ── Booking confirmed ── */}
       <Modal visible={confirmed} animationType="fade" transparent>
         <View style={styles.successOverlay}>
           <View style={styles.successCard}>
-            <View style={styles.successCircle}>
-              <Ionicons name="checkmark-circle" size={72} color="#16a34a" />
-            </View>
+            <Ionicons name="checkmark-circle" size={72} color="#16a34a" style={{ marginBottom: 12 }} />
             <Text style={styles.successTitle}>Booking Confirmed!</Text>
             <Text style={styles.successSub}>
               Your booking at {bookingVenue?.name} has been confirmed.
@@ -565,20 +608,16 @@ function VenueCard({
   distance: string;
   onBook: () => void;
 }) {
-  const emoji = sportEmojiStr(venue.sports[0] ?? '');
   return (
-    <TouchableOpacity style={styles.venueCard} activeOpacity={0.82} onPress={onBook}>
-      {/* Sport-coloured left thumbnail */}
+    <TouchableOpacity style={styles.card} activeOpacity={0.82} onPress={onBook}>
       <View style={[styles.cardThumb, { backgroundColor: venue.imageColor }]}>
         {venue.source === 'live' && (
           <View style={styles.liveChip}>
             <Text style={styles.liveChipText}>LIVE</Text>
           </View>
         )}
-        <Text style={styles.cardEmoji}>{emoji}</Text>
+        <Text style={styles.cardEmoji}>{sportEmojiStr(venue.sports[0] ?? '')}</Text>
       </View>
-
-      {/* Info */}
       <View style={styles.cardBody}>
         <View style={styles.cardTopRow}>
           <Text style={styles.cardName} numberOfLines={1}>{venue.name}</Text>
@@ -604,17 +643,17 @@ function VenueCard({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f3f4f6' },
+  root: { flex: 1, backgroundColor: '#fff' },
 
-  // ── Top section ──
-  topSection: {
+  // ── Top bar ──
+  topBar: {
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     shadowColor: '#000',
     shadowOpacity: 0.06,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 4,
     zIndex: 10,
   },
   titleRow: {
@@ -622,11 +661,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 14,
+    paddingTop: 12,
     paddingBottom: 10,
   },
   pageTitle: { fontSize: 22, fontWeight: '800', color: '#111827' },
-  venueCountBadge: {
+  countBadge: {
     backgroundColor: '#f0fdf4',
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -634,10 +673,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#bbf7d0',
   },
-  venueCountText: { fontSize: 12, fontWeight: '700', color: '#16a34a' },
-
-  searchRow: { paddingHorizontal: 12, paddingBottom: 10 },
-  searchBox: {
+  countBadgeText: { fontSize: 12, fontWeight: '700', color: '#16a34a' },
+  searchRow:  { paddingHorizontal: 12, paddingBottom: 10 },
+  searchBox:  {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -647,9 +685,8 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   searchInput: { flex: 1, fontSize: 14, color: '#111827' },
-
-  filterContent: { paddingHorizontal: 12, paddingBottom: 12, gap: 8, flexDirection: 'row' },
-  filterPill: {
+  filterRow: { paddingHorizontal: 12, paddingBottom: 12, gap: 8, flexDirection: 'row' },
+  pill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
@@ -660,93 +697,76 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     backgroundColor: '#f9fafb',
   },
-  filterPillActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  filterEmoji: { fontSize: 14 },
-  filterLabel: { fontSize: 13, fontWeight: '600', color: '#6b7280' },
-  filterLabelActive: { color: '#fff' },
+  pillActive:      { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  pillEmoji:       { fontSize: 14 },
+  pillLabel:       { fontSize: 13, fontWeight: '600', color: '#6b7280' },
+  pillLabelActive: { color: '#fff' },
 
-  // ── Split area ──
-  splitArea: { flex: 1 },
+  // ── Body (map + sheet) ──
+  body: { flex: 1 },
 
-  // Map takes 40%, list takes 60%
-  mapHalf: { flex: 4, position: 'relative' },
-  mapFull: { flex: 1, position: 'relative' },
-
-  // Floating map controls
-  radiusBubble: {
+  // ── Bottom sheet ──
+  sheet: {
     position: 'absolute',
-    bottom: 14,
-    left: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  radiusBubbleText: { fontSize: 12, fontWeight: '700', color: '#16a34a' },
-  expandBtn: {
-    position: 'absolute',
-    bottom: 14,
-    right: 12,
+    left: 0,
+    right: 0,
+    top: 0,
     backgroundColor: '#fff',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
     shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 16,
   },
-
-  // ── List section ──
-  listSection: { flex: 6, backgroundColor: '#f3f4f6' },
-  listHeader: {
+  handleArea: {
+    paddingTop: 10,
+    paddingBottom: 4,
+    paddingHorizontal: 14,
+  },
+  dragHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#d1d5db',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 10,
+  },
+  sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
-  listCount: { fontSize: 13, fontWeight: '700', color: '#374151' },
-  sliderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  sheetCount:    { fontSize: 14, fontWeight: '700', color: '#111827' },
+  sliderRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
   compactSlider: { width: 90, height: 28 },
-  sliderValue: { fontSize: 12, fontWeight: '700', color: '#16a34a', minWidth: 34 },
+  radiusLabel:   { fontSize: 12, fontWeight: '700', color: '#16a34a', minWidth: 36 },
 
-  listScroll: { flex: 1 },
+  listScroll:  { flex: 1 },
   listContent: { padding: 10, gap: 8 },
 
-  emptyState: { alignItems: 'center', paddingVertical: 40 },
-  emptyText: { color: '#9ca3af', fontSize: 13, marginTop: 10 },
+  emptyState:   { alignItems: 'center', paddingVertical: 48 },
+  emptyText:    { color: '#9ca3af', fontSize: 14, marginTop: 12, fontWeight: '500' },
   emptySubText: { color: '#d1d5db', fontSize: 12, marginTop: 6, textAlign: 'center' },
 
-  // ── Compact venue card ──
-  venueCard: {
+  // ── Venue card ──
+  card: {
     backgroundColor: '#fff',
     borderRadius: 14,
     flexDirection: 'row',
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: '#f3f4f6',
   },
-  cardThumb: {
-    width: 76,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  liveChip: {
+  cardThumb: { width: 76, alignItems: 'center', justifyContent: 'center' },
+  liveChip:  {
     position: 'absolute',
     top: 6,
     left: 4,
@@ -755,30 +775,25 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
   },
-  liveChipText: { color: '#fff', fontSize: 8, fontWeight: '800' },
-  cardEmoji: { fontSize: 28 },
-  cardBody: { flex: 1, paddingHorizontal: 12, paddingVertical: 10, justifyContent: 'space-between' },
-  cardTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
-  cardName: { flex: 1, fontSize: 14, fontWeight: '700', color: '#111827', marginRight: 6 },
-  cardDist: { fontSize: 11, color: '#9ca3af', fontWeight: '500' },
-  cardAddr: { fontSize: 11, color: '#9ca3af', marginBottom: 8 },
+  liveChipText:  { color: '#fff', fontSize: 8, fontWeight: '800' },
+  cardEmoji:     { fontSize: 28 },
+  cardBody:      { flex: 1, paddingHorizontal: 12, paddingVertical: 10, justifyContent: 'space-between' },
+  cardTopRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  cardName:      { flex: 1, fontSize: 14, fontWeight: '700', color: '#111827', marginRight: 6 },
+  cardDist:      { fontSize: 11, color: '#9ca3af', fontWeight: '500' },
+  cardAddr:      { fontSize: 11, color: '#9ca3af', marginBottom: 8 },
   cardBottomRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardPrice: { fontSize: 15, fontWeight: '800', color: '#111827' },
-  perHr: { fontSize: 11, fontWeight: '400', color: '#9ca3af' },
+  cardPrice:     { fontSize: 15, fontWeight: '800', color: '#111827' },
+  perHr:         { fontSize: 11, fontWeight: '400', color: '#9ca3af' },
   cardPriceFree: { fontSize: 12, fontWeight: '600', color: '#9ca3af' },
-  bookBtn: {
-    backgroundColor: '#16a34a',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 8,
-  },
-  bookBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  bookBtn:       { backgroundColor: '#16a34a', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
+  bookBtnText:   { color: '#fff', fontWeight: '700', fontSize: 12 },
 
   // ── Booking modal ──
   sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '94%' },
-  sheetHandle: { width: 40, height: 4, backgroundColor: '#d1d5db', borderRadius: 2, alignSelf: 'center', marginTop: 10 },
-  sheetHeader: {
+  modalSheet:   { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '94%' },
+  modalHandle:  { width: 40, height: 4, backgroundColor: '#d1d5db', borderRadius: 2, alignSelf: 'center', marginTop: 10 },
+  modalHeader:  {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -786,19 +801,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
-  sheetTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
-  sheetContent: { padding: 16 },
-  venueSummary: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 16,
-    alignItems: 'center',
-  },
+  modalTitle:   { fontSize: 18, fontWeight: '700', color: '#111827' },
+  modalContent: { padding: 16 },
+  venueSummary: { flexDirection: 'row', gap: 12, padding: 14, borderRadius: 12, marginBottom: 16, alignItems: 'center' },
   venueIconBig: { width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  venueSummaryName: { fontWeight: '700', color: '#111827', fontSize: 15 },
-  venueSummaryAddr: { color: '#6b7280', fontSize: 12, marginTop: 2 },
+  venueSummaryName:  { fontWeight: '700', color: '#111827', fontSize: 15 },
+  venueSummaryAddr:  { color: '#6b7280', fontSize: 12, marginTop: 2 },
   venueSummaryPrice: { color: '#16a34a', fontWeight: '700', fontSize: 14, marginTop: 4 },
   liveBadge: {
     flexDirection: 'row',
@@ -824,54 +832,25 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginBottom: 14,
   },
-  timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
-  timeSlot: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#f9fafb',
-  },
-  timeSlotActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  timeSlotText: { color: '#6b7280', fontSize: 12 },
+  timeGrid:        { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  timeSlot:        { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb' },
+  timeSlotActive:  { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  timeSlotText:    { color: '#6b7280', fontSize: 12 },
   timeSlotTextActive: { color: '#fff', fontWeight: '600' },
-  durationRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  durationBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    alignItems: 'center',
-    backgroundColor: '#f9fafb',
-  },
-  durationBtnActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  durationBtnText: { color: '#6b7280', fontWeight: '600', fontSize: 14 },
+  durationRow:     { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  durationBtn:     { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', backgroundColor: '#f9fafb' },
+  durationBtnActive:     { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  durationBtnText:       { color: '#6b7280', fontWeight: '600', fontSize: 14 },
   durationBtnTextActive: { color: '#fff' },
-  sportRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
-  sportChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#f9fafb',
-  },
+  sportRow:        { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  sportChip:       { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb' },
   sportChipActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  sportChipText: { color: '#6b7280', fontSize: 13 },
+  sportChipText:   { color: '#6b7280', fontSize: 13 },
   sportChipTextActive: { color: '#fff' },
-  totalBox: {
-    backgroundColor: '#f0fdf4',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-  },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  totalLbl: { color: '#374151', fontSize: 14 },
-  totalAmt: { color: '#16a34a', fontWeight: '800', fontSize: 20 },
+  totalBox:  { backgroundColor: '#f0fdf4', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#bbf7d0' },
+  totalRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  totalLbl:  { color: '#374151', fontSize: 14 },
+  totalAmt:  { color: '#16a34a', fontWeight: '800', fontSize: 20 },
   confirmBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -883,15 +862,14 @@ const styles = StyleSheet.create({
   },
   confirmBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 
-  // ── Success screen ──
+  // ── Success ──
   successOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  successCard: { backgroundColor: '#fff', borderRadius: 24, padding: 28, alignItems: 'center', width: '100%', maxWidth: 360 },
-  successCircle: { marginBottom: 16 },
-  successTitle: { fontSize: 24, fontWeight: '800', color: '#111827', marginBottom: 8 },
-  successSub: { color: '#6b7280', fontSize: 14, textAlign: 'center', marginBottom: 20, lineHeight: 22 },
+  successCard:    { backgroundColor: '#fff', borderRadius: 24, padding: 28, alignItems: 'center', width: '100%', maxWidth: 360 },
+  successTitle:   { fontSize: 24, fontWeight: '800', color: '#111827', marginBottom: 8 },
+  successSub:     { color: '#6b7280', fontSize: 14, textAlign: 'center', marginBottom: 20, lineHeight: 22 },
   confirmDetails: { width: '100%', gap: 10, marginBottom: 24 },
-  confirmRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#f0fdf4', padding: 10, borderRadius: 10 },
+  confirmRow:     { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#f0fdf4', padding: 10, borderRadius: 10 },
   confirmRowText: { color: '#374151', fontWeight: '600' },
-  doneBtn: { backgroundColor: '#16a34a', paddingVertical: 14, paddingHorizontal: 48, borderRadius: 12 },
-  doneBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  doneBtn:        { backgroundColor: '#16a34a', paddingVertical: 14, paddingHorizontal: 48, borderRadius: 12 },
+  doneBtnText:    { color: '#fff', fontWeight: '700', fontSize: 16 },
 });
