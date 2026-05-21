@@ -18,6 +18,47 @@ function sportEmoji(sports: string[]): string {
   return '🏟️';
 }
 
+function VenueMarker({
+  venue,
+  emoji,
+  isSelected,
+  onPress,
+}: {
+  venue: Venue;
+  emoji: string;
+  isSelected: boolean;
+  onPress: () => void;
+}) {
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+
+  return (
+    <Marker
+      coordinate={venue.coord!}
+      anchor={{ x: 0.5, y: 1 }}
+      tracksViewChanges={tracksViewChanges}
+      onPress={onPress}
+    >
+      <View
+        style={[styles.markerOuter, isSelected && styles.markerOuterSelected]}
+        onLayout={() => setTracksViewChanges(false)}
+      >
+        <View style={[styles.markerCircle, { backgroundColor: venue.imageColor ?? '#16a34a' }]}>
+          <Text style={styles.markerEmoji}>{emoji}</Text>
+        </View>
+        <View style={[styles.markerBubble, isSelected && styles.markerBubbleSelected]}>
+          <Text
+            style={[styles.markerName, isSelected && styles.markerNameSelected]}
+            numberOfLines={1}
+          >
+            {venue.name}
+          </Text>
+        </View>
+        <View style={[styles.markerTip, isSelected && styles.markerTipSelected]} />
+      </View>
+    </Marker>
+  );
+}
+
 interface Props {
   location: Coord | null;
   venues: Venue[];
@@ -106,26 +147,13 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
           const emoji = sportEmoji(venue.sports);
           const isSelected = selected?.id === venue.id;
           return (
-            <Marker
+            <VenueMarker
               key={venue.id}
-              coordinate={coord}
-              anchor={{ x: 0.5, y: 1 }}
-              tracksViewChanges
+              venue={venue}
+              emoji={emoji}
+              isSelected={isSelected}
               onPress={() => setSelected(venue)}
-            >
-              <View style={[styles.markerWrapper, isSelected && styles.markerWrapperSelected]}>
-                <Text style={styles.markerEmoji}>{emoji}</Text>
-                <View style={[styles.markerBubble, isSelected && styles.markerBubbleSelected]}>
-                  <Text
-                    style={[styles.markerName, isSelected && styles.markerNameSelected]}
-                    numberOfLines={1}
-                  >
-                    {venue.name}
-                  </Text>
-                </View>
-                <View style={[styles.markerTip, isSelected && styles.markerTipSelected]} />
-              </View>
-            </Marker>
+            />
           );
         })}
       </MapView>
@@ -180,20 +208,38 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
 }
 
 const styles = StyleSheet.create({
-  markerWrapper: { alignItems: 'center' },
-  markerWrapperSelected: { transform: [{ scale: 1.15 }] },
-  markerEmoji: { fontSize: 28, lineHeight: 32 },
+  markerOuter: { alignItems: 'center', minWidth: 70 },
+  markerOuterSelected: { transform: [{ scale: 1.18 }] },
+  markerCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  markerEmoji: {
+    fontSize: Platform.OS === 'android' ? 22 : 24,
+    lineHeight: Platform.OS === 'android' ? 28 : 30,
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
   markerBubble: {
-    backgroundColor: 'rgba(255,255,255,0.96)',
+    backgroundColor: 'rgba(255,255,255,0.97)',
     borderRadius: 6,
     paddingHorizontal: 7,
-    paddingVertical: 2,
-    marginTop: 2,
+    paddingVertical: 3,
+    marginTop: 3,
     shadowColor: '#000',
     shadowOpacity: 0.2,
     shadowRadius: 3,
-    elevation: 3,
-    maxWidth: 140,
+    elevation: 4,
+    maxWidth: 130,
   },
   markerBubbleSelected: { backgroundColor: '#16a34a' },
   markerName: { fontSize: 10, fontWeight: '700', color: '#111827' },
@@ -206,7 +252,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 6,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: 'rgba(255,255,255,0.96)',
+    borderTopColor: 'rgba(255,255,255,0.97)',
   },
   markerTipSelected: { borderTopColor: '#16a34a' },
   venueCard: {

@@ -27,7 +27,7 @@ const TIME_SLOTS = [
   '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
   '6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM',
 ];
-const BOOKING_SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton'];
+const BOOKING_SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton', 'Baseball'];
 const DURATIONS = [1, 2, 3];
 
 const SPORT_FILTERS = [
