@@ -155,11 +155,17 @@ Custom markers use a `VenueMarker` component with `tracksViewChanges={false}` fr
 
 **Root cause of Android invisible markers:** emoji fonts load asynchronously on Android. When react-native-maps takes a native view snapshot for the marker, emoji Text nodes may not have rendered yet → blank marker. Shadows/elevation also interfere with the snapshot.
 
-**Fix:** Use ASCII sport labels (T, F, C, Bk, Bd, Ba) with system fonts (load synchronously) on a solid colored rounded rectangle. No shadows, no elevation, no emoji inside the marker view.
+**Fix:** ASCII sport labels (F/C/B/T/D/X) on a plain solid colored circle. No emoji, no shadow, no elevation, no border inside the marker view. `PROVIDER_GOOGLE` explicit on Android.
 
-- `tracksViewChanges={false}` from mount (no state transition, no race condition)
-- Marker: colored pill badge + ASCII label + triangular pointer. Selected marker: dark background + yellow border.
-- Sport emoji only appears in the bottom tap-card overlay (not in the marker itself)
+**`tracksViewChanges` pattern (per-marker state):**
+- Starts `true` → snapshot taken after Android layout pass
+- Flipped to `false` after 500ms via `setTimeout` → freezes snapshot, stops overhead
+- Flipped back to `true` for 300ms when `isSelected` changes → captures colour change
+- This avoids both the "blank snapshot" problem (false from mount) and the "continuous re-render" problem (always true)
+
+- Marker: plain `borderRadius` circle, no border, no shadow/elevation, single ASCII letter
+- Selected marker: dark background + larger size (tracked by the flip-back pattern above)
+- Sport emoji lives only in the bottom tap-card overlay
 - Sport colors: Tennis=#2563eb, Football=#16a34a, Cricket=#d97706, Basketball=#ea580c, Badminton=#7c3aed, Baseball=#1d4ed8
 
 ### Native marker tap — bottom card overlay
