@@ -95,7 +95,7 @@ function VenueMarker({
   }, [isSelected]);
 
   const imgKey  = sportImage(venue.sports);
-  const imgSize = isSelected ? 48 : 36;
+  const imgSize = isSelected ? 34 : 24;
 
   return (
     <Marker
