@@ -1,7 +1,8 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
 import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { Venue } from '../data/mockData';
 import { latDeltaForRadius, type Coord } from '../utils/geo';
 
@@ -12,9 +13,9 @@ function sportIcon(sports: string[]): MCIconName {
   if (s.includes('football') || s.includes('soccer')) return 'soccer';
   if (s.includes('cricket'))    return 'cricket';
   if (s.includes('basketball')) return 'basketball';
-  if (s.includes('tennis'))     return 'tennis-ball';
+  if (s.includes('tennis'))     return 'tennis';
   if (s.includes('badminton'))  return 'badminton';
-  if (s.includes('baseball'))   return 'baseball-bat';
+  if (s.includes('baseball'))   return 'baseball';
   return 'map-marker';
 }
 
@@ -40,10 +41,11 @@ function sportColor(sports: string[]): string {
   return '#6b7280';
 }
 
-// MaterialCommunityIcons fonts are loaded by Expo at startup (not async like emoji).
-// tracksViewChanges starts true so Android captures the snapshot after the font
-// renders, then flips to false after 500 ms to stop continuous re-capture overhead.
-// Re-enables briefly when isSelected changes to capture the colour update.
+// Android react-native-maps takes a native bitmap snapshot of the marker view.
+// Strategy: keep tracksViewChanges=true until onLayout fires (view + font rendered),
+// then wait an extra 400 ms for the native layer to reflect the drawn icon before
+// freezing. A 2500 ms hard fallback covers edge cases where onLayout is delayed.
+// Selection changes re-enable tracking briefly to capture the colour update.
 function VenueMarker({
   venue,
   isSelected,
@@ -55,27 +57,49 @@ function VenueMarker({
 }) {
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
   const prevSelectedRef = useRef(isSelected);
+  const frozenRef = useRef(false);
+  const freezeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Freeze snapshot after initial render
-  useEffect(() => {
-    const t = setTimeout(() => setTracksViewChanges(false), 500);
-    return () => clearTimeout(t);
+  const freeze = useCallback(() => {
+    if (frozenRef.current) return;
+    frozenRef.current = true;
+    setTracksViewChanges(false);
   }, []);
 
-  // Re-enable briefly when selection state changes
+  // onLayout: icon font has rendered — give native 400 ms then freeze
+  const handleLayout = useCallback(() => {
+    if (frozenRef.current) return;
+    freezeTimerRef.current = setTimeout(freeze, 400);
+  }, [freeze]);
+
+  // Hard fallback: freeze after 2500 ms regardless
+  useEffect(() => {
+    const t = setTimeout(freeze, 2500);
+    return () => {
+      clearTimeout(t);
+      if (freezeTimerRef.current) clearTimeout(freezeTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Re-enable briefly when selection state changes to capture colour update
   useEffect(() => {
     if (prevSelectedRef.current !== isSelected) {
       prevSelectedRef.current = isSelected;
+      frozenRef.current = false;
       setTracksViewChanges(true);
-      const t = setTimeout(() => setTracksViewChanges(false), 300);
+      const t = setTimeout(() => {
+        frozenRef.current = true;
+        setTracksViewChanges(false);
+      }, 500);
       return () => clearTimeout(t);
     }
   }, [isSelected]);
 
-  const color   = isSelected ? '#111827' : sportColor(venue.sports);
-  const icon    = sportIcon(venue.sports);
-  const size    = isSelected ? 48 : 40;
-  const radius  = size / 2;
+  const color  = isSelected ? '#111827' : sportColor(venue.sports);
+  const icon   = sportIcon(venue.sports);
+  const size   = isSelected ? 48 : 40;
+  const radius = size / 2;
 
   return (
     <Marker
@@ -84,7 +108,10 @@ function VenueMarker({
       tracksViewChanges={tracksViewChanges}
       onPress={onPress}
     >
-      <View style={[styles.markerCircle, { backgroundColor: color, width: size, height: size, borderRadius: radius }]}>
+      <View
+        onLayout={handleLayout}
+        style={[styles.markerCircle, { backgroundColor: color, width: size, height: size, borderRadius: radius }]}
+      >
         <MaterialCommunityIcons name={icon} size={isSelected ? 26 : 22} color="#fff" />
       </View>
     </Marker>
