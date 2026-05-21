@@ -1,14 +1,22 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
+import { StyleSheet, View, Text, Image, TouchableOpacity, Platform } from 'react-native';
 import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { Venue } from '../data/mockData';
 import { latDeltaForRadius, type Coord } from '../utils/geo';
 
-type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+const SPORT_IMAGES = {
+  soccer:     require('../assets/sports/soccer.png'),
+  cricket:    require('../assets/sports/cricket.png'),
+  basketball: require('../assets/sports/basketball.png'),
+  tennis:     require('../assets/sports/tennis.png'),
+  badminton:  require('../assets/sports/badminton.png'),
+  baseball:   require('../assets/sports/baseball.png'),
+} as const;
 
-function sportIcon(sports: string[]): MCIconName {
+type SportKey = keyof typeof SPORT_IMAGES;
+
+function sportImage(sports: string[]): SportKey {
   const s = (sports[0] ?? '').toLowerCase();
   if (s.includes('football') || s.includes('soccer')) return 'soccer';
   if (s.includes('cricket'))    return 'cricket';
@@ -16,7 +24,7 @@ function sportIcon(sports: string[]): MCIconName {
   if (s.includes('tennis'))     return 'tennis';
   if (s.includes('badminton'))  return 'badminton';
   if (s.includes('baseball'))   return 'baseball';
-  return 'map-marker';
+  return 'soccer';
 }
 
 function sportEmoji(sports: string[]): string {
@@ -42,9 +50,9 @@ function sportColor(sports: string[]): string {
 }
 
 // Android react-native-maps takes a native bitmap snapshot of the marker view.
-// Strategy: keep tracksViewChanges=true until onLayout fires (view + font rendered),
-// then wait an extra 400 ms for the native layer to reflect the drawn icon before
-// freezing. A 2500 ms hard fallback covers edge cases where onLayout is delayed.
+// Strategy: keep tracksViewChanges=true until the image's onLoadEnd fires
+// (image fully decoded), then wait 400 ms for the native layer to rasterise
+// before freezing. A 2500 ms hard fallback covers any edge cases.
 // Selection changes re-enable tracking briefly to capture the colour update.
 function VenueMarker({
   venue,
@@ -66,8 +74,8 @@ function VenueMarker({
     setTracksViewChanges(false);
   }, []);
 
-  // onLayout: icon font has rendered — give native 400 ms then freeze
-  const handleLayout = useCallback(() => {
+  // Image onLoadEnd: pixels decoded — give native 400 ms then freeze
+  const handleImageLoad = useCallback(() => {
     if (frozenRef.current) return;
     freezeTimerRef.current = setTimeout(freeze, 400);
   }, [freeze]);
@@ -96,10 +104,11 @@ function VenueMarker({
     }
   }, [isSelected]);
 
-  const color  = isSelected ? '#111827' : sportColor(venue.sports);
-  const icon   = sportIcon(venue.sports);
-  const size   = isSelected ? 48 : 40;
-  const radius = size / 2;
+  const color   = isSelected ? '#111827' : sportColor(venue.sports);
+  const imgKey  = sportImage(venue.sports);
+  const size    = isSelected ? 52 : 44;
+  const radius  = size / 2;
+  const imgSize = isSelected ? 32 : 26;
 
   return (
     <Marker
@@ -108,11 +117,13 @@ function VenueMarker({
       tracksViewChanges={tracksViewChanges}
       onPress={onPress}
     >
-      <View
-        onLayout={handleLayout}
-        style={[styles.markerCircle, { backgroundColor: color, width: size, height: size, borderRadius: radius }]}
-      >
-        <MaterialCommunityIcons name={icon} size={isSelected ? 26 : 22} color="#fff" />
+      <View style={[styles.markerCircle, { backgroundColor: color, width: size, height: size, borderRadius: radius }]}>
+        <Image
+          source={SPORT_IMAGES[imgKey]}
+          style={{ width: imgSize, height: imgSize }}
+          resizeMode="contain"
+          onLoadEnd={handleImageLoad}
+        />
       </View>
     </Marker>
   );
