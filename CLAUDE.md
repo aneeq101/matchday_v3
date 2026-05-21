@@ -182,6 +182,17 @@ Custom markers use a `VenueMarker` component with `tracksViewChanges={false}` fr
 
 ---
 
+## Backend & Feature Plan
+
+Full plan in `PLAN.md`. Summary:
+
+- **Backend**: Supabase (PostgreSQL + PostGIS for geo queries, Realtime for messaging, Storage for media)
+- **Auth**: Supabase Auth (email/password + Google + Apple)
+- **Payments**: Stripe via Supabase Edge Functions
+- **Push**: Expo Notifications + FCM/APNs
+
+**6 phases** across ~8 weeks. Start with `npm install @supabase/supabase-js`, create a Supabase project, run schema migrations, wire auth into `app/_layout.tsx`.
+
 ## What's NOT Done Yet (Backend / Features)
 
 - No backend — all data is mock
