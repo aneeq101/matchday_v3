@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import RadiusSlider from '../../components/RadiusSlider';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../lib/AuthContext';
 import {
   View,
   Text,
@@ -130,6 +132,7 @@ out center;`;
 
 export default function BookScreen() {
   const { location, loading: locationLoading } = useUserLocation();
+  const { user } = useAuth();
   const [searchText, setSearchText]       = useState('');
   const [radius, setRadius]               = useState(5);
   const [selectedFilter, setSelectedFilter] = useState<SportFilter>(SPORT_FILTERS[0]);
@@ -301,7 +304,31 @@ export default function BookScreen() {
   };
 
   const totalPrice = bookingVenue ? bookingVenue.pricePerHour * selectedDuration : 0;
-  const handleConfirm = () => setConfirmed(true);
+
+  const handleConfirm = async () => {
+    if (!bookingVenue) return;
+
+    if (user) {
+      // Persist to Supabase — fire-and-forget (don't block the success screen)
+      supabase.from('bookings').insert({
+        user_id:         user.id,
+        venue_name:      bookingVenue.name,
+        venue_address:   bookingVenue.address,
+        sport:           selectedSport,
+        date:            selectedDate,
+        time_slot:       selectedTime,
+        duration_hours:  selectedDuration,
+        players_count:   Number(playersCount) || 10,
+        special_requests: specialRequests || null,
+        total_price:     totalPrice,
+        status:          'confirmed',
+      }).then(({ error }) => {
+        if (error) console.warn('Booking save error:', error.message);
+      });
+    }
+
+    setConfirmed(true);
+  };
   const resetBooking  = () => {
     setConfirmed(false); setBookingVenue(null);
     setSelectedDate(''); setSelectedTime('');

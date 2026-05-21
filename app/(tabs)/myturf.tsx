@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,17 +9,74 @@ import {
   ImageBackground,
   StatusBar,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../lib/AuthContext';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
-import { BOOKINGS, MY_MATCHES, type Booking, type MatchItem } from '../../data/mockData';
+import { MY_MATCHES, type Booking, type MatchItem } from '../../data/mockData';
+
+// Shape returned by Supabase, mapped to the app's Booking type
+function sportEmoji(sport: string): string {
+  const s = sport.toLowerCase();
+  if (s.includes('football') || s.includes('soccer')) return '⚽';
+  if (s.includes('cricket'))    return '🏏';
+  if (s.includes('basketball')) return '🏀';
+  if (s.includes('tennis'))     return '🎾';
+  if (s.includes('badminton'))  return '🏸';
+  if (s.includes('baseball'))   return '⚾';
+  return '🏟️';
+}
 
 export default function MyTurfScreen() {
+  const { user } = useAuth();
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-  const [selectedMatch, setSelectedMatch] = useState<MatchItem | null>(null);
-  const [notifVisible, setNotifVisible] = useState(false);
+  const [selectedMatch, setSelectedMatch]     = useState<MatchItem | null>(null);
+  const [notifVisible, setNotifVisible]       = useState(false);
+  const [dbBookings, setDbBookings]           = useState<Booking[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(false);
+  const [refreshing, setRefreshing]           = useState(false);
+
+  const fetchBookings = async () => {
+    if (!user) return;
+    setLoadingBookings(true);
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      setDbBookings(
+        data.map((row) => ({
+          id:         row.id,
+          venueName:  row.venue_name ?? 'Venue',
+          sport:      row.sport ?? 'Sport',
+          sportEmoji: sportEmoji(row.sport ?? ''),
+          date:       row.date ?? '',
+          time:       row.time_slot ?? '',
+          price:      row.total_price ?? 0,
+          status:     'Confirmed' as const,
+        })),
+      );
+    }
+    setLoadingBookings(false);
+  };
+
+  useEffect(() => { fetchBookings(); }, [user]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchBookings();
+    setRefreshing(false);
+  };
+
+  // Real bookings first, then mock samples (so the screen is never empty)
+  const allBookings = dbBookings.length > 0 ? dbBookings : [];
 
   return (
     <View style={styles.root}>
@@ -42,11 +99,15 @@ export default function MyTurfScreen() {
         </ImageBackground>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />}
+      >
         {/* Stats */}
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
-            <Text style={styles.statNum}>{BOOKINGS.length}</Text>
+            <Text style={styles.statNum}>{allBookings.length}</Text>
             <Text style={styles.statLbl}>Bookings</Text>
           </View>
           <View style={styles.statBox}>
@@ -61,7 +122,15 @@ export default function MyTurfScreen() {
 
         {/* Upcoming Bookings */}
         <Text style={styles.sectionTitle}>Upcoming Bookings</Text>
-        {BOOKINGS.map((b) => (
+        {loadingBookings && <ActivityIndicator color="#16a34a" style={{ marginVertical: 12 }} />}
+        {!loadingBookings && allBookings.length === 0 && (
+          <View style={styles.emptyBookings}>
+            <Ionicons name="calendar-outline" size={36} color="#d1d5db" />
+            <Text style={styles.emptyText}>No bookings yet</Text>
+            <Text style={styles.emptySubText}>Book a venue to see it here</Text>
+          </View>
+        )}
+        {allBookings.map((b) => (
           <BookingCard key={b.id} booking={b} onPress={() => setSelectedBooking(b)} />
         ))}
 
@@ -451,4 +520,7 @@ const styles = StyleSheet.create({
   notifItem: { flexDirection: 'row', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   notifText: { color: '#374151', fontSize: 13, lineHeight: 18 },
   notifTime: { color: '#9ca3af', fontSize: 11, marginTop: 2 },
+  emptyBookings: { alignItems: 'center', paddingVertical: 28, gap: 6 },
+  emptyText:    { color: '#9ca3af', fontSize: 14, fontWeight: '600' },
+  emptySubText: { color: '#d1d5db', fontSize: 12 },
 });
