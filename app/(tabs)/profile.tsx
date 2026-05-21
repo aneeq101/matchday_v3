@@ -10,9 +10,11 @@ import {
   ImageBackground,
   StatusBar,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../lib/AuthContext';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 import { useRouter } from 'expo-router';
@@ -38,6 +40,7 @@ const MENU_ITEMS = [
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { user, signOut } = useAuth();
   const [showVisibilityModal, setShowVisibilityModal] = useState(false);
   const [showMessagesFromModal, setShowMessagesFromModal] = useState(false);
   const [profileVisibility, setProfileVisibility] = useState<'Public' | 'Friends Only'>('Public');
@@ -280,7 +283,14 @@ export default function ProfileScreen() {
               <TouchableOpacity style={styles.cancelBtn2} onPress={() => setShowLogoutConfirm(false)}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.logoutConfirmBtn} onPress={() => setShowLogoutConfirm(false)}>
+              <TouchableOpacity
+                style={styles.logoutConfirmBtn}
+                onPress={async () => {
+                  setShowLogoutConfirm(false);
+                  await signOut();
+                  // _layout.tsx will redirect to sign-in automatically
+                }}
+              >
                 <Text style={styles.logoutConfirmText}>Logout</Text>
               </TouchableOpacity>
             </View>
