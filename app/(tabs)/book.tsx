@@ -12,6 +12,8 @@ import {
   ActivityIndicator,
   Animated,
   PanResponder,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -166,15 +168,41 @@ export default function BookScreen() {
     snapFull.current = 12;
     snapHalf.current = Math.round(bodyH * 0.36);
     snapPeek.current = bodyH - PEEK_HEIGHT;
-    // Open to half on first measure
+    // Start minimised (peek) — user swipes up to see list
     Animated.spring(sheetAnim, {
-      toValue: snapHalf.current,
+      toValue: snapPeek.current,
       useNativeDriver: true,
       damping: 22,
       stiffness: 220,
     }).start();
-    currentY.current = snapHalf.current;
+    currentY.current = snapPeek.current;
   }, [bodyH]);
+
+  // Collapse sheet when keyboard opens so it never fights the keyboard
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const prevY = { value: snapPeek.current };
+
+    const showSub = Keyboard.addListener(showEvent, () => {
+      prevY.value = currentY.current;
+      Animated.spring(sheetAnim, {
+        toValue: snapPeek.current,
+        useNativeDriver: true,
+        damping: 24,
+        stiffness: 280,
+      }).start();
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      Animated.spring(sheetAnim, {
+        toValue: prevY.value,
+        useNativeDriver: true,
+        damping: 24,
+        stiffness: 280,
+      }).start();
+    });
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
 
   const snapTo = (target: number) =>
     Animated.spring(sheetAnim, {
