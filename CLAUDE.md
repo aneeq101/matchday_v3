@@ -86,6 +86,11 @@ utils/
 
 **Currency note:** UI shows "PKR" hardcoded — known bug, not yet fixed. GTA venue prices are in CAD but displayed with PKR label.
 
+**Map vs List venue sets (important):**
+- `mapVenues` = search + sport filter only, **no radius filter** — markers never disappear when user zooms or changes radius
+- `listVenues` = search + sport + radius filter — keeps the list manageable
+- Both are computed in `book.tsx` from `searchSportMockVenues` (mock) + `filteredLiveVenues` (Overpass)
+
 ---
 
 ## Venue Data (`data/mockData.ts`)
@@ -96,16 +101,25 @@ utils/
 - `source?: 'mock' | 'live'` — `'live'` for Overpass results (shows blue "Live" badge)
 - `pricePerHour: 0` + no source → "Contact Venue" shown
 
-**Existing GTA venues with real GPS (IDs):**
+**GTA venues with real GPS (IDs):**
 - `t1`–`t8` — Major venues: Scotiabank Arena, Rogers Centre, BMO Field, Sobeys Stadium, Varsity Centre, Lamport Stadium, Toronto CC, Etobicoke Olympium
-- `tc1`–`tc5` — Public tennis: High Park, Trinity Bellwoods, Ramsden Park, Christie Pits, Sunnybrook Park
-- `gta_t01`–`gta_t10` — Additional public tennis courts (Riverdale, Withrow, Dufferin Grove, etc.)
-- `gta_t11`–`gta_t18` — Private tennis clubs (Toronto Lawn TC, York TC, Donalda Club, etc.)
-- `gta_s01`–`gta_s07` — Football/Soccer fields (Centennial Park, Downsview, Pan Am, etc.)
-- `gta_c01`–`gta_c07` — Cricket grounds (Maple CC, Scarborough CA, Centennial Park, etc.)
-- `gta_b01`–`gta_b06` — Basketball arenas (Mattamy Athletic Centre, Goldring, Esther Shiner, etc.)
-- `gta_bd01`–`gta_bd05` — Badminton clubs (Toronto, Scarborough, Markham, Richmond Hill, Mississauga)
-- `gta_bb01`–`gta_bb04` — Baseball complexes (Christie Pits, Centennial, Scarborough, Etobicoke)
+- `tc1`–`tc5` — Public tennis (Toronto): High Park, Trinity Bellwoods, Ramsden Park, Christie Pits, Sunnybrook
+- `gta_t01`–`gta_t10` — Additional public tennis courts (Toronto: Riverdale, Withrow, Dufferin Grove, Stanley, Eglinton, etc.)
+- `gta_t11`–`gta_t18` — Private tennis clubs (Toronto: Toronto Lawn TC, York TC, Donalda, Lakeshore, Humber Valley, Tam O'Shanter, Rosedale, North York TC)
+- `gta_t19`–`gta_t26` — Tennis (Mississauga): Clarkson LTC, Port Credit TC, Streetsville TC, Meadowvale, Huron Park, Erindale Park, Mississauga Valley, Applewood TC
+- `gta_t27`–`gta_t29` — Tennis (Brampton): Brampton TC, Heart Lake, Professor's Lake
+- `gta_t30`–`gta_t33` — Tennis (Oakville): Oakville Lawn TC, Sixteen Mile Creek TC, Glen Abbey, Bronte TC
+- `gta_t34`–`gta_t36` — Tennis (Burlington): Burlington TC, Roseland TC, Tansley Woods
+- `gta_t37`–`gta_t39` — Tennis (Markham): Markham TC, Unionville Club, Milliken Park
+- `gta_t40`–`gta_t41` — Tennis (Richmond Hill): Richmond Hill Racquet Club, Bayview Hill TC
+- `gta_t42`–`gta_t43` — Tennis (Vaughan): Woodbridge TC, Maple Community
+- `gta_t44`–`gta_t45` — Tennis (North York extra): G. Ross Lord Park, Cloverdale Park
+- `gta_t46`–`gta_t47` — Tennis (East GTA): Ajax TC, Pickering TC
+- `gta_s01`–`gta_s07` — Football/Soccer fields
+- `gta_c01`–`gta_c07` — Cricket grounds
+- `gta_b01`–`gta_b06` — Basketball arenas
+- `gta_bd01`–`gta_bd05` — Badminton clubs
+- `gta_bb01`–`gta_bb04` — Baseball complexes
 
 When adding new venues: use `coord` (not `offsetKm`), prefix ID with `gta_`, set `pricePerHour: 0` for free/public courts.
 
@@ -129,6 +143,9 @@ Metro resolves `.native.tsx` vs `.web.tsx` automatically. Never import `react-na
 `MapView` uses `initialRegion` (not `region`). Programmatic zoom/pan via `mapRef.current.animateToRegion()`. Two refs break feedback loops:
 - `programmaticRef` — set before `animateToRegion`, suppresses resulting `onRegionChangeComplete`
 - `mapDrivenRef` — set in `onRegionChangeComplete`, suppresses the `useEffect` re-animation
+
+### Web map markers — hover tooltip
+`BookMap.web.tsx` uses react-leaflet `<Tooltip direction="top" offset={[0, -68]}>` inside each `<Marker>` to show the venue name on hover. The `<Popup>` (on click) shows full details + Book Now. Both coexist — `Tooltip` for quick peek, `Popup` for booking action.
 
 ### Native map markers — VenueMarker component
 Custom markers use a `VenueMarker` component with per-marker `tracksViewChanges` state:

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Tooltip, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import type { Venue } from '../data/mockData';
 import type { Coord } from '../utils/geo';
@@ -183,6 +183,11 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
               position={[coord.latitude, coord.longitude]}
               icon={createVenueIcon(sportEmoji(venue.sports), venue.name)}
             >
+              <Tooltip direction="top" offset={[0, -68]} opacity={0.95}>
+                <span style={{ fontWeight: 700, fontSize: 13, fontFamily: 'system-ui,sans-serif' }}>
+                  {venue.name}
+                </span>
+              </Tooltip>
               <Popup minWidth={180}>
                 <div style={{ fontFamily: 'system-ui,sans-serif' }}>
                   <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: '#111827' }}>

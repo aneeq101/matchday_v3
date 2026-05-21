@@ -187,22 +187,27 @@ export default function BookScreen() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [location?.latitude, location?.longitude, radius, selectedFilter.osmSport]);
 
-  const filteredMockVenues = VENUES.filter((v) => {
+  // Mock venues matching search + sport — no radius filter (used for map so markers never disappear on zoom)
+  const searchSportMockVenues = VENUES.filter((v) => {
     if (!v.coord) return false;
     const matchSearch =
       searchText === '' ||
       v.name.toLowerCase().includes(searchText.toLowerCase()) ||
       v.address.toLowerCase().includes(searchText.toLowerCase()) ||
       v.sports.some((s) => s.toLowerCase().includes(searchText.toLowerCase()));
-    const matchRadius = !location || venueDistanceKm(location, v) <= radius;
     const matchSport =
       selectedFilter.label === 'All' ||
       v.sports.some((s) => s.toLowerCase() === selectedFilter.label.toLowerCase());
-    return matchSearch && matchRadius && matchSport;
+    return matchSearch && matchSport;
   }).sort((a, b) => {
     if (!location) return 0;
     return venueDistanceKm(location, a) - venueDistanceKm(location, b);
   });
+
+  // Radius filter applied on top — used for list view only
+  const filteredMockVenues = searchSportMockVenues.filter(
+    (v) => !location || venueDistanceKm(location, v) <= radius,
+  );
 
   const filteredLiveVenues = liveVenues.filter(
     (lv) =>
@@ -211,7 +216,10 @@ export default function BookScreen() {
       lv.address.toLowerCase().includes(searchText.toLowerCase()),
   );
 
-  const allVenues = [...filteredMockVenues, ...filteredLiveVenues];
+  // List: radius-filtered so the list stays manageable
+  const listVenues = [...filteredMockVenues, ...filteredLiveVenues];
+  // Map: all matching venues regardless of radius — markers never disappear on zoom/radius change
+  const mapVenues = [...searchSportMockVenues, ...filteredLiveVenues];
 
   const handleBookVenue = (venue: Venue) => {
     setBookingVenue(venue);
@@ -375,7 +383,7 @@ export default function BookScreen() {
 
       {viewMode === 'list' ? (
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-          {allVenues.length === 0 && (
+          {listVenues.length === 0 && (
             <View style={styles.emptyState}>
               <Ionicons name="search-outline" size={48} color="#d1d5db" />
               <Text style={styles.emptyText}>No venues match your search</Text>
@@ -384,7 +392,7 @@ export default function BookScreen() {
               )}
             </View>
           )}
-          {allVenues.map((venue) => (
+          {listVenues.map((venue) => (
             <VenueCard
               key={venue.id}
               venue={venue}
@@ -401,7 +409,7 @@ export default function BookScreen() {
       ) : (
         <BookMap
           location={location}
-          venues={allVenues}
+          venues={mapVenues}
           radius={radius}
           onBookVenue={handleBookVenue}
           onSwitchToList={() => setViewMode('list')}
