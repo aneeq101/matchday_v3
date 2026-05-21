@@ -38,16 +38,6 @@ function sportEmoji(sports: string[]): string {
   return '🏟️';
 }
 
-function sportColor(sports: string[]): string {
-  const s = (sports[0] ?? '').toLowerCase();
-  if (s.includes('football') || s.includes('soccer')) return '#16a34a';
-  if (s.includes('cricket'))    return '#d97706';
-  if (s.includes('basketball')) return '#ea580c';
-  if (s.includes('tennis'))     return '#2563eb';
-  if (s.includes('badminton'))  return '#7c3aed';
-  if (s.includes('baseball'))   return '#1d4ed8';
-  return '#6b7280';
-}
 
 // Android react-native-maps takes a native bitmap snapshot of the marker view.
 // Strategy: keep tracksViewChanges=true until the image's onLoadEnd fires
@@ -104,11 +94,8 @@ function VenueMarker({
     }
   }, [isSelected]);
 
-  const color   = isSelected ? '#111827' : sportColor(venue.sports);
   const imgKey  = sportImage(venue.sports);
-  const size    = isSelected ? 52 : 44;
-  const radius  = size / 2;
-  const imgSize = isSelected ? 32 : 26;
+  const imgSize = isSelected ? 48 : 36;
 
   return (
     <Marker
@@ -117,14 +104,12 @@ function VenueMarker({
       tracksViewChanges={tracksViewChanges}
       onPress={onPress}
     >
-      <View style={[styles.markerCircle, { backgroundColor: color, width: size, height: size, borderRadius: radius }]}>
-        <Image
-          source={SPORT_IMAGES[imgKey]}
-          style={{ width: imgSize, height: imgSize }}
-          resizeMode="contain"
-          onLoadEnd={handleImageLoad}
-        />
-      </View>
+      <Image
+        source={SPORT_IMAGES[imgKey]}
+        style={{ width: imgSize, height: imgSize }}
+        resizeMode="contain"
+        onLoadEnd={handleImageLoad}
+      />
     </Marker>
   );
 }
@@ -255,11 +240,6 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
 }
 
 const styles = StyleSheet.create({
-  markerCircle: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    // No border, no shadow, no elevation — keeps Android snapshot renderer clean
-  },
   venueCard: {
     position: 'absolute',
     bottom: Platform.OS === 'ios' ? 32 : 16,
