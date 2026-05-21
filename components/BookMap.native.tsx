@@ -1,10 +1,25 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
 import MapView, { Marker, Circle } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import type { Venue } from '../data/mockData';
 import { latDeltaForRadius, type Coord } from '../utils/geo';
 
+// Sport label — ASCII only (system font, renders synchronously on Android snapshot)
+function sportLabel(sports: string[]): string {
+  const s = (sports[0] ?? '').toLowerCase();
+  if (s.includes('football') || s.includes('soccer')) return 'F';
+  if (s.includes('cricket')) return 'C';
+  if (s.includes('basketball')) return 'Bk';
+  if (s.includes('tennis')) return 'T';
+  if (s.includes('badminton')) return 'Bd';
+  if (s.includes('baseball')) return 'Ba';
+  if (s.includes('volleyball')) return 'V';
+  if (s.includes('rugby')) return 'R';
+  return '?';
+}
+
+// Sport emoji — used only in the bottom tap-card (not in markers)
 function sportEmoji(sports: string[]): string {
   const s = (sports[0] ?? '').toLowerCase();
   if (s.includes('football') || s.includes('soccer')) return '⚽';
@@ -18,42 +33,43 @@ function sportEmoji(sports: string[]): string {
   return '🏟️';
 }
 
+function sportColor(sports: string[]): string {
+  const s = (sports[0] ?? '').toLowerCase();
+  if (s.includes('football') || s.includes('soccer')) return '#16a34a';
+  if (s.includes('cricket')) return '#d97706';
+  if (s.includes('basketball')) return '#ea580c';
+  if (s.includes('tennis')) return '#2563eb';
+  if (s.includes('badminton')) return '#7c3aed';
+  if (s.includes('baseball')) return '#1d4ed8';
+  return '#6b7280';
+}
+
+// Marker uses ASCII label + solid color so Android snapshot renders correctly.
+// tracksViewChanges={false} from mount — no emoji, no shadows, no async fonts.
 function VenueMarker({
   venue,
-  emoji,
   isSelected,
   onPress,
 }: {
   venue: Venue;
-  emoji: string;
   isSelected: boolean;
   onPress: () => void;
 }) {
-  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+  const label = sportLabel(venue.sports);
+  const color = isSelected ? '#111827' : sportColor(venue.sports);
 
   return (
     <Marker
       coordinate={venue.coord!}
       anchor={{ x: 0.5, y: 1 }}
-      tracksViewChanges={tracksViewChanges}
+      tracksViewChanges={false}
       onPress={onPress}
     >
-      <View
-        style={[styles.markerOuter, isSelected && styles.markerOuterSelected]}
-        onLayout={() => setTracksViewChanges(false)}
-      >
-        <View style={[styles.markerCircle, { backgroundColor: venue.imageColor ?? '#16a34a' }]}>
-          <Text style={styles.markerEmoji}>{emoji}</Text>
+      <View style={styles.markerWrapper}>
+        <View style={[styles.markerPin, { backgroundColor: color }, isSelected && styles.markerPinSelected]}>
+          <Text style={styles.markerLabel}>{label}</Text>
         </View>
-        <View style={[styles.markerBubble, isSelected && styles.markerBubbleSelected]}>
-          <Text
-            style={[styles.markerName, isSelected && styles.markerNameSelected]}
-            numberOfLines={1}
-          >
-            {venue.name}
-          </Text>
-        </View>
-        <View style={[styles.markerTip, isSelected && styles.markerTipSelected]} />
+        <View style={[styles.markerPointer, { borderTopColor: color }]} />
       </View>
     </Marker>
   );
@@ -71,9 +87,7 @@ interface Props {
 export default function BookMap({ location, venues, radius, onBookVenue, onRadiusChange }: Props) {
   const [selected, setSelected] = useState<Venue | null>(null);
   const mapRef = useRef<MapView>(null);
-  // Prevents onRegionChangeComplete from firing during a programmatic animateToRegion
   const programmaticRef = useRef(false);
-  // Prevents animateToRegion from firing when the radius change originated from the map
   const mapDrivenRef = useRef(false);
 
   const venueCenter =
@@ -87,21 +101,12 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
   const center = location ?? venueCenter ?? { latitude: 43.6565, longitude: -79.38 };
   const delta = latDeltaForRadius(location ? radius : radius * 2);
 
-  // Sync map view when radius slider or GPS location changes
   useEffect(() => {
-    if (mapDrivenRef.current) {
-      mapDrivenRef.current = false;
-      return;
-    }
+    if (mapDrivenRef.current) { mapDrivenRef.current = false; return; }
     if (!mapRef.current) return;
     programmaticRef.current = true;
     mapRef.current.animateToRegion(
-      {
-        latitude: center.latitude,
-        longitude: center.longitude,
-        latitudeDelta: delta,
-        longitudeDelta: delta,
-      },
+      { latitude: center.latitude, longitude: center.longitude, latitudeDelta: delta, longitudeDelta: delta },
       300,
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -122,10 +127,7 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
         showsMyLocationButton
         onPress={() => setSelected(null)}
         onRegionChangeComplete={(region) => {
-          if (programmaticRef.current) {
-            programmaticRef.current = false;
-            return;
-          }
+          if (programmaticRef.current) { programmaticRef.current = false; return; }
           if (!onRadiusChange) return;
           const km = Math.max(1, Math.min(20, Math.round((region.latitudeDelta * 111) / 2.6)));
           mapDrivenRef.current = true;
@@ -136,28 +138,26 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
           <Circle
             center={location}
             radius={radius * 1000}
-            fillColor="rgba(22,163,74,0.08)"
+            fillColor="rgba(22,163,74,0.07)"
             strokeColor="#16a34a"
             strokeWidth={1.5}
           />
         )}
+
         {venues.map((venue) => {
-          const coord = venue.coord;
-          if (!coord) return null;
-          const emoji = sportEmoji(venue.sports);
-          const isSelected = selected?.id === venue.id;
+          if (!venue.coord) return null;
           return (
             <VenueMarker
               key={venue.id}
               venue={venue}
-              emoji={emoji}
-              isSelected={isSelected}
+              isSelected={selected?.id === venue.id}
               onPress={() => setSelected(venue)}
             />
           );
         })}
       </MapView>
 
+      {/* Bottom tap-card — shows emoji + full details when a marker is tapped */}
       {selected && (
         <View style={styles.venueCard}>
           <View style={styles.cardRow}>
@@ -166,7 +166,11 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
               <Text style={styles.cardName} numberOfLines={1}>{selected.name}</Text>
               <Text style={styles.cardAddr} numberOfLines={1}>{selected.address}</Text>
             </View>
-            <TouchableOpacity onPress={() => setSelected(null)} style={styles.closeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity
+              onPress={() => setSelected(null)}
+              style={styles.closeBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Ionicons name="close" size={18} color="#6b7280" />
             </TouchableOpacity>
           </View>
@@ -188,7 +192,7 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
           <View style={styles.cardFooter}>
             {selected.pricePerHour > 0 ? (
               <Text style={styles.cardPrice}>
-                PKR {selected.pricePerHour.toLocaleString()}
+                CAD {selected.pricePerHour.toLocaleString()}
                 <Text style={styles.perHr}>/hr</Text>
               </Text>
             ) : (
@@ -208,53 +212,39 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
 }
 
 const styles = StyleSheet.create({
-  markerOuter: { alignItems: 'center', minWidth: 70 },
-  markerOuterSelected: { transform: [{ scale: 1.18 }] },
-  markerCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+  // Marker — no shadow/elevation, no emoji, solid color + ASCII text
+  markerWrapper: { alignItems: 'center' },
+  markerPin: {
+    minWidth: 36,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 2.5,
+    borderColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  markerPinSelected: {
+    borderColor: '#facc15',
     borderWidth: 3,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 6,
   },
-  markerEmoji: {
-    fontSize: Platform.OS === 'android' ? 22 : 24,
-    lineHeight: Platform.OS === 'android' ? 28 : 30,
-    textAlign: 'center',
-    includeFontPadding: false,
+  markerLabel: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 13,
+    letterSpacing: 0.3,
   },
-  markerBubble: {
-    backgroundColor: 'rgba(255,255,255,0.97)',
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    marginTop: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 4,
-    maxWidth: 130,
-  },
-  markerBubbleSelected: { backgroundColor: '#16a34a' },
-  markerName: { fontSize: 10, fontWeight: '700', color: '#111827' },
-  markerNameSelected: { color: '#fff' },
-  markerTip: {
+  markerPointer: {
     width: 0,
     height: 0,
-    borderLeftWidth: 5,
-    borderRightWidth: 5,
-    borderTopWidth: 6,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 8,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: 'rgba(255,255,255,0.97)',
   },
-  markerTipSelected: { borderTopColor: '#16a34a' },
+
+  // Bottom tap-card
   venueCard: {
     position: 'absolute',
     bottom: Platform.OS === 'ios' ? 32 : 16,

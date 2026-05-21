@@ -22,6 +22,9 @@ import BookMap from '../../components/BookMap';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 
+// Set to true to re-enable live Overpass API venue search
+const LIVE_SEARCH_ENABLED = false;
+
 const TIME_SLOTS = [
   '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
   '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
@@ -160,8 +163,9 @@ export default function BookScreen() {
   const [playersCount, setPlayersCount] = useState('10');
   const [specialRequests, setSpecialRequests] = useState('');
 
-  // Live venue search via Overpass API
+  // Live venue search via Overpass API — gated by LIVE_SEARCH_ENABLED
   useEffect(() => {
+    if (!LIVE_SEARCH_ENABLED) return;
     const { osmSport } = selectedFilter;
     if (!location || !osmSport) {
       setLiveVenues([]);
@@ -259,7 +263,7 @@ export default function BookScreen() {
               <View style={styles.header}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={styles.headerTitle}>Book Venue</Text>
-                  {(locationLoading || liveLoading) && (
+                  {(locationLoading || (LIVE_SEARCH_ENABLED && liveLoading)) && (
                     <ActivityIndicator size="small" color="rgba(255,255,255,0.8)" />
                   )}
                 </View>
@@ -345,8 +349,8 @@ export default function BookScreen() {
         </View>
       </View>
 
-      {/* Live search status bar */}
-      {selectedFilter.osmSport && (
+      {/* Live search status bar — only shown when live search is enabled */}
+      {LIVE_SEARCH_ENABLED && selectedFilter.osmSport && (
         <View style={styles.liveBar}>
           {liveLoading ? (
             <>

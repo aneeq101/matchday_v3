@@ -144,15 +144,23 @@ Metro resolves `.native.tsx` vs `.web.tsx` automatically. Never import `react-na
 - `programmaticRef` — set before `animateToRegion`, suppresses resulting `onRegionChangeComplete`
 - `mapDrivenRef` — set in `onRegionChangeComplete`, suppresses the `useEffect` re-animation
 
+### Live search toggle
+`book.tsx` has `const LIVE_SEARCH_ENABLED = false;` near the top. Set to `true` to re-enable the Overpass API live venue search. When false: the useEffect returns early, `liveVenues` stays `[]`, the status bar and header spinner are hidden. All Overpass code is intact.
+
 ### Web map markers — hover tooltip
 `BookMap.web.tsx` uses react-leaflet `<Tooltip direction="top" offset={[0, -68]}>` inside each `<Marker>` to show the venue name on hover. The `<Popup>` (on click) shows full details + Book Now. Both coexist — `Tooltip` for quick peek, `Popup` for booking action.
 
 ### Native map markers — VenueMarker component
-Custom markers use a `VenueMarker` component with per-marker `tracksViewChanges` state:
-- Starts `true` → flips to `false` after `onLayout` fires
-- Design: explicit-size (46×46) colored circle with white border + emoji inside + name bubble below
-- Android: `includeFontPadding: false`, platform-specific fontSize/lineHeight
-- Never use bare `tracksViewChanges` without this pattern — Android markers won't render
+Custom markers use a `VenueMarker` component with `tracksViewChanges={false}` from mount.
+
+**Root cause of Android invisible markers:** emoji fonts load asynchronously on Android. When react-native-maps takes a native view snapshot for the marker, emoji Text nodes may not have rendered yet → blank marker. Shadows/elevation also interfere with the snapshot.
+
+**Fix:** Use ASCII sport labels (T, F, C, Bk, Bd, Ba) with system fonts (load synchronously) on a solid colored rounded rectangle. No shadows, no elevation, no emoji inside the marker view.
+
+- `tracksViewChanges={false}` from mount (no state transition, no race condition)
+- Marker: colored pill badge + ASCII label + triangular pointer. Selected marker: dark background + yellow border.
+- Sport emoji only appears in the bottom tap-card overlay (not in the marker itself)
+- Sport colors: Tennis=#2563eb, Football=#16a34a, Cricket=#d97706, Basketball=#ea580c, Badminton=#7c3aed, Baseball=#1d4ed8
 
 ### Native marker tap — bottom card overlay
 `<Callout>` removed (unreliable on Android). Marker `onPress` → sets `selected` state → floating bottom card renders over map. Tap map background (`MapView onPress`) dismisses it.
