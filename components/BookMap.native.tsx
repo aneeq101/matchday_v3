@@ -1,50 +1,49 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
 import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import type { Venue } from '../data/mockData';
 import { latDeltaForRadius, type Coord } from '../utils/geo';
 
-// Single-letter sport labels — ASCII, system font, always available on Android
-function sportLabel(sports: string[]): string {
+type MCIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+function sportIcon(sports: string[]): MCIconName {
   const s = (sports[0] ?? '').toLowerCase();
-  if (s.includes('football') || s.includes('soccer')) return 'F';
-  if (s.includes('cricket')) return 'C';
-  if (s.includes('basketball')) return 'B';
-  if (s.includes('tennis')) return 'T';
-  if (s.includes('badminton')) return 'D';
-  if (s.includes('baseball')) return 'X';
-  return '?';
+  if (s.includes('football') || s.includes('soccer')) return 'soccer';
+  if (s.includes('cricket'))    return 'cricket';
+  if (s.includes('basketball')) return 'basketball';
+  if (s.includes('tennis'))     return 'tennis-ball';
+  if (s.includes('badminton'))  return 'badminton';
+  if (s.includes('baseball'))   return 'baseball-bat';
+  return 'map-marker';
 }
 
-// Emoji for the bottom card only (not inside markers)
 function sportEmoji(sports: string[]): string {
   const s = (sports[0] ?? '').toLowerCase();
   if (s.includes('football') || s.includes('soccer')) return '⚽';
-  if (s.includes('cricket')) return '🏏';
+  if (s.includes('cricket'))    return '🏏';
   if (s.includes('basketball')) return '🏀';
-  if (s.includes('tennis')) return '🎾';
-  if (s.includes('badminton')) return '🏸';
-  if (s.includes('baseball')) return '⚾';
+  if (s.includes('tennis'))     return '🎾';
+  if (s.includes('badminton'))  return '🏸';
+  if (s.includes('baseball'))   return '⚾';
   return '🏟️';
 }
 
 function sportColor(sports: string[]): string {
   const s = (sports[0] ?? '').toLowerCase();
   if (s.includes('football') || s.includes('soccer')) return '#16a34a';
-  if (s.includes('cricket')) return '#d97706';
+  if (s.includes('cricket'))    return '#d97706';
   if (s.includes('basketball')) return '#ea580c';
-  if (s.includes('tennis')) return '#2563eb';
-  if (s.includes('badminton')) return '#7c3aed';
-  if (s.includes('baseball')) return '#1d4ed8';
+  if (s.includes('tennis'))     return '#2563eb';
+  if (s.includes('badminton'))  return '#7c3aed';
+  if (s.includes('baseball'))   return '#1d4ed8';
   return '#6b7280';
 }
 
-// Marker rendering strategy:
-// - tracksViewChanges starts true so Android captures the snapshot after layout
-// - flips to false after a short delay (one rAF + 100ms) to freeze the snapshot
-//   and avoid continuous re-capture overhead for 70+ static markers
-// - flips back to true when isSelected changes so the colour update is captured
+// MaterialCommunityIcons fonts are loaded by Expo at startup (not async like emoji).
+// tracksViewChanges starts true so Android captures the snapshot after the font
+// renders, then flips to false after 500 ms to stop continuous re-capture overhead.
+// Re-enables briefly when isSelected changes to capture the colour update.
 function VenueMarker({
   venue,
   isSelected,
@@ -55,26 +54,28 @@ function VenueMarker({
   onPress: () => void;
 }) {
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
-  const prevSelected = useRef(isSelected);
+  const prevSelectedRef = useRef(isSelected);
 
+  // Freeze snapshot after initial render
   useEffect(() => {
-    // Give Android at least one full render cycle before freezing the snapshot
     const t = setTimeout(() => setTracksViewChanges(false), 500);
     return () => clearTimeout(t);
   }, []);
 
-  // Re-enable tracking whenever selected state flips so colour change is captured
+  // Re-enable briefly when selection state changes
   useEffect(() => {
-    if (prevSelected.current !== isSelected) {
-      prevSelected.current = isSelected;
+    if (prevSelectedRef.current !== isSelected) {
+      prevSelectedRef.current = isSelected;
       setTracksViewChanges(true);
       const t = setTimeout(() => setTracksViewChanges(false), 300);
       return () => clearTimeout(t);
     }
   }, [isSelected]);
 
-  const color = isSelected ? '#111827' : sportColor(venue.sports);
-  const label = sportLabel(venue.sports);
+  const color   = isSelected ? '#111827' : sportColor(venue.sports);
+  const icon    = sportIcon(venue.sports);
+  const size    = isSelected ? 48 : 40;
+  const radius  = size / 2;
 
   return (
     <Marker
@@ -83,14 +84,8 @@ function VenueMarker({
       tracksViewChanges={tracksViewChanges}
       onPress={onPress}
     >
-      <View
-        style={[
-          styles.markerCircle,
-          { backgroundColor: color },
-          isSelected && styles.markerCircleSelected,
-        ]}
-      >
-        <Text style={styles.markerText}>{label}</Text>
+      <View style={[styles.markerCircle, { backgroundColor: color, width: size, height: size, borderRadius: radius }]}>
+        <MaterialCommunityIcons name={icon} size={isSelected ? 26 : 22} color="#fff" />
       </View>
     </Marker>
   );
@@ -107,9 +102,9 @@ interface Props {
 
 export default function BookMap({ location, venues, radius, onBookVenue, onRadiusChange }: Props) {
   const [selected, setSelected] = useState<Venue | null>(null);
-  const mapRef = useRef<MapView>(null);
+  const mapRef          = useRef<MapView>(null);
   const programmaticRef = useRef(false);
-  const mapDrivenRef = useRef(false);
+  const mapDrivenRef    = useRef(false);
 
   const venueCenter =
     venues.length > 0
@@ -139,12 +134,7 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFill}
-        initialRegion={{
-          latitude: center.latitude,
-          longitude: center.longitude,
-          latitudeDelta: delta,
-          longitudeDelta: delta,
-        }}
+        initialRegion={{ latitude: center.latitude, longitude: center.longitude, latitudeDelta: delta, longitudeDelta: delta }}
         showsUserLocation
         showsMyLocationButton
         onPress={() => setSelected(null)}
@@ -179,7 +169,6 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
         })}
       </MapView>
 
-      {/* Tap card — emoji & details shown here, not in the marker itself */}
       {selected && (
         <View style={styles.venueCard}>
           <View style={styles.cardRow}>
@@ -228,26 +217,11 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
 }
 
 const styles = StyleSheet.create({
-  // Marker — plain solid circle, no shadow, no elevation, no emoji
   markerCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    // No border, no shadow, no elevation — keeps Android snapshot renderer clean
   },
-  markerCircleSelected: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  markerText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-
-  // Tap card
   venueCard: {
     position: 'absolute',
     bottom: Platform.OS === 'ios' ? 32 : 16,
@@ -275,11 +249,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#bbf7d0',
   },
-  sportTagText:   { color: '#16a34a', fontSize: 11, fontWeight: '600' },
-  cardFooter:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardPrice:      { fontSize: 18, fontWeight: '800', color: '#111827' },
-  perHr:          { fontSize: 13, fontWeight: '400', color: '#6b7280' },
-  cardPriceFree:  { color: '#6b7280', fontWeight: '600', fontSize: 13 },
-  bookBtn:        { backgroundColor: '#16a34a', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
-  bookBtnText:    { color: '#fff', fontWeight: '700', fontSize: 14 },
+  sportTagText:  { color: '#16a34a', fontSize: 11, fontWeight: '600' },
+  cardFooter:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cardPrice:     { fontSize: 18, fontWeight: '800', color: '#111827' },
+  perHr:         { fontSize: 13, fontWeight: '400', color: '#6b7280' },
+  cardPriceFree: { color: '#6b7280', fontWeight: '600', fontSize: 13 },
+  bookBtn:       { backgroundColor: '#16a34a', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
+  bookBtnText:   { color: '#fff', fontWeight: '700', fontSize: 14 },
 });
