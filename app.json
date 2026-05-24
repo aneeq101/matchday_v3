@@ -29,9 +29,13 @@
     },
     "plugins": [
       "expo-router",
-      ["expo-location", {
-        "locationAlwaysAndWhenInUsePermission": "MatchDay needs your location to show venues and players near you."
-      }]
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "MatchDay needs your location to show venues and players near you."
+        }
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

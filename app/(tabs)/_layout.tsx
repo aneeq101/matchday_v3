@@ -1,9 +1,21 @@
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
+import { View, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../../lib/AuthContext';
 
 export default function TabLayout() {
+  const { session, loading } = useAuth();
   const insets = useSafeAreaInsets();
+
+  if (loading) return (
+    <View style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' }}>
+      <ActivityIndicator size="large" color="#16a34a" />
+    </View>
+  );
+
+  if (!session) return <Redirect href="/(auth)/sign-in" />;
+
   const tabBarHeight = 60 + insets.bottom;
 
   return (

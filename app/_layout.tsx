@@ -1,34 +1,24 @@
 import React, { useEffect } from 'react';
 import { Stack, router, useSegments } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import * as Linking from 'expo-linking';
 import { AuthProvider, useAuth } from '../lib/AuthContext';
-import { supabase } from '../lib/supabase';
 
 function RootNavigator() {
   const { session, loading } = useAuth();
   const segments = useSegments();
 
-  // Redirect based on auth state
+  // Redirect based on auth state.
+  // Treat both '(auth)' and 'auth' (the auth/callback route) as the auth flow
+  // so we don't bounce the user to sign-in mid-exchange.
   useEffect(() => {
     if (loading) return;
-    const inAuthGroup = segments[0] === '(auth)';
-    if (!session && !inAuthGroup) {
+    const inAuthFlow = segments[0] === '(auth)' || segments[0] === 'auth';
+    if (!session && !inAuthFlow) {
       router.replace('/(auth)/sign-in');
-    } else if (session && inAuthGroup) {
+    } else if (session && inAuthFlow) {
       router.replace('/(tabs)');
     }
   }, [session, loading, segments]);
-
-  // Handle OAuth deep-link callback (Google sign-in returns here)
-  useEffect(() => {
-    const subscription = Linking.addEventListener('url', ({ url }) => {
-      if (url.includes('code=') || url.includes('access_token')) {
-        supabase.auth.exchangeCodeForSession(url).catch(() => {});
-      }
-    });
-    return () => subscription.remove();
-  }, []);
 
   return (
     <Stack>
@@ -44,6 +34,7 @@ function RootNavigator() {
         }}
       />
       <Stack.Screen name="chat" options={{ headerShown: false }} />
+      <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
     </Stack>
   );
 }

@@ -8,6 +8,7 @@ import {
   Modal,
   Switch,
   ImageBackground,
+  Image,
   StatusBar,
   Platform,
   Alert,
@@ -41,6 +42,24 @@ const MENU_ITEMS = [
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
+
+  // Google puts name in full_name; email signup puts it in name
+  const displayName =
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    user?.email?.split('@')[0] ||
+    'User';
+
+  const avatarUrl: string | undefined =
+    user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
+
+  const initials = displayName
+    .split(' ')
+    .map((w: string) => w[0] ?? '')
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
   const [showVisibilityModal, setShowVisibilityModal] = useState(false);
   const [showMessagesFromModal, setShowMessagesFromModal] = useState(false);
   const [profileVisibility, setProfileVisibility] = useState<'Public' | 'Friends Only'>('Public');
@@ -76,12 +95,16 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.avatarSection}>
               <View style={styles.avatarCircle}>
-                <Text style={styles.avatarInitials}>AA</Text>
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarInitials}>{initials}</Text>
+                )}
               </View>
-              <Text style={styles.profileName}>Aneeq Ahmad</Text>
+              <Text style={styles.profileName}>{displayName}</Text>
               <View style={styles.locationRow}>
-                <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.8)" />
-                <Text style={styles.profileLocation}>Model Town, Lahore</Text>
+                <Ionicons name="mail-outline" size={14} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.profileLocation}>{user?.email ?? ''}</Text>
               </View>
             </View>
           </SafeAreaView>
@@ -332,7 +355,9 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.5)',
     marginBottom: 12,
+    overflow: 'hidden',
   },
+  avatarImage: { width: 88, height: 88, borderRadius: 44 },
   avatarInitials: { color: '#fff', fontSize: 30, fontWeight: '800' },
   profileName: { color: '#fff', fontSize: 24, fontWeight: '700' },
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
