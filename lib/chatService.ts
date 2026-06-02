@@ -34,35 +34,20 @@ function dbToMessage(row: Record<string, unknown>, currentUserId: string): Messa
 }
 
 // ── Conversations ─────────────────────────────────────────────
+// Uses SECURITY DEFINER RPCs (patch_conv_functions.sql) to bypass
+// the RLS cross-participant join problem cleanly.
 
 export async function fetchConversations(userId: string): Promise<{
   real: Conversation[];
   mock: Conversation[];
 }> {
-  const { data: participantRows } = await supabase
-    .from('conversation_participants')
-    .select('conversation_id')
-    .eq('user_id', userId);
+  const { data: rows, error } = await supabase.rpc('get_my_conversations');
 
-  const convIds = (participantRows ?? []).map(
-    (p: Record<string, string>) => p.conversation_id
-  );
-
-  if (!convIds.length) return { real: [], mock: CONVERSATIONS };
-
-  const { data: convs } = await supabase
-    .from('conversations')
-    .select('*, conversation_participants(user_id)')
-    .in('id', convIds)
-    .order('last_message_at', { ascending: false });
-
-  if (!convs?.length) return { real: [], mock: CONVERSATIONS };
+  if (error || !rows?.length) return { real: [], mock: CONVERSATIONS };
 
   const real: Conversation[] = [];
-  for (const conv of convs as Record<string, unknown>[]) {
-    const participants = conv.conversation_participants as { user_id: string }[];
-    const otherId = participants.find((p) => p.user_id !== userId)?.user_id;
-    if (!otherId) continue;
+  for (const row of rows as Record<string, unknown>[]) {
+    const otherId = row.other_user_id as string;
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -71,14 +56,14 @@ export async function fetchConversations(userId: string): Promise<{
       .single();
 
     real.push({
-      id: conv.id as string,
+      id: row.id as string,
       playerId: otherId,
       playerName: (profile?.name as string) ?? 'Player',
       initials: (profile?.initials as string) ?? 'P',
       avatarColor: (profile?.avatar_color as string) ?? '#16a34a',
       gender: ((profile?.gender as string) ?? 'male') as 'male' | 'female',
-      lastMessage: (conv.last_message_text as string) ?? '',
-      timestamp: relativeTime(conv.last_message_at as string),
+      lastMessage: (row.last_message_text as string) ?? '',
+      timestamp: relativeTime(row.last_message_at as string),
       unread: false,
     });
   }
@@ -86,56 +71,19 @@ export async function fetchConversations(userId: string): Promise<{
   return { real, mock: real.length ? [] : CONVERSATIONS };
 }
 
-function generateUuid(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
-
 export async function getOrCreateConversation(
-  userId: string,
+  _userId: string,
   otherUserId: string
 ): Promise<string | null> {
-  // Step 1: Get conversation IDs the current user is in
-  const { data: mine } = await supabase
-    .from('conversation_participants')
-    .select('conversation_id')
-    .eq('user_id', userId);
+  // The RPC runs as SECURITY DEFINER, so it can join across participant
+  // rows without the self-referential RLS problem.
+  const { data, error } = await supabase.rpc('get_or_create_conversation', {
+    other_user_id: otherUserId,
+  });
 
-  const myIds = (mine ?? []).map((c: Record<string, string>) => c.conversation_id);
+  if (error || !data) return null;
 
-  // Step 2: Check if the other user shares any of those conversations.
-  // Requires the updated conv_part_select RLS policy (patch_conv_rls.sql).
-  if (myIds.length) {
-    const { data: shared } = await supabase
-      .from('conversation_participants')
-      .select('conversation_id')
-      .eq('user_id', otherUserId)
-      .in('conversation_id', myIds)
-      .limit(1);
-
-    if (shared?.length) return (shared[0] as Record<string, string>).conversation_id;
-  }
-
-  // Step 3: Create a new conversation. Generate the UUID client-side so we
-  // can insert participants immediately without needing to select the row back
-  // (the conv_select RLS requires participants to exist first, causing a
-  // chicken-and-egg problem if we use insert().select().single()).
-  const newId = generateUuid();
-
-  const { error } = await supabase
-    .from('conversations')
-    .insert({ id: newId });
-
-  if (error) return null;
-
-  await supabase.from('conversation_participants').insert([
-    { conversation_id: newId, user_id: userId },
-    { conversation_id: newId, user_id: otherUserId },
-  ]);
-
-  return newId;
+  return data as string;
 }
 
 // ── Messages ──────────────────────────────────────────────────
