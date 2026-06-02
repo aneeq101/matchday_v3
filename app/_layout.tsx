@@ -34,6 +34,7 @@ function RootNavigator() {
         }}
       />
       <Stack.Screen name="chat" options={{ headerShown: false }} />
+      <Stack.Screen name="looking-now" options={{ headerShown: false }} />
       <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
     </Stack>
   );

@@ -24,6 +24,7 @@ import PlayerProfileModal from '../../components/PlayerProfileModal';
 import { useAuth } from '../../lib/AuthContext';
 import { fetchPosts, createPost, toggleLike, fetchLikedPostIds } from '../../lib/posts';
 import { fetchPlayers } from '../../lib/players';
+import { getOrCreateConversation } from '../../lib/chatService';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 
@@ -110,22 +111,42 @@ export default function HoodScreen() {
     return matchSearch && matchSport && matchRadius;
   });
 
-  const handleToggleLike = async (postId: string) => {
-    if (!user) {
-      setLikedPosts((prev) => {
-        const next = new Set(prev);
-        next.has(postId) ? next.delete(postId) : next.add(postId);
-        return next;
-      });
-      return;
-    }
+  const handleToggleLike = async (postId: string, authorId: string) => {
+    // Prevent self-likes
+    if (user && user.id === authorId) return;
+
     const isLiked = likedPosts.has(postId);
+
+    // Optimistic UI: update liked set and count immediately
     setLikedPosts((prev) => {
       const next = new Set(prev);
       isLiked ? next.delete(postId) : next.add(postId);
       return next;
     });
-    await toggleLike(postId, user.id, isLiked);
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? { ...p, likes: Math.max(0, p.likes + (isLiked ? -1 : 1)) }
+          : p
+      )
+    );
+
+    if (user) {
+      await toggleLike(postId, user.id, isLiked);
+    }
+  };
+
+  const handleMessage = async (target: { id: string; name: string; initials: string; avatarColor: string }) => {
+    if (!user) { router.push('/messages'); return; }
+    if (target.id === user.id) return;
+
+    const convId = await getOrCreateConversation(user.id, target.id);
+    if (convId) {
+      router.push({
+        pathname: '/chat',
+        params: { id: convId, name: target.name, initials: target.initials, color: target.avatarColor },
+      });
+    }
   };
 
   const handlePost = async () => {
@@ -190,7 +211,7 @@ export default function HoodScreen() {
                   <Ionicons name="people" size={18} color="#fff" />
                   <Text style={styles.statText}>{nearbyCount} Near You</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
+                <TouchableOpacity style={styles.statCard} onPress={() => router.push('/looking-now')}>
                   <Ionicons name="search" size={18} color="#fff" />
                   <Text style={styles.statText}>{lookingCount} Looking</Text>
                 </TouchableOpacity>
@@ -210,11 +231,20 @@ export default function HoodScreen() {
             key={post.id}
             post={post}
             liked={likedPosts.has(post.id)}
-            onLike={() => handleToggleLike(post.id)}
+            isSelf={user?.id === post.playerId}
+            onLike={() => handleToggleLike(post.id, post.playerId)}
             onAvatarPress={() => {
               const p = players.find((pl) => pl.id === post.playerId);
               if (p) setSelectedPlayer(p);
             }}
+            onMessage={() =>
+              handleMessage({
+                id: post.playerId,
+                name: post.playerName,
+                initials: post.initials,
+                avatarColor: post.avatarColor,
+              })
+            }
           />
         ))}
       </ScrollView>
@@ -302,7 +332,12 @@ export default function HoodScreen() {
                   }}
                   onMessage={() => {
                     setShowPlayersModal(false);
-                    router.push('/messages');
+                    handleMessage({
+                      id: item.id,
+                      name: item.name,
+                      initials: item.initials,
+                      avatarColor: item.avatarColor,
+                    });
                   }}
                 />
               )}
@@ -440,9 +475,14 @@ export default function HoodScreen() {
       <PlayerProfileModal
         player={selectedPlayer}
         onClose={() => setSelectedPlayer(null)}
-        onMessage={() => {
+        onMessage={(player) => {
           setSelectedPlayer(null);
-          router.push('/messages');
+          handleMessage({
+            id: player.id,
+            name: player.name,
+            initials: player.initials,
+            avatarColor: player.avatarColor,
+          });
         }}
       />
     </View>
@@ -452,13 +492,17 @@ export default function HoodScreen() {
 function PostCard({
   post,
   liked,
+  isSelf,
   onLike,
   onAvatarPress,
+  onMessage,
 }: {
   post: Post;
   liked: boolean;
+  isSelf: boolean;
   onLike: () => void;
   onAvatarPress: () => void;
+  onMessage: () => void;
 }) {
   return (
     <View style={styles.postCard}>
@@ -469,10 +513,10 @@ function PostCard({
           </View>
         </TouchableOpacity>
         <View style={styles.postMeta}>
-          <Text style={styles.posterName}>{post.playerName}</Text>
+          <Text style={styles.posterName}>{post.playerName}{isSelf ? ' (You)' : ''}</Text>
           <Text style={styles.postTime}>{post.time}</Text>
         </View>
-        <View style={[styles.lookingBadge]}>
+        <View style={styles.lookingBadge}>
           <Text style={styles.lookingBadgeText}>{post.lookingFor}</Text>
         </View>
       </View>
@@ -491,20 +535,36 @@ function PostCard({
       </View>
 
       <View style={styles.postActions}>
-        <TouchableOpacity style={styles.actionBtn} onPress={onLike}>
-          <Ionicons name={liked ? 'heart' : 'heart-outline'} size={18} color={liked ? '#ef4444' : '#6b7280'} />
-          <Text style={[styles.actionText, liked && { color: '#ef4444' }]}>
-            {liked ? post.likes + 1 : post.likes}
-          </Text>
-        </TouchableOpacity>
+        {/* Like — hidden on own posts */}
+        {!isSelf && (
+          <TouchableOpacity style={styles.actionBtn} onPress={onLike}>
+            <Ionicons name={liked ? 'heart' : 'heart-outline'} size={18} color={liked ? '#ef4444' : '#6b7280'} />
+            <Text style={[styles.actionText, liked && { color: '#ef4444' }]}>{post.likes}</Text>
+          </TouchableOpacity>
+        )}
+        {isSelf && (
+          <View style={styles.actionBtn}>
+            <Ionicons name="heart-outline" size={18} color="#d1d5db" />
+            <Text style={[styles.actionText, { color: '#d1d5db' }]}>{post.likes}</Text>
+          </View>
+        )}
         <TouchableOpacity style={styles.actionBtn}>
           <Ionicons name="chatbubble-outline" size={18} color="#6b7280" />
           <Text style={styles.actionText}>{post.comments}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn}>
-          <Ionicons name="share-social-outline" size={18} color="#6b7280" />
-          <Text style={styles.actionText}>Share</Text>
-        </TouchableOpacity>
+        {/* Message author — only on other people's posts */}
+        {!isSelf && (
+          <TouchableOpacity style={styles.actionBtn} onPress={onMessage}>
+            <Ionicons name="paper-plane-outline" size={18} color="#16a34a" />
+            <Text style={[styles.actionText, { color: '#16a34a' }]}>Message</Text>
+          </TouchableOpacity>
+        )}
+        {isSelf && (
+          <TouchableOpacity style={styles.actionBtn}>
+            <Ionicons name="share-social-outline" size={18} color="#6b7280" />
+            <Text style={styles.actionText}>Share</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
