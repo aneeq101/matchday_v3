@@ -68,7 +68,15 @@ export async function fetchConversations(userId: string): Promise<{
     });
   }
 
-  return { real, mock: real.length ? [] : CONVERSATIONS };
+  // Deduplicate by other user — in case multiple conversations exist for the same pair
+  const seen = new Set<string>();
+  const deduped = real.filter((c) => {
+    if (seen.has(c.playerId)) return false;
+    seen.add(c.playerId);
+    return true;
+  });
+
+  return { real: deduped, mock: deduped.length ? [] : CONVERSATIONS };
 }
 
 export async function getOrCreateConversation(
