@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,22 @@ import {
   ImageBackground,
   StatusBar,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 import { TOURNAMENTS, type Tournament, type EventType } from '../../data/mockData';
+import { useAuth } from '../../lib/AuthContext';
+import {
+  fetchTournaments,
+  fetchRegisteredIds,
+  registerForTournament,
+  unregisterFromTournament,
+  createTournament as dbCreateTournament,
+} from '../../lib/tournaments';
 
 const TYPE_COLORS: Record<EventType, string> = {
   tournament: '#8b5cf6',
@@ -40,11 +50,14 @@ const SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Hockey', 'Badmin
 const EVENT_TYPES: EventType[] = ['tournament', 'league', 'match'];
 
 export default function EarnScreen() {
+  const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState('All');
   const [registerEvent, setRegisterEvent] = useState<Tournament | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [registeredIds, setRegisteredIds] = useState<Set<string>>(new Set());
   const [registerSuccess, setRegisterSuccess] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Create event form
   const [newType, setNewType] = useState<EventType>('tournament');
@@ -57,33 +70,77 @@ export default function EarnScreen() {
 
   const [events, setEvents] = useState<Tournament[]>(TOURNAMENTS);
 
+  const loadData = useCallback(async () => {
+    const [dbEvents, regIds] = await Promise.all([
+      fetchTournaments(),
+      user ? fetchRegisteredIds(user.id) : Promise.resolve(new Set<string>()),
+    ]);
+    setEvents(dbEvents);
+    setRegisteredIds(regIds);
+  }, [user]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
   const filtered = activeFilter === 'All' ? events : events.filter((e) => e.type === activeFilter);
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!registerEvent) return;
     setRegisterSuccess(true);
-    setRegisteredIds((prev) => new Set(prev).add(registerEvent.id));
+    if (user) {
+      await registerForTournament(registerEvent.id, user.id);
+      setRegisteredIds((prev) => new Set(prev).add(registerEvent.id));
+      // Increment local count
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === registerEvent.id ? { ...e, participants: e.participants + 1 } : e
+        )
+      );
+    } else {
+      setRegisteredIds((prev) => new Set(prev).add(registerEvent.id));
+    }
     setTimeout(() => {
       setRegisterSuccess(false);
       setRegisterEvent(null);
     }, 1600);
   };
 
-  const handleCreate = () => {
-    const newEvent: Tournament = {
+  const handleCreate = async () => {
+    setSaving(true);
+    const saved = await dbCreateTournament(
+      {
+        name: newName || 'New Event',
+        type: newType,
+        sport: newSport,
+        date: newDate || 'TBD',
+        location: newLocation || '',
+        entryFee: parseInt(newFee) || 0,
+        prizePool: parseInt(newPrize) || 0,
+      },
+      user?.id ?? null
+    );
+
+    const newEvent: Tournament = saved ?? {
       id: String(Date.now()),
       name: newName || 'New Event',
       type: newType,
       sport: newSport,
-      sportEmoji: { Football: '⚽', Cricket: '🏏', Tennis: '🎾', Basketball: '🏀', Hockey: '🏑', Badminton: '🏸' }[newSport] || '🏆',
+      sportEmoji: ({ Football: '⚽', Cricket: '🏏', Tennis: '🎾', Basketball: '🏀', Hockey: '🏑', Badminton: '🏸' } as Record<string, string>)[newSport] || '🏆',
       date: newDate || 'TBD',
-      location: newLocation || 'Lahore',
+      location: newLocation || '',
       participants: 0,
       maxParticipants: 16,
       entryFee: parseInt(newFee) || 0,
       prizePool: parseInt(newPrize) || 0,
     };
-    setEvents([newEvent, ...events]);
+
+    setEvents((prev) => [newEvent, ...prev]);
+    setSaving(false);
     setShowCreateModal(false);
     setNewName('');
     setNewDate('');
@@ -125,7 +182,11 @@ export default function EarnScreen() {
         ))}
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />}
+      >
         {filtered.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="trophy-outline" size={48} color="#d1d5db" />
@@ -301,9 +362,10 @@ export default function EarnScreen() {
                 </View>
               </View>
 
-              <TouchableOpacity style={styles.confirmBtn} onPress={handleCreate}>
-                <Ionicons name="add-circle-outline" size={18} color="#fff" />
-                <Text style={styles.confirmBtnText}>Create Event</Text>
+              <TouchableOpacity style={styles.confirmBtn} onPress={handleCreate} disabled={saving}>
+                {saving
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <><Ionicons name="add-circle-outline" size={18} color="#fff" /><Text style={styles.confirmBtnText}>Create Event</Text></>}
               </TouchableOpacity>
               <View style={{ height: 20 }} />
             </ScrollView>

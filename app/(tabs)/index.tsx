@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   FlatList,
   ImageBackground,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +21,9 @@ import { PLAYERS, POSTS, playerDistanceKm, type Player, type Post } from '../../
 import { formatDistance } from '../../utils/geo';
 import { useUserLocation } from '../../hooks/useUserLocation';
 import PlayerProfileModal from '../../components/PlayerProfileModal';
+import { useAuth } from '../../lib/AuthContext';
+import { fetchPosts, createPost, toggleLike, fetchLikedPostIds } from '../../lib/posts';
+import { fetchPlayers } from '../../lib/players';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 
@@ -44,15 +49,18 @@ const PLAYER_RADIUS_OPTIONS = [1, 3, 5, 10, 20];
 
 export default function HoodScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const { location } = useUserLocation();
   const [playerRadius, setPlayerRadius] = useState(5);
+  const [players, setPlayers] = useState<Player[]>(PLAYERS);
+  const [refreshing, setRefreshing] = useState(false);
 
   const nearbyCount = location
-    ? PLAYERS.filter((p) => playerDistanceKm(location, p) <= playerRadius).length
-    : PLAYERS.length;
+    ? players.filter((p) => playerDistanceKm(location, p) <= playerRadius).length
+    : players.length;
   const lookingCount = location
-    ? PLAYERS.filter((p) => p.privacy === 'public' && playerDistanceKm(location, p) <= playerRadius).length
-    : PLAYERS.filter((p) => p.privacy === 'public').length;
+    ? players.filter((p) => p.privacy === 'public' && playerDistanceKm(location, p) <= playerRadius).length
+    : players.filter((p) => p.privacy === 'public').length;
 
   const [showPlayersModal, setShowPlayersModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -69,10 +77,29 @@ export default function HoodScreen() {
   const [skillLevel, setSkillLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Intermediate');
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [posts, setPosts] = useState<Post[]>(POSTS);
+  const [posting, setPosting] = useState(false);
 
   const allSports = ['All', ...SPORTS];
 
-  const filteredPlayers = PLAYERS.filter((p) => {
+  const loadData = useCallback(async () => {
+    const [dbPosts, dbPlayers] = await Promise.all([fetchPosts(), fetchPlayers()]);
+    setPosts(dbPosts);
+    setPlayers(dbPlayers);
+    if (user) {
+      const liked = await fetchLikedPostIds(user.id);
+      setLikedPosts(liked);
+    }
+  }, [user]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
+  const filteredPlayers = players.filter((p) => {
     const matchSearch =
       playerSearch === '' ||
       p.name.toLowerCase().includes(playerSearch.toLowerCase()) ||
@@ -83,21 +110,46 @@ export default function HoodScreen() {
     return matchSearch && matchSport && matchRadius;
   });
 
-  const toggleLike = (postId: string) => {
+  const handleToggleLike = async (postId: string) => {
+    if (!user) {
+      setLikedPosts((prev) => {
+        const next = new Set(prev);
+        next.has(postId) ? next.delete(postId) : next.add(postId);
+        return next;
+      });
+      return;
+    }
+    const isLiked = likedPosts.has(postId);
     setLikedPosts((prev) => {
       const next = new Set(prev);
-      next.has(postId) ? next.delete(postId) : next.add(postId);
+      isLiked ? next.delete(postId) : next.add(postId);
       return next;
     });
+    await toggleLike(postId, user.id, isLiked);
   };
 
-  const handlePost = () => {
-    const newPost: Post = {
+  const handlePost = async () => {
+    setPosting(true);
+    const userName = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'You';
+    const userInitials = userName.slice(0, 2).toUpperCase();
+    const userColor = '#16a34a';
+
+    const saved = await createPost({
+      userId: user?.id ?? null,
+      userName,
+      userInitials,
+      userColor,
+      text: postText || 'Looking to play!',
+      lookingFor,
+      sports: [{ name: postSport, skill: skillLevel, emoji: '' }],
+    });
+
+    const newPost: Post = saved ?? {
       id: String(Date.now()),
-      playerId: 'me',
-      playerName: 'You',
-      initials: 'ME',
-      avatarColor: '#16a34a',
+      playerId: user?.id ?? 'me',
+      playerName: userName,
+      initials: userInitials,
+      avatarColor: userColor,
       time: 'Just now',
       text: postText || 'Looking to play!',
       sports: [{ name: postSport, skill: skillLevel, emoji: '' }],
@@ -105,7 +157,8 @@ export default function HoodScreen() {
       likes: 0,
       comments: 0,
     };
-    setPosts([newPost, ...posts]);
+    setPosts((prev) => [newPost, ...prev]);
+    setPosting(false);
     setShowCreateModal(false);
     setPostText('');
   };
@@ -147,15 +200,19 @@ export default function HoodScreen() {
         </ImageBackground>
       </View>
 
-      <ScrollView style={styles.feed} contentContainerStyle={styles.feedContent}>
+      <ScrollView
+        style={styles.feed}
+        contentContainerStyle={styles.feedContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />}
+      >
         {posts.map((post) => (
           <PostCard
             key={post.id}
             post={post}
             liked={likedPosts.has(post.id)}
-            onLike={() => toggleLike(post.id)}
+            onLike={() => handleToggleLike(post.id)}
             onAvatarPress={() => {
-              const p = PLAYERS.find((pl) => pl.id === post.playerId);
+              const p = players.find((pl) => pl.id === post.playerId);
               if (p) setSelectedPlayer(p);
             }}
           />
@@ -324,9 +381,10 @@ export default function HoodScreen() {
                   <Ionicons name="radio-outline" size={18} color="#16a34a" />
                   <Text style={styles.broadcastBtnText}>Broadcast to Nearby</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.postBtn} onPress={handlePost}>
-                  <Ionicons name="send-outline" size={18} color="#fff" />
-                  <Text style={styles.postBtnText}>Post to Feed</Text>
+                <TouchableOpacity style={styles.postBtn} onPress={handlePost} disabled={posting}>
+                  {posting
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <><Ionicons name="send-outline" size={18} color="#fff" /><Text style={styles.postBtnText}>Post to Feed</Text></>}
                 </TouchableOpacity>
               </View>
             </ScrollView>

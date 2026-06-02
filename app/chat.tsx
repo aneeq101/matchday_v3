@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,34 +13,92 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { CHAT_MESSAGES, type Message } from '../data/mockData';
+import { type Message } from '../data/mockData';
+import { useAuth } from '../lib/AuthContext';
+import {
+  isMockConvId,
+  fetchMessages,
+  sendMessage as dbSendMessage,
+  subscribeToMessages,
+} from '../lib/chatService';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export default function ChatScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const params = useLocalSearchParams<{ id: string; name: string; initials: string; color: string }>();
   const conversationId = params.id ?? '1';
   const playerName = params.name ?? 'Player';
   const initials = params.initials ?? '??';
   const avatarColor = params.color ?? '#16a34a';
 
-  const [messages, setMessages] = useState<Message[]>(
-    CHAT_MESSAGES[conversationId] ?? []
-  );
+  const isMock = isMockConvId(conversationId);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
-  const sendMessage = () => {
+  const load = useCallback(async () => {
+    const msgs = await fetchMessages(conversationId, user?.id ?? '');
+    setMessages(msgs);
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+  }, [conversationId, user?.id]);
+
+  useEffect(() => {
+    load();
+
+    // Subscribe to real-time messages for real (non-mock) conversations
+    if (!isMock && user) {
+      channelRef.current = subscribeToMessages(conversationId, user.id, (msg) => {
+        // Deduplicate: ignore if we already have this message (we optimistically added it on send)
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      });
+    }
+
+    return () => {
+      channelRef.current?.unsubscribe();
+      channelRef.current = null;
+    };
+  }, [conversationId, isMock, load, user]);
+
+  const sendMessage = async () => {
     const text = inputText.trim();
     if (!text) return;
-    const newMsg: Message = {
-      id: String(Date.now()),
-      conversationId,
-      text,
-      sent: true,
-      time: 'Now',
-    };
-    setMessages((prev) => [...prev, newMsg]);
     setInputText('');
+
+    if (isMock || !user) {
+      const newMsg: Message = {
+        id: String(Date.now()),
+        conversationId,
+        text,
+        sent: true,
+        time: 'Now',
+      };
+      setMessages((prev) => [...prev, newMsg]);
+    } else {
+      // Optimistic insert
+      const optimisticId = `opt-${Date.now()}`;
+      const optimistic: Message = {
+        id: optimisticId,
+        conversationId,
+        text,
+        sent: true,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setMessages((prev) => [...prev, optimistic]);
+
+      const userName = user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? 'Me';
+      const saved = await dbSendMessage(conversationId, user.id, userName, text);
+      if (saved) {
+        // Replace optimistic with real message
+        setMessages((prev) => prev.map((m) => (m.id === optimisticId ? saved : m)));
+      }
+    }
+
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
@@ -79,8 +137,7 @@ export default function ChatScreen() {
           contentContainerStyle={styles.messageList}
           onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
           renderItem={({ item, index }) => {
-            const showTime =
-              index === 0 || messages[index - 1]?.sent !== item.sent;
+            const showTime = index === 0 || messages[index - 1]?.sent !== item.sent;
             return <MessageBubble message={item} showTime={showTime} />;
           }}
         />

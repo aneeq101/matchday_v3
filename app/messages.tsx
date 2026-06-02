@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,17 +7,41 @@ import {
   TouchableOpacity,
   TextInput,
   StatusBar,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { CONVERSATIONS, type Conversation } from '../data/mockData';
+import { useAuth } from '../lib/AuthContext';
+import { fetchConversations } from '../lib/chatService';
 
 export default function MessagesScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
+  const [conversations, setConversations] = useState<Conversation[]>(CONVERSATIONS);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const filtered = CONVERSATIONS.filter(
+  const load = useCallback(async () => {
+    if (!user) { setConversations(CONVERSATIONS); return; }
+    setLoading(true);
+    const { real, mock } = await fetchConversations(user.id);
+    setConversations([...real, ...mock]);
+    setLoading(false);
+  }, [user]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
+  const filtered = conversations.filter(
     (c) =>
       search === '' ||
       c.playerName.toLowerCase().includes(search.toLowerCase()) ||
@@ -45,7 +69,11 @@ export default function MessagesScreen() {
         </View>
       </View>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color="#16a34a" />
+        </View>
+      ) : filtered.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="chatbubbles-outline" size={56} color="#d1d5db" />
           <Text style={styles.emptyTitle}>No conversations found</Text>
@@ -55,6 +83,7 @@ export default function MessagesScreen() {
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />}
           renderItem={({ item }) => (
             <ConversationRow
               conversation={item}
