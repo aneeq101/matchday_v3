@@ -86,11 +86,18 @@ export async function fetchConversations(userId: string): Promise<{
   return { real, mock: real.length ? [] : CONVERSATIONS };
 }
 
+function generateUuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 export async function getOrCreateConversation(
   userId: string,
   otherUserId: string
 ): Promise<string | null> {
-  // Look for an existing shared conversation
+  // Step 1: Get conversation IDs the current user is in
   const { data: mine } = await supabase
     .from('conversation_participants')
     .select('conversation_id')
@@ -98,6 +105,8 @@ export async function getOrCreateConversation(
 
   const myIds = (mine ?? []).map((c: Record<string, string>) => c.conversation_id);
 
+  // Step 2: Check if the other user shares any of those conversations.
+  // Requires the updated conv_part_select RLS policy (patch_conv_rls.sql).
   if (myIds.length) {
     const { data: shared } = await supabase
       .from('conversation_participants')
@@ -109,20 +118,24 @@ export async function getOrCreateConversation(
     if (shared?.length) return (shared[0] as Record<string, string>).conversation_id;
   }
 
-  const { data: conv } = await supabase
-    .from('conversations')
-    .insert({})
-    .select()
-    .single();
+  // Step 3: Create a new conversation. Generate the UUID client-side so we
+  // can insert participants immediately without needing to select the row back
+  // (the conv_select RLS requires participants to exist first, causing a
+  // chicken-and-egg problem if we use insert().select().single()).
+  const newId = generateUuid();
 
-  if (!conv) return null;
+  const { error } = await supabase
+    .from('conversations')
+    .insert({ id: newId });
+
+  if (error) return null;
 
   await supabase.from('conversation_participants').insert([
-    { conversation_id: (conv as Record<string, string>).id, user_id: userId },
-    { conversation_id: (conv as Record<string, string>).id, user_id: otherUserId },
+    { conversation_id: newId, user_id: userId },
+    { conversation_id: newId, user_id: otherUserId },
   ]);
 
-  return (conv as Record<string, string>).id;
+  return newId;
 }
 
 // ── Messages ──────────────────────────────────────────────────
