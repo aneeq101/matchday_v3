@@ -68,24 +68,24 @@ export default function ChatScreen() {
         </View>
       </SafeAreaView>
 
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.messageList}
-        onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
-        renderItem={({ item, index }) => {
-          const showTime =
-            index === 0 || messages[index - 1]?.sent !== item.sent;
-          return <MessageBubble message={item} showTime={showTime} />;
-        }}
-      />
-
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <SafeAreaView style={styles.inputSafe}>
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.messageList}
+          onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          renderItem={({ item, index }) => {
+            const showTime =
+              index === 0 || messages[index - 1]?.sent !== item.sent;
+            return <MessageBubble message={item} showTime={showTime} />;
+          }}
+        />
+
+        <SafeAreaView style={styles.inputSafe} edges={['bottom']}>
           <View style={styles.inputRow}>
             <TouchableOpacity style={styles.attachBtn}>
               <Ionicons name="attach" size={22} color="#9ca3af" />

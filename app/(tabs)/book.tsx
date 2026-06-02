@@ -16,6 +16,7 @@ import {
   PanResponder,
   Keyboard,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -482,17 +483,21 @@ export default function BookScreen() {
 
       {/* ── Booking modal ── */}
       <Modal visible={!!bookingVenue && !confirmed} animationType="slide" transparent>
-        <View style={styles.sheetOverlay}>
-          <SafeAreaView style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Book Venue</Text>
-              <TouchableOpacity onPress={() => setBookingVenue(null)}>
-                <Ionicons name="close" size={24} color="#111827" />
-              </TouchableOpacity>
-            </View>
-            {bookingVenue && (
-              <ScrollView contentContainerStyle={styles.modalContent}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={styles.sheetOverlay}>
+            <SafeAreaView style={styles.modalSheet}>
+              <View style={styles.modalHandle} />
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Book Venue</Text>
+                <TouchableOpacity onPress={() => setBookingVenue(null)}>
+                  <Ionicons name="close" size={24} color="#111827" />
+                </TouchableOpacity>
+              </View>
+              {bookingVenue && (
+              <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalContent}>
                 <View style={[styles.venueSummary, { backgroundColor: bookingVenue.imageColor + '15' }]}>
                   <View style={[styles.venueIconBig, { backgroundColor: bookingVenue.imageColor }]}>
                     <Ionicons name="location" size={28} color="#fff" />
@@ -609,9 +614,10 @@ export default function BookScreen() {
                 </TouchableOpacity>
                 <View style={{ height: 20 }} />
               </ScrollView>
-            )}
-          </SafeAreaView>
-        </View>
+              )}
+            </SafeAreaView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Booking confirmed ── */}
