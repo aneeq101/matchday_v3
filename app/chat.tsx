@@ -20,6 +20,7 @@ import {
   fetchMessages,
   sendMessage as dbSendMessage,
   subscribeToMessages,
+  markConversationRead,
 } from '../lib/chatService';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -47,8 +48,9 @@ export default function ChatScreen() {
   useEffect(() => {
     load();
 
-    // Subscribe to real-time messages for real (non-mock) conversations
+    // Mark as read and subscribe to new messages for real conversations
     if (!isMock && user) {
+      markConversationRead(conversationId);
       channelRef.current = subscribeToMessages(conversationId, user.id, (msg) => {
         // Deduplicate: ignore if we already have this message (we optimistically added it on send)
         setMessages((prev) => {

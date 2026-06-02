@@ -94,6 +94,7 @@ export interface Conversation {
   playerName: string;
   initials: string;
   avatarColor: string;
+  avatarUrl?: string;
   gender: Gender;
   lastMessage: string;
   timestamp: string;

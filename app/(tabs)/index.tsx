@@ -83,13 +83,14 @@ export default function HoodScreen() {
   const allSports = ['All', ...SPORTS];
 
   const loadData = useCallback(async () => {
-    const [dbPosts, dbPlayers] = await Promise.all([fetchPosts(), fetchPlayers()]);
+    const [dbPosts, dbPlayers, liked] = await Promise.all([
+      fetchPosts(),
+      fetchPlayers(),
+      user ? fetchLikedPostIds(user.id) : Promise.resolve(new Set<string>()),
+    ]);
     setPosts(dbPosts);
     setPlayers(dbPlayers);
-    if (user) {
-      const liked = await fetchLikedPostIds(user.id);
-      setLikedPosts(liked);
-    }
+    setLikedPosts(liked);
   }, [user]);
 
   useEffect(() => { loadData(); }, [loadData]);

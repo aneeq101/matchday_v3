@@ -51,7 +51,7 @@ export async function fetchConversations(userId: string): Promise<{
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('name, initials, avatar_color, gender')
+      .select('name, initials, avatar_color, avatar_url, gender')
       .eq('id', otherId)
       .single();
 
@@ -61,10 +61,11 @@ export async function fetchConversations(userId: string): Promise<{
       playerName: (profile?.name as string) ?? 'Player',
       initials: (profile?.initials as string) ?? 'P',
       avatarColor: (profile?.avatar_color as string) ?? '#16a34a',
+      avatarUrl: (profile?.avatar_url as string) ?? undefined,
       gender: ((profile?.gender as string) ?? 'male') as 'male' | 'female',
       lastMessage: (row.last_message_text as string) ?? '',
       timestamp: relativeTime(row.last_message_at as string),
-      unread: false,
+      unread: (row.unread as boolean) ?? false,
     });
   }
 
@@ -92,6 +93,10 @@ export async function getOrCreateConversation(
   if (error || !data) return null;
 
   return data as string;
+}
+
+export async function markConversationRead(conversationId: string): Promise<void> {
+  await supabase.rpc('mark_conversation_read', { p_conversation_id: conversationId });
 }
 
 // ── Messages ──────────────────────────────────────────────────

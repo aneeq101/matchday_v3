@@ -8,6 +8,7 @@ import {
   TextInput,
   StatusBar,
   ActivityIndicator,
+  Image,
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -111,21 +112,35 @@ function ConversationRow({
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
-      <View style={[styles.avatar, { backgroundColor: conversation.avatarColor }]}>
-        <Text style={styles.avatarText}>{conversation.initials}</Text>
-      </View>
+    <TouchableOpacity
+      style={[styles.row, conversation.unread && styles.rowUnread]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      {/* Avatar: photo if available, else coloured initials circle */}
+      {conversation.avatarUrl ? (
+        <Image source={{ uri: conversation.avatarUrl }} style={styles.avatarImg} />
+      ) : (
+        <View style={[styles.avatar, { backgroundColor: conversation.avatarColor }]}>
+          <Text style={styles.avatarText}>{conversation.initials}</Text>
+        </View>
+      )}
+
       <View style={styles.rowBody}>
         <View style={styles.rowTop}>
           <View style={styles.nameRow}>
-            <Text style={styles.name}>{conversation.playerName}</Text>
+            <Text style={[styles.name, conversation.unread && styles.nameUnread]}>
+              {conversation.playerName}
+            </Text>
             <Ionicons
               name={conversation.gender === 'male' ? 'male' : 'female'}
               size={13}
               color={conversation.gender === 'male' ? '#3b82f6' : '#ec4899'}
             />
           </View>
-          <Text style={styles.timestamp}>{conversation.timestamp}</Text>
+          <Text style={[styles.timestamp, conversation.unread && styles.timestampUnread]}>
+            {conversation.timestamp}
+          </Text>
         </View>
         <View style={styles.rowBottom}>
           <Text
@@ -169,6 +184,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     gap: 12,
   },
+  rowUnread: {
+    backgroundColor: '#f0fdf4',
+  },
+  avatarImg: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
   avatar: {
     width: 52,
     height: 52,
@@ -181,7 +204,9 @@ const styles = StyleSheet.create({
   rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   name: { fontWeight: '700', color: '#111827', fontSize: 15 },
+  nameUnread: { color: '#16a34a' },
   timestamp: { color: '#9ca3af', fontSize: 12 },
+  timestampUnread: { color: '#16a34a', fontWeight: '600' },
   rowBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   lastMessage: { color: '#6b7280', fontSize: 13, flex: 1 },
   lastMessageBold: { color: '#111827', fontWeight: '600' },
