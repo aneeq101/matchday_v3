@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,23 +12,36 @@ import {
   StatusBar,
   Platform,
   Alert,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/AuthContext';
+import { fetchMySports, addSport, removeSport, fetchMyRanking, type ProfileSport, type MyRanking } from '../../lib/profile';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 import { useRouter } from 'expo-router';
-
-const MY_SPORTS = [
-  { name: 'Football', skill: 'Advanced', emoji: '⚽' },
-  { name: 'Cricket', skill: 'Beginner', emoji: '🏏' },
-];
 
 const SKILL_COLORS: Record<string, string> = {
   Beginner: '#3b82f6',
   Intermediate: '#f59e0b',
   Advanced: '#ef4444',
+};
+
+const SPORT_EMOJIS: Record<string, string> = {
+  Football: '⚽', Cricket: '🏏', Tennis: '🎾',
+  Basketball: '🏀', Hockey: '🏑', Badminton: '🏸', Baseball: '⚾',
+};
+
+const SPORT_DETAILS_FIELDS: Record<string, { label: string; options: string[] }[]> = {
+  Tennis:     [{ label: 'NTRP Rating', options: ['1.0','1.5','2.0','2.5','3.0','3.5','4.0','4.5','5.0','5.5','6.0','7.0'] }],
+  Cricket:    [{ label: 'Role', options: ['Batsman','Bowler','All-rounder','Wicket-keeper'] }, { label: 'Batting Hand', options: ['Right','Left'] }],
+  Football:   [{ label: 'Position', options: ['Forward','Midfielder','Defender','Goalkeeper'] }],
+  Basketball: [{ label: 'Position', options: ['Point Guard','Shooting Guard','Small Forward','Power Forward','Center'] }],
+  Badminton:  [{ label: 'Style', options: ['Singles','Doubles','Mixed'] }],
+  Baseball:   [{ label: 'Position', options: ['Pitcher','Catcher','First Base','Second Base','Shortstop','Third Base','Outfield'] }],
+  Hockey:     [{ label: 'Position', options: ['Forward','Midfielder','Defender','Goalkeeper'] }],
 };
 
 const MENU_ITEMS = [
@@ -66,6 +79,59 @@ export default function ProfileScreen() {
   const [allowMessages, setAllowMessages] = useState(true);
   const [messagesFrom, setMessagesFrom] = useState({ male: true, female: true, undisclosed: true });
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  // Sports & stats
+  const [mySports, setMySports] = useState<ProfileSport[]>([]);
+  const [ranking, setRanking] = useState<MyRanking | null>(null);
+  const [showAddSport, setShowAddSport] = useState(false);
+  const [addingSport, setAddingSport] = useState(false);
+  const [newSport, setNewSport] = useState('Football');
+  const [newSkill, setNewSkill] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Intermediate');
+  const [newDetails, setNewDetails] = useState<Record<string, string>>({});
+
+  const loadProfile = useCallback(async () => {
+    if (!user) return;
+    const [sports, rank] = await Promise.all([fetchMySports(user.id), fetchMyRanking()]);
+    setMySports(sports);
+    setRanking(rank);
+  }, [user]);
+
+  useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  const handleAddSport = async () => {
+    if (!user) return;
+    setAddingSport(true);
+    const result = await addSport({
+      userId: user.id,
+      sport: newSport,
+      skill: newSkill,
+      emoji: SPORT_EMOJIS[newSport] ?? '🏆',
+      details: newDetails,
+    });
+    if (result) {
+      setMySports((prev) => {
+        const existing = prev.findIndex((s) => s.name === newSport);
+        if (existing >= 0) { const next = [...prev]; next[existing] = result; return next; }
+        return [...prev, result];
+      });
+    }
+    setAddingSport(false);
+    setShowAddSport(false);
+    setNewDetails({});
+  };
+
+  const handleRemoveSport = (sport: ProfileSport) => {
+    Alert.alert('Remove Sport', `Remove ${sport.name} from your profile?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove', style: 'destructive',
+        onPress: async () => {
+          setMySports((prev) => prev.filter((s) => s.id !== sport.id));
+          await removeSport(sport.id);
+        },
+      },
+    ]);
+  };
 
   const toggleGender = (key: keyof typeof messagesFrom) => {
     setMessagesFrom((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -111,48 +177,76 @@ export default function ProfileScreen() {
           </View>
         </ImageBackground>
 
-        {/* Stats Card (overlapping header) */}
+        {/* Stats Card */}
         <View style={styles.statsCard}>
           <View style={styles.statItem}>
-            <Text style={styles.statNum}>47</Text>
+            <Text style={styles.statNum}>{ranking?.matches ?? '—'}</Text>
             <Text style={styles.statLbl}>Matches</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statNum}>32</Text>
+            <Text style={styles.statNum}>{ranking?.wins ?? '—'}</Text>
             <Text style={styles.statLbl}>Wins</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={[styles.statNum, { color: '#f59e0b' }]}>Gold</Text>
-            <Text style={styles.statLbl}>Rank</Text>
+            <Text style={[styles.statNum, { color: '#f59e0b' }]}>
+              {ranking ? `${ranking.winRate}%` : '—'}
+            </Text>
+            <Text style={styles.statLbl}>Win Rate</Text>
           </View>
         </View>
+
+        {/* Area Ranking */}
+        {ranking && ranking.areaTotal > 1 && (
+          <View style={styles.rankCard}>
+            <View style={styles.rankLeft}>
+              <Ionicons name="trophy-outline" size={20} color="#f59e0b" />
+              <View>
+                <Text style={styles.rankTitle}>Area Ranking</Text>
+                <Text style={styles.rankSub}>{ranking.area || 'Your area'}</Text>
+              </View>
+            </View>
+            <Text style={styles.rankBadge}>
+              #{ranking.areaRank} <Text style={styles.rankOf}>of {ranking.areaTotal}</Text>
+            </Text>
+          </View>
+        )}
 
         {/* My Sports */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>My Sports</Text>
-            <TouchableOpacity style={styles.addSportBtn}>
+            <TouchableOpacity style={styles.addSportBtn} onPress={() => setShowAddSport(true)}>
               <Ionicons name="add" size={18} color="#16a34a" />
               <Text style={styles.addSportText}>Add Sport</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.sportsGrid}>
-            {MY_SPORTS.map((s, i) => (
-              <View key={i} style={styles.sportCard}>
+            {mySports.map((s) => (
+              <TouchableOpacity
+                key={s.id}
+                style={styles.sportCard}
+                onLongPress={() => handleRemoveSport(s)}
+              >
                 <Text style={styles.sportEmoji}>{s.emoji}</Text>
                 <Text style={styles.sportName}>{s.name}</Text>
                 <View style={[styles.skillBadge, { backgroundColor: SKILL_COLORS[s.skill] }]}>
                   <Text style={styles.skillBadgeText}>{s.skill}</Text>
                 </View>
-              </View>
+                {Object.entries(s.details).map(([k, v]) => (
+                  <Text key={k} style={styles.sportDetail}>{k}: {v}</Text>
+                ))}
+              </TouchableOpacity>
             ))}
-            <TouchableOpacity style={styles.addSportCard}>
+            <TouchableOpacity style={styles.addSportCard} onPress={() => setShowAddSport(true)}>
               <Ionicons name="add" size={28} color="#d1d5db" />
               <Text style={styles.addSportCardText}>Add</Text>
             </TouchableOpacity>
           </View>
+          {mySports.length > 0 && (
+            <Text style={styles.longPressHint}>Long press a sport to remove it</Text>
+          )}
         </View>
 
         {/* Privacy & Messaging */}
@@ -318,6 +412,80 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      {/* Add Sport Modal */}
+      <Modal visible={showAddSport} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <SafeAreaView style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Sport</Text>
+              <TouchableOpacity onPress={() => { setShowAddSport(false); setNewDetails({}); }}>
+                <Ionicons name="close" size={24} color="#111827" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={styles.modalBody}>
+              <Text style={styles.fieldLabel}>Sport</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {Object.keys(SPORT_EMOJIS).map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      style={[styles.sportChip, newSport === s && styles.sportChipActive]}
+                      onPress={() => { setNewSport(s); setNewDetails({}); }}
+                    >
+                      <Text style={styles.sportChipEmoji}>{SPORT_EMOJIS[s]}</Text>
+                      <Text style={[styles.sportChipText, newSport === s && { color: '#fff' }]}>{s}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+
+              <Text style={styles.fieldLabel}>Skill Level</Text>
+              <View style={styles.skillRow}>
+                {(['Beginner', 'Intermediate', 'Advanced'] as const).map((lvl) => (
+                  <TouchableOpacity
+                    key={lvl}
+                    style={[styles.skillChip, newSkill === lvl && { backgroundColor: SKILL_COLORS[lvl], borderColor: SKILL_COLORS[lvl] }]}
+                    onPress={() => setNewSkill(lvl)}
+                  >
+                    <Text style={[styles.skillChipText, newSkill === lvl && { color: '#fff' }]}>{lvl}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Sport-specific fields */}
+              {(SPORT_DETAILS_FIELDS[newSport] ?? []).map((field) => (
+                <View key={field.label}>
+                  <Text style={styles.fieldLabel}>{field.label}</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {field.options.map((opt) => (
+                        <TouchableOpacity
+                          key={opt}
+                          style={[styles.optionPill, newDetails[field.label] === opt && styles.optionPillActive]}
+                          onPress={() => setNewDetails((prev) => ({ ...prev, [field.label]: opt }))}
+                        >
+                          <Text style={[styles.optionPillText, newDetails[field.label] === opt && { color: '#fff' }]}>
+                            {opt}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
+              ))}
+
+              <TouchableOpacity style={styles.saveBtn} onPress={handleAddSport} disabled={addingSport}>
+                {addingSport
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.saveBtnText}>Save Sport</Text>}
+              </TouchableOpacity>
+              <View style={{ height: 20 }} />
+            </ScrollView>
+          </SafeAreaView>
         </View>
       </Modal>
     </View>
@@ -528,4 +696,71 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoutConfirmText: { color: '#fff', fontWeight: '700' },
+  // Ranking
+  rankCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: -8,
+    marginBottom: 8,
+    borderRadius: 12,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  rankLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  rankTitle: { fontWeight: '700', color: '#111827', fontSize: 14 },
+  rankSub: { color: '#6b7280', fontSize: 12 },
+  rankBadge: { fontSize: 22, fontWeight: '800', color: '#f59e0b' },
+  rankOf: { fontSize: 14, fontWeight: '400', color: '#6b7280' },
+  longPressHint: { color: '#9ca3af', fontSize: 11, textAlign: 'center', marginTop: 4 },
+  sportDetail: { fontSize: 10, color: '#6b7280', marginTop: 2 },
+  // Add Sport Modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+  },
+  modalHandle: {
+    width: 40, height: 4, backgroundColor: '#d1d5db',
+    borderRadius: 2, alignSelf: 'center', marginTop: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    padding: 16, borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  modalBody: { padding: 16 },
+  fieldLabel: { fontWeight: '700', color: '#111827', fontSize: 14, marginBottom: 8 },
+  sportChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
+    borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb',
+  },
+  sportChipActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  sportChipEmoji: { fontSize: 16 },
+  sportChipText: { color: '#374151', fontWeight: '500', fontSize: 13 },
+  skillRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  skillChip: {
+    flex: 1, paddingVertical: 8, borderRadius: 8,
+    borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center',
+  },
+  skillChipText: { color: '#374151', fontWeight: '600', fontSize: 13 },
+  optionPill: {
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+    borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb',
+  },
+  optionPillActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  optionPillText: { color: '#374151', fontWeight: '500', fontSize: 13 },
+  saveBtn: {
+    backgroundColor: '#16a34a', paddingVertical: 14,
+    borderRadius: 12, alignItems: 'center', marginTop: 8,
+  },
+  saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

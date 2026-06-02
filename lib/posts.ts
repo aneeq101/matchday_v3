@@ -13,7 +13,7 @@ function relativeTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString();
 }
 
-function dbToPost(row: Record<string, unknown>): Post {
+export function dbToPost(row: Record<string, unknown>): Post {
   return {
     id: row.id as string,
     playerId: (row.author_id as string) ?? 'demo',
@@ -28,6 +28,8 @@ function dbToPost(row: Record<string, unknown>): Post {
     lookingFor: (row.looking_for as string) ?? '',
     likes: (row.likes_count as number) ?? 0,
     comments: (row.comments_count as number) ?? 0,
+    mediaUrl: (row.media_url as string) ?? undefined,
+    mediaType: (row.media_type as 'image' | 'video') ?? undefined,
   };
 }
 
@@ -41,6 +43,28 @@ export async function fetchPosts(): Promise<Post[]> {
   return data.map(dbToPost);
 }
 
+export async function uploadPostMedia(
+  userId: string,
+  uri: string,
+  type: 'image' | 'video'
+): Promise<string | null> {
+  const ext = type === 'image' ? 'jpg' : 'mp4';
+  const path = `${userId}/${Date.now()}.${ext}`;
+  const contentType = type === 'image' ? 'image/jpeg' : 'video/mp4';
+
+  const response = await fetch(uri);
+  const blob = await response.blob();
+
+  const { error } = await supabase.storage
+    .from('post-media')
+    .upload(path, blob, { contentType, upsert: false });
+
+  if (error) return null;
+
+  const { data } = supabase.storage.from('post-media').getPublicUrl(path);
+  return data.publicUrl;
+}
+
 export async function createPost(params: {
   userId: string | null;
   userName: string;
@@ -49,6 +73,8 @@ export async function createPost(params: {
   text: string;
   lookingFor: string;
   sports: { name: string; skill: string; emoji: string }[];
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video';
 }): Promise<Post | null> {
   const { data, error } = await supabase
     .from('posts')
@@ -60,6 +86,8 @@ export async function createPost(params: {
       text: params.text,
       looking_for: params.lookingFor,
       sports: params.sports,
+      media_url: params.mediaUrl ?? null,
+      media_type: params.mediaType ?? null,
     })
     .select()
     .single();
@@ -79,14 +107,18 @@ export async function toggleLike(
   postId: string,
   userId: string,
   isCurrentlyLiked: boolean
-): Promise<void> {
+): Promise<boolean> {
   if (isCurrentlyLiked) {
-    await supabase
+    const { error } = await supabase
       .from('post_likes')
       .delete()
       .eq('post_id', postId)
       .eq('user_id', userId);
+    return !error;
   } else {
-    await supabase.from('post_likes').insert({ post_id: postId, user_id: userId });
+    const { error } = await supabase
+      .from('post_likes')
+      .insert({ post_id: postId, user_id: userId });
+    return !error;
   }
 }

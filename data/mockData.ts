@@ -37,6 +37,8 @@ export interface Post {
   lookingFor: string;
   likes: number;
   comments: number;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video';
 }
 
 export interface Venue {

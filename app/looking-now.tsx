@@ -54,10 +54,13 @@ export default function LookingNowScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [messagingId, setMessagingId] = useState<string | null>(null);
 
+  const [dbLoaded, setDbLoaded] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     const all = await fetchPosts();
     setPosts(dedupByPlayer(all));
+    setDbLoaded(true);
     setLoading(false);
   }, []);
 
@@ -131,6 +134,7 @@ export default function LookingNowScreen() {
             <LookingCard
               post={item}
               isMessaging={messagingId === item.playerId}
+              disabled={!dbLoaded}
               onMessage={() => handleMessage(item)}
             />
           )}
@@ -143,10 +147,12 @@ export default function LookingNowScreen() {
 function LookingCard({
   post,
   isMessaging,
+  disabled,
   onMessage,
 }: {
   post: Post;
   isMessaging: boolean;
+  disabled: boolean;
   onMessage: () => void;
 }) {
   const iconName = (LOOKING_ICONS[post.lookingFor] ?? 'search-outline') as keyof typeof Ionicons.glyphMap;
@@ -180,7 +186,7 @@ function LookingCard({
         ))}
       </View>
 
-      <TouchableOpacity style={styles.messageBtn} onPress={onMessage} disabled={isMessaging}>
+      <TouchableOpacity style={[styles.messageBtn, disabled && { opacity: 0.6 }]} onPress={onMessage} disabled={isMessaging || disabled}>
         {isMessaging ? (
           <ActivityIndicator size="small" color="#fff" />
         ) : (

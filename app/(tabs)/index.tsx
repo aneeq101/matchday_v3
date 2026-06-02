@@ -10,6 +10,7 @@ import {
   StatusBar,
   FlatList,
   ImageBackground,
+  Image,
   Platform,
   ActivityIndicator,
   RefreshControl,
@@ -17,12 +18,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { PLAYERS, POSTS, playerDistanceKm, type Player, type Post } from '../../data/mockData';
 import { formatDistance } from '../../utils/geo';
 import { useUserLocation } from '../../hooks/useUserLocation';
 import PlayerProfileModal from '../../components/PlayerProfileModal';
 import { useAuth } from '../../lib/AuthContext';
-import { fetchPosts, createPost, toggleLike, fetchLikedPostIds } from '../../lib/posts';
+import { fetchPosts, createPost, toggleLike, fetchLikedPostIds, uploadPostMedia } from '../../lib/posts';
 import { fetchPlayers } from '../../lib/players';
 import { getOrCreateConversation } from '../../lib/chatService';
 
@@ -79,6 +81,7 @@ export default function HoodScreen() {
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [posts, setPosts] = useState<Post[]>(POSTS);
   const [posting, setPosting] = useState(false);
+  const [pickedMedia, setPickedMedia] = useState<{ uri: string; type: 'image' | 'video' } | null>(null);
 
   const allSports = ['All', ...SPORTS];
 
@@ -150,11 +153,35 @@ export default function HoodScreen() {
     }
   };
 
+  const pickMedia = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      setPickedMedia({
+        uri: asset.uri,
+        type: asset.type === 'video' ? 'video' : 'image',
+      });
+    }
+  };
+
   const handlePost = async () => {
     setPosting(true);
     const userName = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'You';
     const userInitials = userName.slice(0, 2).toUpperCase();
     const userColor = '#16a34a';
+
+    let mediaUrl: string | undefined;
+    let mediaType: 'image' | 'video' | undefined;
+    if (pickedMedia && user) {
+      const uploaded = await uploadPostMedia(user.id, pickedMedia.uri, pickedMedia.type);
+      if (uploaded) { mediaUrl = uploaded; mediaType = pickedMedia.type; }
+    }
 
     const saved = await createPost({
       userId: user?.id ?? null,
@@ -164,6 +191,8 @@ export default function HoodScreen() {
       text: postText || 'Looking to play!',
       lookingFor,
       sports: [{ name: postSport, skill: skillLevel, emoji: '' }],
+      mediaUrl,
+      mediaType,
     });
 
     const newPost: Post = saved ?? {
@@ -183,6 +212,7 @@ export default function HoodScreen() {
     setPosting(false);
     setShowCreateModal(false);
     setPostText('');
+    setPickedMedia(null);
   };
 
   const handleBroadcast = () => {
@@ -244,6 +274,12 @@ export default function HoodScreen() {
                 name: post.playerName,
                 initials: post.initials,
                 avatarColor: post.avatarColor,
+              })
+            }
+            onComment={() =>
+              router.push({
+                pathname: '/comments',
+                params: { postId: post.id, postAuthor: post.playerName },
               })
             }
           />
@@ -367,6 +403,21 @@ export default function HoodScreen() {
                 multiline
                 numberOfLines={4}
               />
+
+              {/* Media picker */}
+              {pickedMedia ? (
+                <View style={styles.mediaPreviewBox}>
+                  <Image source={{ uri: pickedMedia.uri }} style={styles.mediaPreview} resizeMode="cover" />
+                  <TouchableOpacity style={styles.mediaRemoveBtn} onPress={() => setPickedMedia(null)}>
+                    <Ionicons name="close-circle" size={22} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.mediaPickerBtn} onPress={pickMedia}>
+                  <Ionicons name="image-outline" size={20} color="#6b7280" />
+                  <Text style={styles.mediaPickerText}>Add Photo / Video</Text>
+                </TouchableOpacity>
+              )}
 
               <Text style={styles.fieldLabel}>Looking For</Text>
               <View style={styles.optionGrid}>
@@ -497,6 +548,7 @@ function PostCard({
   onLike,
   onAvatarPress,
   onMessage,
+  onComment,
 }: {
   post: Post;
   liked: boolean;
@@ -504,6 +556,7 @@ function PostCard({
   onLike: () => void;
   onAvatarPress: () => void;
   onMessage: () => void;
+  onComment: () => void;
 }) {
   return (
     <View style={styles.postCard}>
@@ -524,6 +577,11 @@ function PostCard({
 
       <Text style={styles.postText}>{post.text}</Text>
 
+      {/* Media */}
+      {post.mediaUrl && post.mediaType === 'image' && (
+        <Image source={{ uri: post.mediaUrl }} style={styles.postMedia} resizeMode="cover" />
+      )}
+
       <View style={styles.tagRow}>
         {post.sports.map((s, i) => (
           <View key={i} style={styles.sportTag}>
@@ -536,31 +594,38 @@ function PostCard({
       </View>
 
       <View style={styles.postActions}>
-        {/* Like — hidden on own posts */}
-        {!isSelf && (
+        {/* Instagram like mechanic: visible on all posts, tappable only on others' */}
+        {isSelf ? (
+          <View style={styles.actionBtn}>
+            <Ionicons
+              name={post.likes > 0 ? 'heart' : 'heart-outline'}
+              size={18}
+              color={post.likes > 0 ? '#ef4444' : '#d1d5db'}
+            />
+            <Text style={[styles.actionText, { color: post.likes > 0 ? '#ef4444' : '#d1d5db' }]}>
+              {post.likes}
+            </Text>
+          </View>
+        ) : (
           <TouchableOpacity style={styles.actionBtn} onPress={onLike}>
             <Ionicons name={liked ? 'heart' : 'heart-outline'} size={18} color={liked ? '#ef4444' : '#6b7280'} />
             <Text style={[styles.actionText, liked && { color: '#ef4444' }]}>{post.likes}</Text>
           </TouchableOpacity>
         )}
-        {isSelf && (
-          <View style={styles.actionBtn}>
-            <Ionicons name="heart-outline" size={18} color="#d1d5db" />
-            <Text style={[styles.actionText, { color: '#d1d5db' }]}>{post.likes}</Text>
-          </View>
-        )}
-        <TouchableOpacity style={styles.actionBtn}>
+
+        {/* Comment button — all posts */}
+        <TouchableOpacity style={styles.actionBtn} onPress={onComment}>
           <Ionicons name="chatbubble-outline" size={18} color="#6b7280" />
           <Text style={styles.actionText}>{post.comments}</Text>
         </TouchableOpacity>
-        {/* Message author — only on other people's posts */}
-        {!isSelf && (
+
+        {/* Message — only others' posts */}
+        {!isSelf ? (
           <TouchableOpacity style={styles.actionBtn} onPress={onMessage}>
             <Ionicons name="paper-plane-outline" size={18} color="#16a34a" />
             <Text style={[styles.actionText, { color: '#16a34a' }]}>Message</Text>
           </TouchableOpacity>
-        )}
-        {isSelf && (
+        ) : (
           <TouchableOpacity style={styles.actionBtn}>
             <Ionicons name="share-social-outline" size={18} color="#6b7280" />
             <Text style={styles.actionText}>Share</Text>
@@ -724,7 +789,25 @@ const styles = StyleSheet.create({
   },
   lookingBadgeText: { color: '#16a34a', fontSize: 11, fontWeight: '600' },
   postText: { color: '#374151', fontSize: 14, lineHeight: 22, marginBottom: 10 },
+  postMedia: { width: '100%', height: 200, borderRadius: 10, marginBottom: 10 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  mediaPickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    borderStyle: 'dashed',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 14,
+    backgroundColor: '#f9fafb',
+  },
+  mediaPickerText: { color: '#6b7280', fontSize: 14 },
+  mediaPreviewBox: { position: 'relative', marginBottom: 14 },
+  mediaPreview: { width: '100%', height: 180, borderRadius: 10 },
+  mediaRemoveBtn: { position: 'absolute', top: 6, right: 6 },
   sportTag: {
     flexDirection: 'row',
     alignItems: 'center',

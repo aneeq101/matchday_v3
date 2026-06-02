@@ -88,12 +88,16 @@ export default function MessagesScreen() {
           renderItem={({ item }) => (
             <ConversationRow
               conversation={item}
-              onPress={() =>
+              onPress={() => {
+                // Optimistically clear unread before navigating
+                setConversations((prev) =>
+                  prev.map((c) => (c.id === item.id ? { ...c, unread: false } : c))
+                );
                 router.push({
                   pathname: '/chat',
                   params: { id: item.id, name: item.playerName, initials: item.initials, color: item.avatarColor },
-                })
-              }
+                });
+              }}
             />
           )}
           contentContainerStyle={styles.list}
