@@ -26,13 +26,17 @@ export interface MyRanking {
 
 export async function fetchMySports(userId: string): Promise<ProfileSport[]> {
   const resolvedId = MOCK_ID_TO_UUID[userId] ?? userId;
+  console.log('[fetchMySports] querying profile_id:', resolvedId);
+
   const { data, error } = await supabase
     .from('profile_sports')
     .select('*')
     .eq('profile_id', resolvedId)
     .order('created_at', { ascending: true });
 
-  if (error) { console.warn('[fetchMySports] error for', resolvedId, error.message); return []; }
+  console.log('[fetchMySports] rows:', data?.length ?? 0, 'error:', error?.message ?? 'none');
+
+  if (error) { console.warn('[fetchMySports] error:', error.message, error.code); return []; }
   if (!data) return [];
   return data.map((row: Record<string, unknown>) => ({
     id: row.id as string,

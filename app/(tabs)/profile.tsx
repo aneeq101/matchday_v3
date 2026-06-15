@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -154,13 +154,21 @@ export default function ProfileScreen() {
   const [recordSportStats, setRecordSportStats] = useState<Record<string, string>>({});
   const [savingStats, setSavingStats] = useState(false);
 
+  const loadKey = useRef(0);
+
   const loadProfile = useCallback(async () => {
     if (!user) return;
+    const key = ++loadKey.current;
+
     const [sports, rank, stats] = await Promise.all([
       fetchMySports(user.id),
       fetchMyRanking(),
       fetchPlayerStats(user.id),
     ]);
+
+    // Discard result if a newer loadProfile call has already started
+    if (key !== loadKey.current) return;
+
     setRanking(rank);
     setMySports(sports);
 
