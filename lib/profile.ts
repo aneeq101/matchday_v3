@@ -32,7 +32,7 @@ export async function fetchMySports(userId: string): Promise<ProfileSport[]> {
     .from('profile_sports')
     .select('*')
     .eq('profile_id', resolvedId)
-    .order('created_at', { ascending: true });
+    .order('id', { ascending: true });
 
   console.log('[fetchMySports] rows:', data?.length ?? 0, 'error:', error?.message ?? 'none');
 
