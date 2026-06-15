@@ -66,7 +66,8 @@ export async function addSport(params: {
     .select()
     .single();
 
-  if (error || !data) return null;
+  if (error) { console.warn('[addSport] error:', error.message); return null; }
+  if (!data) return null;
   const row = data as Record<string, unknown>;
   return {
     id: row.id as string,

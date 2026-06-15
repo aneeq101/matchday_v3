@@ -579,7 +579,8 @@ export default function ProfileScreen() {
       {/* Add Sport Modal */}
       <Modal visible={showAddSport} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <SafeAreaView style={styles.modalSheet}>
+          <View style={styles.modalSheet}>
+          <SafeAreaView style={{ flex: 1 }}>
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Add Sport</Text>
@@ -647,6 +648,7 @@ export default function ProfileScreen() {
               <View style={{ height: 20 }} />
             </ScrollView>
           </SafeAreaView>
+          </View>
         </View>
       </Modal>
     </View>
@@ -886,7 +888,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '85%',
+    height: '85%',
+    overflow: 'hidden',
   },
   modalHandle: {
     width: 40, height: 4, backgroundColor: '#d1d5db',
