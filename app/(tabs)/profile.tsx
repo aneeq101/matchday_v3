@@ -163,14 +163,18 @@ export default function ProfileScreen() {
     });
     setAddingSport(false);
     if (!result) {
-      Alert.alert('Error', 'Could not save sport. Check your connection and try again.');
+      Alert.alert('Error', 'Could not save sport. Please try again.');
       return;
     }
-    // Reload sports from DB so the UI reflects what was actually saved
-    const saved = await fetchMySports(user.id);
-    setMySports(saved);
+    // Optimistic: add to list immediately so the user sees it right away
+    setMySports((prev) => {
+      const filtered = prev.filter((s) => s.name !== result.name);
+      return [...filtered, result];
+    });
     setShowAddSport(false);
     setNewDetails({});
+    // Background reload to confirm DB state (replaces optimistic if anything drifted)
+    loadProfile();
   };
 
   const handleRemoveSport = (sport: ProfileSport) => {
