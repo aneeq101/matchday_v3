@@ -106,6 +106,38 @@ const MOCK_ID_TO_UUID: Record<string, string> = {
   '6': '00000000-0000-0000-0000-000000000006',
 };
 
+export interface FullProfile {
+  bio: string;
+  area: string;
+  joinDate: string;
+  stats: { matches: number; wins: number; rank: string };
+}
+
+export async function fetchFullProfile(userId: string): Promise<FullProfile | null> {
+  const resolvedId = MOCK_ID_TO_UUID[userId] ?? userId;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('bio, area, join_date, stats')
+    .eq('id', resolvedId)
+    .single();
+
+  if (error || !data) return null;
+  const row = data as Record<string, unknown>;
+  const raw = row.stats;
+  const stats =
+    typeof raw === 'string'
+      ? JSON.parse(raw)
+      : (raw as { matches: number; wins: number; rank: string }) ?? {
+          matches: 0, wins: 0, rank: 'Bronze',
+        };
+  return {
+    bio:      (row.bio as string) ?? '',
+    area:     (row.area as string) ?? '',
+    joinDate: (row.join_date as string) ?? '',
+    stats,
+  };
+}
+
 export async function fetchPlayerStats(userId: string): Promise<PlayerStat[]> {
   const resolvedId = MOCK_ID_TO_UUID[userId] ?? userId;
   const { data, error } = await supabase

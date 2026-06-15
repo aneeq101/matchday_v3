@@ -11,7 +11,14 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Player } from '../data/mockData';
-import { fetchPlayerStats, fetchMySports, type PlayerStat, type ProfileSport } from '../lib/profile';
+import {
+  fetchPlayerStats,
+  fetchMySports,
+  fetchFullProfile,
+  type PlayerStat,
+  type ProfileSport,
+  type FullProfile,
+} from '../lib/profile';
 
 interface Props {
   player: Player | null;
@@ -76,25 +83,32 @@ const SPORT_STAT_FIELDS: Record<string, { key: string; label: string }[]> = {
 };
 
 export default function PlayerProfileModal({ player, onClose, onMessage }: Props) {
-  const [sports, setSports] = useState<ProfileSport[]>([]);
-  const [playerStats, setPlayerStats] = useState<PlayerStat[]>([]);
+  const [sports, setSports]               = useState<ProfileSport[]>([]);
+  const [playerStats, setPlayerStats]     = useState<PlayerStat[]>([]);
   const [selectedStatSport, setSelectedStatSport] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [fullProfile, setFullProfile]     = useState<FullProfile | null>(null);
+  const [loading, setLoading]             = useState(false);
 
   useEffect(() => {
     if (!player) return;
     setSports([]);
     setPlayerStats([]);
     setSelectedStatSport('');
+    setFullProfile(null);
     setLoading(true);
 
     Promise.all([
       fetchMySports(player.id),
       fetchPlayerStats(player.id),
-    ]).then(([sp, st]) => {
-      // Fall back to the pre-fetched sports if DB returns nothing
-      setSports(sp.length > 0 ? sp : player.sports.map((s, i) => ({ ...s, id: String(i), details: {} })));
+      fetchFullProfile(player.id),
+    ]).then(([sp, st, pr]) => {
+      setSports(
+        sp.length > 0
+          ? sp
+          : player.sports.map((s, i) => ({ ...s, id: String(i), details: {} }))
+      );
       setPlayerStats(st);
+      setFullProfile(pr);
       if (st.length > 0) setSelectedStatSport(st[0].sport);
       setLoading(false);
     }).catch((err) => {
@@ -111,205 +125,224 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
     ? Math.round((currentStat.wins / currentStat.matches) * 100)
     : 0;
 
+  // Use fetched profile data where available, fall back to prop values
+  const displayBio    = fullProfile?.bio      || player.bio      || '';
+  const displayArea   = fullProfile?.area     || player.area     || '';
+  const displayJoin   = fullProfile?.joinDate || player.joinDate || '';
+  const displayStats  = fullProfile?.stats    || player.stats;
+
   return (
     <Modal visible={!!player} animationType="slide" transparent>
       <View style={styles.overlay}>
-        <SafeAreaView style={styles.container}>
-          <View style={styles.handle} />
+        {/* height: '90%' gives the ScrollView a real height budget */}
+        <View style={styles.sheet}>
+          <SafeAreaView style={styles.safeInner}>
+            <View style={styles.handle} />
 
-          {/* Header */}
-          <View style={[styles.profileHeader, { backgroundColor: player.avatarColor }]}>
-            <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-              <Ionicons name="close" size={22} color="#fff" />
-            </TouchableOpacity>
-            <View style={styles.avatarLg}>
-              <Text style={styles.avatarInitialsLg}>{player.initials}</Text>
-            </View>
-            <Text style={styles.profileName}>{player.name}</Text>
-            <View style={styles.locationRow}>
-              <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.85)" />
-              <Text style={styles.profileLocation}>{player.area}</Text>
-            </View>
-            <View style={styles.joinRow}>
-              <Ionicons name="calendar-outline" size={12} color="rgba(255,255,255,0.7)" />
-              <Text style={styles.joinText}>Member since {player.joinDate}</Text>
-            </View>
-          </View>
-
-          <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-            {/* Summary stats */}
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNum}>{player.stats.matches}</Text>
-                <Text style={styles.statLbl}>Matches</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statNum}>{player.stats.wins}</Text>
-                <Text style={styles.statLbl}>Wins</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={[styles.statNum, { color: '#f59e0b' }]}>{player.stats.rank}</Text>
-                <Text style={styles.statLbl}>Rank</Text>
-              </View>
-            </View>
-
-            {player.privacy === 'private' && (
-              <View style={styles.privacyBadge}>
-                <Ionicons name="lock-closed" size={14} color="#6b7280" />
-                <Text style={styles.privacyText}>Private Profile</Text>
-              </View>
-            )}
-
-            {/* Bio */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>About</Text>
-              <Text style={styles.bioText}>{player.bio}</Text>
-            </View>
-
-            {/* Sports & Skills */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Sports & Skills</Text>
-              {loading ? (
-                <ActivityIndicator size="small" color="#16a34a" style={{ marginTop: 8 }} />
-              ) : (
-                <View style={styles.sportsGrid}>
-                  {sports.map((s, i) => (
-                    <View key={s.id ?? i} style={styles.sportCard}>
-                      <Text style={styles.sportEmoji}>{s.emoji || SPORT_EMOJIS[s.name] || '🏆'}</Text>
-                      <Text style={styles.sportName}>{s.name}</Text>
-                      <View style={[styles.skillBadge, { backgroundColor: SKILL_COLORS[s.skill] }]}>
-                        <Text style={styles.skillBadgeText}>{s.skill}</Text>
-                      </View>
-                      {Object.entries(s.details ?? {}).map(([k, v]) => (
-                        <Text key={k} style={styles.sportDetail}>{k}: {v}</Text>
-                      ))}
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Player Stats */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Player Stats</Text>
-              {loading ? (
-                <ActivityIndicator size="small" color="#16a34a" style={{ marginTop: 4 }} />
-              ) : playerStats.length === 0 ? (
-                <View style={styles.emptyStats}>
-                  <Ionicons name="stats-chart-outline" size={30} color="#d1d5db" />
-                  <Text style={styles.emptyStatsText}>No stats recorded yet</Text>
-                </View>
-              ) : (
-                <>
-                  {/* Sport tabs */}
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={{ marginBottom: 12 }}
-                    contentContainerStyle={{ gap: 8, flexDirection: 'row' }}
-                  >
-                    {playerStats.map((s) => (
-                      <TouchableOpacity
-                        key={s.sport}
-                        style={[
-                          styles.statSportTab,
-                          selectedStatSport === s.sport && styles.statSportTabActive,
-                        ]}
-                        onPress={() => setSelectedStatSport(s.sport)}
-                      >
-                        <Text style={styles.statSportTabEmoji}>
-                          {SPORT_EMOJIS[s.sport] ?? '🏆'}
-                        </Text>
-                        <Text style={[
-                          styles.statSportTabText,
-                          selectedStatSport === s.sport && styles.statSportTabTextActive,
-                        ]}>
-                          {s.sport}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-
-                  {currentStat && (
-                    <View style={styles.statsDetailCard}>
-                      {/* W / L / D / Played */}
-                      <View style={styles.wldRow}>
-                        <View style={styles.wldItem}>
-                          <Text style={[styles.wldNum, { color: '#16a34a' }]}>{currentStat.wins}</Text>
-                          <Text style={styles.wldLbl}>Won</Text>
-                        </View>
-                        <View style={styles.wldDivider} />
-                        <View style={styles.wldItem}>
-                          <Text style={[styles.wldNum, { color: '#ef4444' }]}>{currentStat.losses}</Text>
-                          <Text style={styles.wldLbl}>Lost</Text>
-                        </View>
-                        {currentStat.draws > 0 && (
-                          <>
-                            <View style={styles.wldDivider} />
-                            <View style={styles.wldItem}>
-                              <Text style={[styles.wldNum, { color: '#f59e0b' }]}>{currentStat.draws}</Text>
-                              <Text style={styles.wldLbl}>Draw</Text>
-                            </View>
-                          </>
-                        )}
-                        <View style={styles.wldDivider} />
-                        <View style={styles.wldItem}>
-                          <Text style={styles.wldNum}>{currentStat.matches}</Text>
-                          <Text style={styles.wldLbl}>Played</Text>
-                        </View>
-                      </View>
-
-                      {/* Win rate */}
-                      <View style={styles.winRateSection}>
-                        <View style={styles.winRateHeader}>
-                          <Text style={styles.winRateLabel}>Win Rate</Text>
-                          <Text style={styles.winRatePct}>{winRate}%</Text>
-                        </View>
-                        <View style={styles.winRateBarBg}>
-                          <View style={[styles.winRateBarFill, { width: `${winRate}%` as any }]} />
-                        </View>
-                      </View>
-
-                      {/* Sport-specific grid */}
-                      {SPORT_STAT_FIELDS[currentStat.sport] && (
-                        <View style={styles.sportStatsGrid}>
-                          {SPORT_STAT_FIELDS[currentStat.sport]
-                            .filter(({ key }) => currentStat.sportStats[key] !== undefined)
-                            .map(({ key, label }) => (
-                              <View key={key} style={styles.sportStatCell}>
-                                <Text style={styles.sportStatValue}>
-                                  {String(currentStat.sportStats[key])}
-                                </Text>
-                                <Text style={styles.sportStatLabel}>{label}</Text>
-                              </View>
-                            ))}
-                        </View>
-                      )}
-                    </View>
-                  )}
-                </>
-              )}
-            </View>
-
-            {/* Actions */}
-            {player.privacy !== 'private' && onMessage && (
-              <TouchableOpacity style={styles.messageBtn} onPress={() => onMessage(player)}>
-                <Ionicons name="chatbubble-outline" size={18} color="#fff" />
-                <Text style={styles.messageBtnText}>Send Message</Text>
+            {/* Coloured header */}
+            <View style={[styles.profileHeader, { backgroundColor: player.avatarColor }]}>
+              <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
+                <Ionicons name="close" size={22} color="#fff" />
               </TouchableOpacity>
-            )}
-            {player.privacy === 'private' && (
-              <View style={styles.privateNote}>
-                <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
-                <Text style={styles.privateNoteText}>This user has restricted messages.</Text>
+              <View style={styles.avatarLg}>
+                <Text style={styles.avatarInitialsLg}>{player.initials}</Text>
               </View>
-            )}
+              <Text style={styles.profileName}>{player.name}</Text>
+              {displayArea ? (
+                <View style={styles.locationRow}>
+                  <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.85)" />
+                  <Text style={styles.profileLocation}>{displayArea}</Text>
+                </View>
+              ) : null}
+              {displayJoin ? (
+                <View style={styles.joinRow}>
+                  <Ionicons name="calendar-outline" size={12} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.joinText}>Member since {displayJoin}</Text>
+                </View>
+              ) : null}
+            </View>
 
-            <View style={{ height: 32 }} />
-          </ScrollView>
-        </SafeAreaView>
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Summary stats row */}
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statNum}>{displayStats.matches}</Text>
+                  <Text style={styles.statLbl}>Matches</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={styles.statNum}>{displayStats.wins}</Text>
+                  <Text style={styles.statLbl}>Wins</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statItem}>
+                  <Text style={[styles.statNum, { color: '#f59e0b' }]}>{displayStats.rank}</Text>
+                  <Text style={styles.statLbl}>Rank</Text>
+                </View>
+              </View>
+
+              {player.privacy === 'private' && (
+                <View style={styles.privacyBadge}>
+                  <Ionicons name="lock-closed" size={14} color="#6b7280" />
+                  <Text style={styles.privacyText}>Private Profile</Text>
+                </View>
+              )}
+
+              {/* Bio */}
+              {displayBio ? (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>About</Text>
+                  <Text style={styles.bioText}>{displayBio}</Text>
+                </View>
+              ) : null}
+
+              {/* Sports & Skills */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Sports & Skills</Text>
+                {loading ? (
+                  <ActivityIndicator size="small" color="#16a34a" style={{ marginTop: 8 }} />
+                ) : sports.length === 0 ? (
+                  <Text style={styles.emptyText}>No sports added yet</Text>
+                ) : (
+                  <View style={styles.sportsGrid}>
+                    {sports.map((s, i) => (
+                      <View key={s.id ?? i} style={styles.sportCard}>
+                        <Text style={styles.sportEmoji}>{s.emoji || SPORT_EMOJIS[s.name] || '🏆'}</Text>
+                        <Text style={styles.sportName}>{s.name}</Text>
+                        <View style={[styles.skillBadge, { backgroundColor: SKILL_COLORS[s.skill] }]}>
+                          <Text style={styles.skillBadgeText}>{s.skill}</Text>
+                        </View>
+                        {Object.entries(s.details ?? {}).map(([k, v]) => (
+                          <Text key={k} style={styles.sportDetail}>{k}: {v}</Text>
+                        ))}
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Player Stats */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Player Stats</Text>
+                {loading ? (
+                  <ActivityIndicator size="small" color="#16a34a" style={{ marginTop: 4 }} />
+                ) : playerStats.length === 0 ? (
+                  <View style={styles.emptyStatsBox}>
+                    <Ionicons name="stats-chart-outline" size={30} color="#d1d5db" />
+                    <Text style={styles.emptyStatsText}>No stats recorded yet</Text>
+                  </View>
+                ) : (
+                  <>
+                    {/* Sport tabs */}
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={{ marginBottom: 12 }}
+                      contentContainerStyle={{ gap: 8, flexDirection: 'row' }}
+                    >
+                      {playerStats.map((s) => (
+                        <TouchableOpacity
+                          key={s.sport}
+                          style={[
+                            styles.statSportTab,
+                            selectedStatSport === s.sport && styles.statSportTabActive,
+                          ]}
+                          onPress={() => setSelectedStatSport(s.sport)}
+                        >
+                          <Text style={styles.statSportTabEmoji}>{SPORT_EMOJIS[s.sport] ?? '🏆'}</Text>
+                          <Text style={[
+                            styles.statSportTabText,
+                            selectedStatSport === s.sport && styles.statSportTabTextActive,
+                          ]}>
+                            {s.sport}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+
+                    {currentStat && (
+                      <View style={styles.statsDetailCard}>
+                        {/* W / L / D / Played */}
+                        <View style={styles.wldRow}>
+                          <View style={styles.wldItem}>
+                            <Text style={[styles.wldNum, { color: '#16a34a' }]}>{currentStat.wins}</Text>
+                            <Text style={styles.wldLbl}>Won</Text>
+                          </View>
+                          <View style={styles.wldDivider} />
+                          <View style={styles.wldItem}>
+                            <Text style={[styles.wldNum, { color: '#ef4444' }]}>{currentStat.losses}</Text>
+                            <Text style={styles.wldLbl}>Lost</Text>
+                          </View>
+                          {currentStat.draws > 0 && (
+                            <>
+                              <View style={styles.wldDivider} />
+                              <View style={styles.wldItem}>
+                                <Text style={[styles.wldNum, { color: '#f59e0b' }]}>{currentStat.draws}</Text>
+                                <Text style={styles.wldLbl}>Draw</Text>
+                              </View>
+                            </>
+                          )}
+                          <View style={styles.wldDivider} />
+                          <View style={styles.wldItem}>
+                            <Text style={styles.wldNum}>{currentStat.matches}</Text>
+                            <Text style={styles.wldLbl}>Played</Text>
+                          </View>
+                        </View>
+
+                        {/* Win rate bar */}
+                        <View style={styles.winRateSection}>
+                          <View style={styles.winRateHeader}>
+                            <Text style={styles.winRateLabel}>Win Rate</Text>
+                            <Text style={styles.winRatePct}>{winRate}%</Text>
+                          </View>
+                          <View style={styles.winRateBarBg}>
+                            <View style={[styles.winRateBarFill, { width: `${winRate}%` as any }]} />
+                          </View>
+                        </View>
+
+                        {/* Sport-specific grid */}
+                        {SPORT_STAT_FIELDS[currentStat.sport] && (
+                          <View style={styles.sportStatsGrid}>
+                            {SPORT_STAT_FIELDS[currentStat.sport]
+                              .filter(({ key }) => currentStat.sportStats[key] !== undefined)
+                              .map(({ key, label }) => (
+                                <View key={key} style={styles.sportStatCell}>
+                                  <Text style={styles.sportStatValue}>
+                                    {String(currentStat.sportStats[key])}
+                                  </Text>
+                                  <Text style={styles.sportStatLabel}>{label}</Text>
+                                </View>
+                              ))}
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+
+              {/* Actions */}
+              {player.privacy !== 'private' && onMessage && (
+                <TouchableOpacity style={styles.messageBtn} onPress={() => onMessage(player)}>
+                  <Ionicons name="chatbubble-outline" size={18} color="#fff" />
+                  <Text style={styles.messageBtnText}>Send Message</Text>
+                </TouchableOpacity>
+              )}
+              {player.privacy === 'private' && (
+                <View style={styles.privateNote}>
+                  <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
+                  <Text style={styles.privateNoteText}>This user has restricted messages.</Text>
+                </View>
+              )}
+
+              <View style={{ height: 32 }} />
+            </ScrollView>
+          </SafeAreaView>
+        </View>
       </View>
     </Modal>
   );
@@ -321,11 +354,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
-  container: {
+  // Explicit height gives ScrollView a real layout budget
+  sheet: {
+    height: '90%',
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '92%',
+    overflow: 'hidden',
+  },
+  safeInner: {
+    flex: 1,
   },
   handle: {
     width: 40, height: 4, backgroundColor: '#d1d5db',
@@ -334,31 +372,30 @@ const styles = StyleSheet.create({
   },
   profileHeader: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: 20,
     paddingHorizontal: 16,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
     position: 'relative',
   },
   closeBtn: {
-    position: 'absolute', top: 16, right: 16,
+    position: 'absolute', top: 12, right: 16,
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
   avatarLg: {
-    width: 80, height: 80, borderRadius: 40,
+    width: 72, height: 72, borderRadius: 36,
     backgroundColor: 'rgba(255,255,255,0.3)',
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: 'rgba(255,255,255,0.6)',
   },
-  avatarInitialsLg: { color: '#fff', fontSize: 28, fontWeight: '700' },
-  profileName: { color: '#fff', fontSize: 22, fontWeight: '700', marginTop: 12 },
+  avatarInitialsLg: { color: '#fff', fontSize: 26, fontWeight: '700' },
+  profileName: { color: '#fff', fontSize: 20, fontWeight: '700', marginTop: 10 },
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  profileLocation: { color: 'rgba(255,255,255,0.85)', fontSize: 14 },
+  profileLocation: { color: 'rgba(255,255,255,0.85)', fontSize: 13 },
   joinRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  joinText: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
+  joinText: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },
   scroll: { flex: 1 },
+  scrollContent: { paddingBottom: 16 },
   statsRow: {
     flexDirection: 'row',
     backgroundColor: '#fff',
@@ -379,6 +416,7 @@ const styles = StyleSheet.create({
   section: { marginHorizontal: 16, marginTop: 20 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 10 },
   bioText: { color: '#6b7280', fontSize: 14, lineHeight: 22 },
+  emptyText: { color: '#9ca3af', fontSize: 13 },
   sportsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   sportCard: {
     backgroundColor: '#f9fafb', borderRadius: 12, padding: 14,
@@ -390,8 +428,7 @@ const styles = StyleSheet.create({
   skillBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   skillBadgeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
   sportDetail: { fontSize: 10, color: '#6b7280', marginTop: 2 },
-  // Player Stats
-  emptyStats: {
+  emptyStatsBox: {
     alignItems: 'center', gap: 8, paddingVertical: 20,
     backgroundColor: '#f9fafb', borderRadius: 12,
     borderWidth: 1, borderColor: '#e5e7eb',
@@ -410,7 +447,6 @@ const styles = StyleSheet.create({
   statsDetailCard: {
     backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden',
     borderWidth: 1, borderColor: '#e5e7eb',
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
   },
   wldRow: {
     flexDirection: 'row', paddingVertical: 16, paddingHorizontal: 8,
@@ -437,7 +473,6 @@ const styles = StyleSheet.create({
   },
   sportStatValue: { fontSize: 20, fontWeight: '800', color: '#111827' },
   sportStatLabel: { fontSize: 11, color: '#6b7280', marginTop: 3 },
-  // Actions
   messageBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: '#16a34a', marginHorizontal: 16, marginTop: 24,
