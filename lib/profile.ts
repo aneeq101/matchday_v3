@@ -52,22 +52,32 @@ export async function addSport(params: {
   emoji: string;
   details: Record<string, string>;
 }): Promise<ProfileSport | null> {
+  // Delete any existing row for this sport first, then insert fresh.
+  // Avoids upsert/onConflict issues with unique indexes vs. constraints.
+  const { error: delErr } = await supabase
+    .from('profile_sports')
+    .delete()
+    .eq('profile_id', params.userId)
+    .eq('sport', params.sport);
+
+  if (delErr) console.warn('[addSport] delete error:', delErr.message, delErr.code);
+
   const { data, error } = await supabase
     .from('profile_sports')
-    .upsert(
-      {
-        profile_id: params.userId,
-        sport: params.sport,
-        skill: params.skill,
-        emoji: params.emoji,
-        details: params.details,
-      },
-      { onConflict: 'profile_id,sport' }
-    )
+    .insert({
+      profile_id: params.userId,
+      sport: params.sport,
+      skill: params.skill,
+      emoji: params.emoji,
+      details: params.details,
+    })
     .select()
     .single();
 
-  if (error) { console.warn('[addSport] error:', error.message); return null; }
+  if (error) {
+    console.warn('[addSport] insert error:', error.message, 'code:', error.code);
+    return null;
+  }
   if (!data) return null;
   const row = data as Record<string, unknown>;
   return {
