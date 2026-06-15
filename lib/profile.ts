@@ -32,7 +32,8 @@ export async function fetchMySports(userId: string): Promise<ProfileSport[]> {
     .eq('profile_id', resolvedId)
     .order('created_at', { ascending: true });
 
-  if (error || !data) return [];
+  if (error) { console.warn('[fetchMySports] error for', resolvedId, error.message); return []; }
+  if (!data) return [];
   return data.map((row: Record<string, unknown>) => ({
     id: row.id as string,
     name: row.sport as string,

@@ -161,14 +161,14 @@ export default function ProfileScreen() {
       emoji: SPORT_EMOJIS[newSport] ?? '🏆',
       details: newDetails,
     });
-    if (result) {
-      setMySports((prev) => {
-        const existing = prev.findIndex((s) => s.name === newSport);
-        if (existing >= 0) { const next = [...prev]; next[existing] = result; return next; }
-        return [...prev, result];
-      });
-    }
     setAddingSport(false);
+    if (!result) {
+      Alert.alert('Error', 'Could not save sport. Check your connection and try again.');
+      return;
+    }
+    // Reload sports from DB so the UI reflects what was actually saved
+    const saved = await fetchMySports(user.id);
+    setMySports(saved);
     setShowAddSport(false);
     setNewDetails({});
   };
