@@ -13,10 +13,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { POSTS, type Post } from '../data/mockData';
+import { POSTS, type Post, type Player } from '../data/mockData';
 import { fetchPosts } from '../lib/posts';
 import { getOrCreateConversation } from '../lib/chatService';
 import { useAuth } from '../lib/AuthContext';
+import PlayerProfileModal from '../components/PlayerProfileModal';
 
 const SKILL_COLORS: Record<string, string> = {
   Beginner: '#3b82f6',
@@ -53,6 +54,7 @@ export default function LookingNowScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [messagingId, setMessagingId] = useState<string | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
   const [dbLoaded, setDbLoaded] = useState(false);
 
@@ -70,6 +72,24 @@ export default function LookingNowScreen() {
     setRefreshing(true);
     await load();
     setRefreshing(false);
+  };
+
+  const openProfile = (post: Post) => {
+    setSelectedPlayer({
+      id: post.playerId,
+      name: post.playerName,
+      initials: post.initials,
+      avatarColor: post.avatarColor,
+      gender: 'male' as const,
+      area: '',
+      distance: '',
+      bio: '',
+      sports: post.sports ?? [],
+      privacy: 'public' as const,
+      joinDate: '',
+      stats: { matches: 0, wins: 0, rank: 'Bronze' },
+      offsetKm: { dx: 0, dy: 0 },
+    });
   };
 
   const handleMessage = async (post: Post) => {
@@ -135,11 +155,25 @@ export default function LookingNowScreen() {
               post={item}
               isMessaging={messagingId === item.playerId}
               disabled={!dbLoaded}
+              onProfile={() => openProfile(item)}
               onMessage={() => handleMessage(item)}
             />
           )}
         />
       )}
+
+      <PlayerProfileModal
+        player={selectedPlayer}
+        onClose={() => setSelectedPlayer(null)}
+        onMessage={(p) => {
+          setSelectedPlayer(null);
+          if (user && p.id !== user.id) {
+            getOrCreateConversation(user.id, p.id).then((convId) => {
+              if (convId) router.push({ pathname: '/chat', params: { id: convId, name: p.name, initials: p.initials, color: p.avatarColor } });
+            });
+          }
+        }}
+      />
     </View>
   );
 }
@@ -148,18 +182,20 @@ function LookingCard({
   post,
   isMessaging,
   disabled,
+  onProfile,
   onMessage,
 }: {
   post: Post;
   isMessaging: boolean;
   disabled: boolean;
+  onProfile: () => void;
   onMessage: () => void;
 }) {
   const iconName = (LOOKING_ICONS[post.lookingFor] ?? 'search-outline') as keyof typeof Ionicons.glyphMap;
 
   return (
     <View style={styles.card}>
-      <View style={styles.cardTop}>
+      <TouchableOpacity style={styles.cardTop} onPress={onProfile} activeOpacity={0.7}>
         <View style={[styles.avatar, { backgroundColor: post.avatarColor }]}>
           <Text style={styles.avatarText}>{post.initials}</Text>
         </View>
@@ -170,8 +206,10 @@ function LookingCard({
             <Text style={styles.lookingBadgeText}>{post.lookingFor}</Text>
           </View>
         </View>
-        <Text style={styles.timeAgo}>{post.time}</Text>
-      </View>
+        <View style={styles.profileHint}>
+          <Ionicons name="chevron-forward" size={16} color="#d1d5db" />
+        </View>
+      </TouchableOpacity>
 
       <Text style={styles.postText} numberOfLines={2}>{post.text}</Text>
 
@@ -260,6 +298,7 @@ const styles = StyleSheet.create({
   },
   lookingBadgeText: { color: '#16a34a', fontSize: 11, fontWeight: '600' },
   timeAgo: { color: '#9ca3af', fontSize: 11 },
+  profileHint: { marginLeft: 'auto', justifyContent: 'center' },
   postText: { color: '#374151', fontSize: 13, lineHeight: 20, marginBottom: 10 },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
   sportTag: {

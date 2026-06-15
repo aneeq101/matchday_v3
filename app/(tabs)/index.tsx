@@ -265,8 +265,27 @@ export default function HoodScreen() {
             isSelf={user?.id === post.playerId}
             onLike={() => handleToggleLike(post.id, post.playerId)}
             onAvatarPress={() => {
-              const p = players.find((pl) => pl.id === post.playerId);
-              if (p) setSelectedPlayer(p);
+              // Use the cached player if IDs already match (DB → DB).
+              // If players is still mock data (IDs '1'–'6') but posts carry
+              // real UUIDs, build a minimal Player from the post so the modal
+              // can open and fetch real sports/stats from Supabase.
+              const p =
+                players.find((pl) => pl.id === post.playerId) ?? {
+                  id: post.playerId,
+                  name: post.playerName,
+                  initials: post.initials,
+                  avatarColor: post.avatarColor,
+                  gender: 'male' as const,
+                  area: '',
+                  distance: '',
+                  bio: '',
+                  sports: post.sports ?? [],
+                  privacy: 'public' as const,
+                  joinDate: '',
+                  stats: { matches: 0, wins: 0, rank: 'Bronze' },
+                  offsetKm: { dx: 0, dy: 0 },
+                };
+              setSelectedPlayer(p);
             }}
             onMessage={() =>
               handleMessage({
