@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/AuthContext';
-import { fetchMySports, addSport, removeSport, fetchMyRanking, fetchPlayerStats, initSportStats, type ProfileSport, type MyRanking, type PlayerStat } from '../../lib/profile';
+import { fetchMySports, addSport, removeSport, fetchMyRanking, fetchPlayerStats, upsertSportStats, type ProfileSport, type MyRanking, type PlayerStat } from '../../lib/profile';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 import { useRouter } from 'expo-router';
@@ -44,48 +44,56 @@ const SPORT_DETAILS_FIELDS: Record<string, { label: string; options: string[] }[
   Hockey:     [{ label: 'Position', options: ['Forward','Midfielder','Defender','Goalkeeper'] }],
 };
 
-const SPORT_STAT_FIELDS: Record<string, { key: string; label: string }[]> = {
-  Football:   [
-    { key: 'goals',        label: 'Goals' },
-    { key: 'assists',      label: 'Assists' },
-    { key: 'yellow_cards', label: 'Yellow Cards' },
-    { key: 'red_cards',    label: 'Red Cards' },
+// Used for both the Record Stats form and the stats display card
+const SPORT_STAT_FIELDS: Record<string, { key: string; label: string; numeric: boolean }[]> = {
+  Football: [
+    { key: 'goals',        label: 'Goals',        numeric: true  },
+    { key: 'assists',      label: 'Assists',       numeric: true  },
+    { key: 'clean_sheets', label: 'Clean Sheets',  numeric: true  },
+    { key: 'yellow_cards', label: 'Yellow Cards',  numeric: true  },
+    { key: 'red_cards',    label: 'Red Cards',     numeric: true  },
   ],
   Cricket: [
-    { key: 'runs',         label: 'Total Runs' },
-    { key: 'wickets',      label: 'Wickets' },
-    { key: 'batting_avg',  label: 'Batting Avg' },
-    { key: 'bowling_avg',  label: 'Bowling Avg' },
-    { key: 'centuries',    label: 'Centuries' },
-    { key: 'fifties',      label: 'Fifties' },
+    { key: 'runs',         label: 'Total Runs',    numeric: true  },
+    { key: 'wickets',      label: 'Wickets',       numeric: true  },
+    { key: 'batting_avg',  label: 'Batting Avg',   numeric: false },
+    { key: 'bowling_avg',  label: 'Bowling Avg',   numeric: false },
+    { key: 'centuries',    label: 'Centuries',     numeric: true  },
+    { key: 'fifties',      label: 'Fifties',       numeric: true  },
   ],
   Tennis: [
-    { key: 'aces',             label: 'Aces' },
-    { key: 'sets_won',         label: 'Sets Won' },
-    { key: 'games_won',        label: 'Games Won' },
-    { key: 'first_serve_pct',  label: 'First Serve %' },
-    { key: 'double_faults',    label: 'Double Faults' },
+    { key: 'aces',            label: 'Aces',           numeric: true  },
+    { key: 'double_faults',   label: 'Double Faults',  numeric: true  },
+    { key: 'sets_won',        label: 'Sets Won',        numeric: true  },
+    { key: 'games_won',       label: 'Games Won',       numeric: true  },
+    { key: 'first_serve_pct', label: 'First Serve %',   numeric: false },
   ],
   Basketball: [
-    { key: 'points',         label: 'Points' },
-    { key: 'rebounds',       label: 'Rebounds' },
-    { key: 'assists',        label: 'Assists' },
-    { key: 'blocks',         label: 'Blocks' },
-    { key: 'steals',         label: 'Steals' },
-    { key: 'three_pointers', label: '3-Pointers' },
+    { key: 'points',         label: 'Points',      numeric: true },
+    { key: 'rebounds',       label: 'Rebounds',    numeric: true },
+    { key: 'assists',        label: 'Assists',      numeric: true },
+    { key: 'blocks',         label: 'Blocks',       numeric: true },
+    { key: 'steals',         label: 'Steals',       numeric: true },
+    { key: 'three_pointers', label: '3-Pointers',   numeric: true },
   ],
   Badminton: [
-    { key: 'sets_won',       label: 'Sets Won' },
-    { key: 'points_scored',  label: 'Points Scored' },
-    { key: 'smashes',        label: 'Smashes' },
-    { key: 'drop_shots',     label: 'Drop Shots' },
+    { key: 'sets_won',      label: 'Sets Won',       numeric: true },
+    { key: 'points_scored', label: 'Points Scored',  numeric: true },
+    { key: 'smashes',       label: 'Smashes',        numeric: true },
+    { key: 'drop_shots',    label: 'Drop Shots',     numeric: true },
   ],
   Baseball: [
-    { key: 'home_runs',    label: 'Home Runs' },
-    { key: 'hits',         label: 'Hits' },
-    { key: 'rbis',         label: 'RBIs' },
-    { key: 'batting_avg',  label: 'Batting Avg' },
-    { key: 'stolen_bases', label: 'Stolen Bases' },
+    { key: 'home_runs',    label: 'Home Runs',    numeric: true  },
+    { key: 'hits',         label: 'Hits',          numeric: true  },
+    { key: 'rbis',         label: 'RBIs',          numeric: true  },
+    { key: 'batting_avg',  label: 'Batting Avg',   numeric: false },
+    { key: 'stolen_bases', label: 'Stolen Bases',  numeric: true  },
+  ],
+  Hockey: [
+    { key: 'goals',           label: 'Goals',           numeric: true },
+    { key: 'assists',         label: 'Assists',          numeric: true },
+    { key: 'saves',           label: 'Saves',            numeric: true },
+    { key: 'penalty_minutes', label: 'Penalty Minutes',  numeric: true },
   ],
 };
 
@@ -136,6 +144,16 @@ export default function ProfileScreen() {
   const [newSkill, setNewSkill] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Intermediate');
   const [newDetails, setNewDetails] = useState<Record<string, string>>({});
 
+  // Record Stats modal
+  const [showRecordStats, setShowRecordStats] = useState(false);
+  const [recordingSport, setRecordingSport] = useState('');
+  const [recordMatches, setRecordMatches] = useState('0');
+  const [recordWins, setRecordWins] = useState('0');
+  const [recordLosses, setRecordLosses] = useState('0');
+  const [recordDraws, setRecordDraws] = useState('0');
+  const [recordSportStats, setRecordSportStats] = useState<Record<string, string>>({});
+  const [savingStats, setSavingStats] = useState(false);
+
   const loadProfile = useCallback(async () => {
     if (!user) return;
     const [sports, rank, stats] = await Promise.all([
@@ -144,30 +162,19 @@ export default function ProfileScreen() {
       fetchPlayerStats(user.id),
     ]);
     setRanking(rank);
+    setMySports(sports);
 
-    // Merge: show sports-only-in-player_stats as virtual My Sports cards
-    // (SQL patches seeded player_stats without creating profile_sports rows)
-    const realSportNames = new Set(sports.map((s) => s.name));
-    const virtualSports: ProfileSport[] = stats
-      .filter((s) => !realSportNames.has(s.sport))
-      .map((s) => ({
-        id: `virtual-${s.sport}`,
-        name: s.sport,
-        skill: 'Intermediate' as ProfileSport['skill'],
-        emoji: SPORT_EMOJIS[s.sport] ?? '🏆',
-        details: {},
-      }));
-    setMySports([...sports, ...virtualSports]);
+    // Only show stats for sports the user has explicitly added to their profile
+    const mySportNames = new Set(sports.map((s) => s.name));
+    const filteredStats = stats.filter((s) => mySportNames.has(s.sport));
+    setPlayerStats(filteredStats);
 
-    // Placeholder 0-stat entries for profile_sports that have no player_stats row yet
-    const sportsWithStats = new Set(stats.map((s) => s.sport));
-    const placeholders: PlayerStat[] = [...sports, ...virtualSports]
-      .filter((s) => !sportsWithStats.has(s.name))
-      .map((s) => ({ sport: s.name, matches: 0, wins: 0, losses: 0, draws: 0, sportStats: {} }));
-    const merged = [...stats, ...placeholders];
-
-    setPlayerStats(merged);
-    if (merged.length > 0 && !selectedStatSport) setSelectedStatSport(merged[0].sport);
+    // Set selected tab to first sport (only if nothing is selected or selection no longer exists)
+    if (sports.length > 0) {
+      setSelectedStatSport((prev) => (prev && mySportNames.has(prev) ? prev : sports[0].name));
+    } else {
+      setSelectedStatSport('');
+    }
   }, [user]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
@@ -187,21 +194,15 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'Could not save sport. Please try again.');
       return;
     }
-    // Optimistic: add to sports list immediately
+    // Optimistic: show sport immediately in My Sports
     setMySports((prev) => {
       const filtered = prev.filter((s) => s.name !== result.name);
       return [...filtered, result];
     });
-    // Also add a 0-stat entry so the sport appears in Player Stats right away
-    setPlayerStats((prev) => {
-      if (prev.some((s) => s.sport === result.name)) return prev;
-      return [...prev, { sport: result.name, matches: 0, wins: 0, losses: 0, draws: 0, sportStats: {} }];
-    });
-    if (!selectedStatSport) setSelectedStatSport(result.name);
+    setSelectedStatSport(result.name);
     setShowAddSport(false);
     setNewDetails({});
-    // Persist stats entry + full profile reload in background
-    initSportStats(user.id, result.name);
+    // Background reload confirms the DB state
     loadProfile();
   };
 
@@ -213,12 +214,52 @@ export default function ProfileScreen() {
         onPress: async () => {
           setMySports((prev) => prev.filter((s) => s.id !== sport.id));
           setPlayerStats((prev) => prev.filter((s) => s.sport !== sport.name));
-          // Virtual entries (id starts with 'virtual-') only exist in player_stats, not profile_sports
-          if (sport.id.startsWith('virtual-')) return;
+          setSelectedStatSport((prev) => (prev === sport.name ? '' : prev));
           await removeSport(sport.id);
         },
       },
     ]);
+  };
+
+  const openRecordStats = (sport: string) => {
+    const existing = playerStats.find((s) => s.sport === sport);
+    setRecordingSport(sport);
+    setRecordMatches(String(existing?.matches ?? 0));
+    setRecordWins(String(existing?.wins ?? 0));
+    setRecordLosses(String(existing?.losses ?? 0));
+    setRecordDraws(String(existing?.draws ?? 0));
+    const statsStr: Record<string, string> = {};
+    Object.entries(existing?.sportStats ?? {}).forEach(([k, v]) => { statsStr[k] = String(v); });
+    setRecordSportStats(statsStr);
+    setShowRecordStats(true);
+  };
+
+  const handleSaveStats = async () => {
+    if (!user) return;
+    setSavingStats(true);
+    const matches = Math.max(0, parseInt(recordMatches) || 0);
+    const wins    = Math.max(0, parseInt(recordWins)    || 0);
+    const losses  = Math.max(0, parseInt(recordLosses)  || 0);
+    const draws   = Math.max(0, parseInt(recordDraws)   || 0);
+
+    const sportStats: Record<string, string | number> = {};
+    Object.entries(recordSportStats).forEach(([k, v]) => {
+      if (!v.trim()) return;
+      const n = parseFloat(v);
+      sportStats[k] = isNaN(n) ? v : n;
+    });
+
+    const ok = await upsertSportStats({ userId: user.id, sport: recordingSport, matches, wins, losses, draws, sportStats });
+    setSavingStats(false);
+    if (!ok) { Alert.alert('Error', 'Could not save stats. Please try again.'); return; }
+
+    setPlayerStats((prev) => {
+      const updated: PlayerStat = { sport: recordingSport, matches, wins, losses, draws, sportStats };
+      const idx = prev.findIndex((s) => s.sport === recordingSport);
+      if (idx >= 0) { const next = [...prev]; next[idx] = updated; return next; }
+      return [...prev, updated];
+    });
+    setShowRecordStats(false);
   };
 
   const toggleGender = (key: keyof typeof messagesFrom) => {
@@ -305,50 +346,52 @@ export default function ProfileScreen() {
         {(() => {
           const currentStat = playerStats.find((s) => s.sport === selectedStatSport);
           const winRate = currentStat && currentStat.matches > 0
-            ? Math.round((currentStat.wins / currentStat.matches) * 100)
-            : 0;
+            ? Math.round((currentStat.wins / currentStat.matches) * 100) : 0;
           return (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Player Stats</Text>
-              {playerStats.length === 0 ? (
+              {mySports.length === 0 ? (
                 <View style={styles.emptyStatsCard}>
                   <Ionicons name="stats-chart-outline" size={36} color="#d1d5db" />
-                  <Text style={styles.emptyStatsText}>No stats yet. Play some matches!</Text>
+                  <Text style={styles.emptyStatsText}>Add a sport above to track your stats</Text>
                 </View>
               ) : (
                 <>
-                  {/* Sport tabs */}
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={{ marginBottom: 12 }}
-                    contentContainerStyle={{ gap: 8, flexDirection: 'row' }}
-                  >
-                    {playerStats.map((s) => (
+                  {/* Sport tabs — driven by mySports, not playerStats */}
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}
+                    style={{ marginBottom: 12 }} contentContainerStyle={{ gap: 8, flexDirection: 'row' }}>
+                    {mySports.map((s) => (
                       <TouchableOpacity
-                        key={s.sport}
-                        style={[
-                          styles.statSportTab,
-                          selectedStatSport === s.sport && styles.statSportTabActive,
-                        ]}
-                        onPress={() => setSelectedStatSport(s.sport)}
+                        key={s.id}
+                        style={[styles.statSportTab, selectedStatSport === s.name && styles.statSportTabActive]}
+                        onPress={() => setSelectedStatSport(s.name)}
                       >
-                        <Text style={styles.statSportTabEmoji}>
-                          {SPORT_EMOJIS[s.sport] ?? '🏆'}
-                        </Text>
-                        <Text style={[
-                          styles.statSportTabText,
-                          selectedStatSport === s.sport && styles.statSportTabTextActive,
-                        ]}>
-                          {s.sport}
+                        <Text style={styles.statSportTabEmoji}>{s.emoji || SPORT_EMOJIS[s.name] || '🏆'}</Text>
+                        <Text style={[styles.statSportTabText, selectedStatSport === s.name && styles.statSportTabTextActive]}>
+                          {s.name}
                         </Text>
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
 
-                  {currentStat && (
+                  {!currentStat ? (
+                    /* No stats recorded yet for this sport */
+                    <TouchableOpacity style={styles.recordStatsPrompt} onPress={() => openRecordStats(selectedStatSport)}>
+                      <Ionicons name="add-circle-outline" size={22} color="#16a34a" />
+                      <Text style={styles.recordStatsPromptText}>Record your {selectedStatSport} stats</Text>
+                    </TouchableOpacity>
+                  ) : (
                     <View style={styles.statsDetailCard}>
-                      {/* W / L / D / Played row */}
+                      {/* Card header with Edit button */}
+                      <View style={styles.statsCardHeader}>
+                        <Text style={styles.statsCardTitle}>{selectedStatSport} Stats</Text>
+                        <TouchableOpacity style={styles.editStatsBtn} onPress={() => openRecordStats(selectedStatSport)}>
+                          <Ionicons name="create-outline" size={15} color="#16a34a" />
+                          <Text style={styles.editStatsBtnText}>Edit</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* W / L / D / Played */}
                       <View style={styles.wldRow}>
                         <View style={styles.wldItem}>
                           <Text style={[styles.wldNum, { color: '#16a34a' }]}>{currentStat.wins}</Text>
@@ -359,15 +402,13 @@ export default function ProfileScreen() {
                           <Text style={[styles.wldNum, { color: '#ef4444' }]}>{currentStat.losses}</Text>
                           <Text style={styles.wldLbl}>Lost</Text>
                         </View>
-                        {currentStat.draws > 0 && (
-                          <>
-                            <View style={styles.wldDivider} />
-                            <View style={styles.wldItem}>
-                              <Text style={[styles.wldNum, { color: '#f59e0b' }]}>{currentStat.draws}</Text>
-                              <Text style={styles.wldLbl}>Draw</Text>
-                            </View>
-                          </>
-                        )}
+                        {currentStat.draws > 0 && <>
+                          <View style={styles.wldDivider} />
+                          <View style={styles.wldItem}>
+                            <Text style={[styles.wldNum, { color: '#f59e0b' }]}>{currentStat.draws}</Text>
+                            <Text style={styles.wldLbl}>Draw</Text>
+                          </View>
+                        </>}
                         <View style={styles.wldDivider} />
                         <View style={styles.wldItem}>
                           <Text style={styles.wldNum}>{currentStat.matches}</Text>
@@ -393,9 +434,7 @@ export default function ProfileScreen() {
                             .filter(({ key }) => currentStat.sportStats[key] !== undefined)
                             .map(({ key, label }) => (
                               <View key={key} style={styles.sportStatCell}>
-                                <Text style={styles.sportStatValue}>
-                                  {String(currentStat.sportStats[key])}
-                                </Text>
+                                <Text style={styles.sportStatValue}>{String(currentStat.sportStats[key])}</Text>
                                 <Text style={styles.sportStatLabel}>{label}</Text>
                               </View>
                             ))}
@@ -607,6 +646,72 @@ export default function ProfileScreen() {
                 <Text style={styles.logoutConfirmText}>Logout</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Record Stats Modal */}
+      <Modal visible={showRecordStats} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+          <SafeAreaView style={{ flex: 1 }}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {playerStats.find((s) => s.sport === recordingSport) ? 'Edit' : 'Record'} {recordingSport} Stats
+              </Text>
+              <TouchableOpacity onPress={() => setShowRecordStats(false)}>
+                <Ionicons name="close" size={24} color="#111827" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={styles.modalBody}>
+              {/* Match record row */}
+              <Text style={styles.fieldLabel}>Match Record</Text>
+              <View style={styles.matchRecordRow}>
+                {([
+                  { label: 'Played', value: recordMatches, set: setRecordMatches },
+                  { label: 'Won',    value: recordWins,    set: setRecordWins    },
+                  { label: 'Lost',   value: recordLosses,  set: setRecordLosses  },
+                  { label: 'Draw',   value: recordDraws,   set: setRecordDraws   },
+                ] as const).map(({ label, value, set }) => (
+                  <View key={label} style={styles.matchRecordCell}>
+                    <Text style={styles.matchRecordLabel}>{label}</Text>
+                    <TextInput
+                      style={styles.matchRecordInput}
+                      value={value}
+                      onChangeText={set}
+                      keyboardType="numeric"
+                      maxLength={5}
+                      selectTextOnFocus
+                    />
+                  </View>
+                ))}
+              </View>
+
+              {/* Sport-specific stat fields */}
+              {(SPORT_STAT_FIELDS[recordingSport] ?? []).map((field) => (
+                <View key={field.key}>
+                  <Text style={styles.fieldLabel}>{field.label}</Text>
+                  <TextInput
+                    style={styles.statTextInput}
+                    value={recordSportStats[field.key] ?? ''}
+                    onChangeText={(v) => setRecordSportStats((prev) => ({ ...prev, [field.key]: v }))}
+                    keyboardType={field.numeric ? 'numeric' : 'default'}
+                    placeholder="0"
+                    placeholderTextColor="#9ca3af"
+                    selectTextOnFocus
+                  />
+                </View>
+              ))}
+
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveStats} disabled={savingStats}>
+                {savingStats
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.saveBtnText}>Save Stats</Text>}
+              </TouchableOpacity>
+              <View style={{ height: 20 }} />
+            </ScrollView>
+          </SafeAreaView>
           </View>
         </View>
       </Modal>
@@ -962,6 +1067,38 @@ const styles = StyleSheet.create({
     borderRadius: 12, alignItems: 'center', marginTop: 8,
   },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  // Record Stats prompt (when no stats exist for a sport yet)
+  recordStatsPrompt: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#f0fdf4', borderRadius: 12, paddingVertical: 20,
+    borderWidth: 1.5, borderColor: '#bbf7d0', borderStyle: 'dashed',
+  },
+  recordStatsPromptText: { color: '#16a34a', fontWeight: '600', fontSize: 15 },
+  // Stats card header with Edit button
+  statsCardHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+  },
+  statsCardTitle: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  editStatsBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#f0fdf4', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8,
+  },
+  editStatsBtnText: { color: '#16a34a', fontWeight: '600', fontSize: 13 },
+  // Match record row in Record Stats modal
+  matchRecordRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  matchRecordCell: { flex: 1, alignItems: 'center' },
+  matchRecordLabel: { fontSize: 11, color: '#6b7280', marginBottom: 4, fontWeight: '600' },
+  matchRecordInput: {
+    width: '100%', textAlign: 'center', fontSize: 18, fontWeight: '700',
+    color: '#111827', backgroundColor: '#f9fafb', borderRadius: 10,
+    borderWidth: 1, borderColor: '#e5e7eb', paddingVertical: 10,
+  },
+  statTextInput: {
+    backgroundColor: '#f9fafb', borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb',
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#111827', marginBottom: 14,
+  },
   // Player Stats section
   emptyStatsCard: {
     backgroundColor: '#fff',

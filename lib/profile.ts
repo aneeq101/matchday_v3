@@ -89,14 +89,36 @@ export async function addSport(params: {
   };
 }
 
-export async function initSportStats(userId: string, sport: string): Promise<void> {
+export async function upsertSportStats(params: {
+  userId: string;
+  sport: string;
+  matches: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  sportStats: Record<string, string | number>;
+}): Promise<boolean> {
+  // Delete existing entry then insert fresh to avoid onConflict index issues
+  await supabase
+    .from('player_stats')
+    .delete()
+    .eq('profile_id', params.userId)
+    .eq('sport', params.sport);
+
   const { error } = await supabase
     .from('player_stats')
-    .insert({ profile_id: userId, sport, matches: 0, wins: 0, losses: 0, draws: 0, sport_stats: {} });
-  // Ignore unique-violation (23505) — entry already exists, that's fine
-  if (error && error.code !== '23505') {
-    console.warn('[initSportStats] error:', error.message, error.code);
-  }
+    .insert({
+      profile_id: params.userId,
+      sport: params.sport,
+      matches: params.matches,
+      wins: params.wins,
+      losses: params.losses,
+      draws: params.draws,
+      sport_stats: params.sportStats,
+    });
+
+  if (error) { console.warn('[upsertSportStats]', error.message, error.code); return false; }
+  return true;
 }
 
 export async function removeSport(sportId: string): Promise<boolean> {
