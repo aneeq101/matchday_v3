@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/AuthContext';
-import { fetchMySports, addSport, removeSport, fetchMyRanking, fetchPlayerStats, type ProfileSport, type MyRanking, type PlayerStat } from '../../lib/profile';
+import { fetchMySports, addSport, removeSport, fetchMyRanking, fetchPlayerStats, initSportStats, type ProfileSport, type MyRanking, type PlayerStat } from '../../lib/profile';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 import { useRouter } from 'expo-router';
@@ -145,8 +145,16 @@ export default function ProfileScreen() {
     ]);
     setMySports(sports);
     setRanking(rank);
-    setPlayerStats(stats);
-    if (stats.length > 0) setSelectedStatSport(stats[0].sport);
+
+    // Add placeholder 0-stat entries for sports in profile_sports but not yet in player_stats
+    const sportsWithStats = new Set(stats.map((s) => s.sport));
+    const placeholders: PlayerStat[] = sports
+      .filter((s) => !sportsWithStats.has(s.name))
+      .map((s) => ({ sport: s.name, matches: 0, wins: 0, losses: 0, draws: 0, sportStats: {} }));
+    const merged = [...stats, ...placeholders];
+
+    setPlayerStats(merged);
+    if (merged.length > 0 && !selectedStatSport) setSelectedStatSport(merged[0].sport);
   }, [user]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
@@ -166,14 +174,21 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'Could not save sport. Please try again.');
       return;
     }
-    // Optimistic: add to list immediately so the user sees it right away
+    // Optimistic: add to sports list immediately
     setMySports((prev) => {
       const filtered = prev.filter((s) => s.name !== result.name);
       return [...filtered, result];
     });
+    // Also add a 0-stat entry so the sport appears in Player Stats right away
+    setPlayerStats((prev) => {
+      if (prev.some((s) => s.sport === result.name)) return prev;
+      return [...prev, { sport: result.name, matches: 0, wins: 0, losses: 0, draws: 0, sportStats: {} }];
+    });
+    if (!selectedStatSport) setSelectedStatSport(result.name);
     setShowAddSport(false);
     setNewDetails({});
-    // Background reload to confirm DB state (replaces optimistic if anything drifted)
+    // Persist stats entry + full profile reload in background
+    initSportStats(user.id, result.name);
     loadProfile();
   };
 

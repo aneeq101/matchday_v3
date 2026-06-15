@@ -89,6 +89,16 @@ export async function addSport(params: {
   };
 }
 
+export async function initSportStats(userId: string, sport: string): Promise<void> {
+  const { error } = await supabase
+    .from('player_stats')
+    .insert({ profile_id: userId, sport, matches: 0, wins: 0, losses: 0, draws: 0, sport_stats: {} });
+  // Ignore unique-violation (23505) — entry already exists, that's fine
+  if (error && error.code !== '23505') {
+    console.warn('[initSportStats] error:', error.message, error.code);
+  }
+}
+
 export async function removeSport(sportId: string): Promise<boolean> {
   const { error } = await supabase.from('profile_sports').delete().eq('id', sportId);
   return !error;
