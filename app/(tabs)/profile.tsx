@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/AuthContext';
-import { fetchMySports, addSport, removeSport, fetchMyRanking, type ProfileSport, type MyRanking } from '../../lib/profile';
+import { fetchMySports, addSport, removeSport, fetchMyRanking, fetchPlayerStats, type ProfileSport, type MyRanking, type PlayerStat } from '../../lib/profile';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 import { useRouter } from 'expo-router';
@@ -42,6 +42,51 @@ const SPORT_DETAILS_FIELDS: Record<string, { label: string; options: string[] }[
   Badminton:  [{ label: 'Style', options: ['Singles','Doubles','Mixed'] }],
   Baseball:   [{ label: 'Position', options: ['Pitcher','Catcher','First Base','Second Base','Shortstop','Third Base','Outfield'] }],
   Hockey:     [{ label: 'Position', options: ['Forward','Midfielder','Defender','Goalkeeper'] }],
+};
+
+const SPORT_STAT_FIELDS: Record<string, { key: string; label: string }[]> = {
+  Football:   [
+    { key: 'goals',        label: 'Goals' },
+    { key: 'assists',      label: 'Assists' },
+    { key: 'yellow_cards', label: 'Yellow Cards' },
+    { key: 'red_cards',    label: 'Red Cards' },
+  ],
+  Cricket: [
+    { key: 'runs',         label: 'Total Runs' },
+    { key: 'wickets',      label: 'Wickets' },
+    { key: 'batting_avg',  label: 'Batting Avg' },
+    { key: 'bowling_avg',  label: 'Bowling Avg' },
+    { key: 'centuries',    label: 'Centuries' },
+    { key: 'fifties',      label: 'Fifties' },
+  ],
+  Tennis: [
+    { key: 'aces',             label: 'Aces' },
+    { key: 'sets_won',         label: 'Sets Won' },
+    { key: 'games_won',        label: 'Games Won' },
+    { key: 'first_serve_pct',  label: 'First Serve %' },
+    { key: 'double_faults',    label: 'Double Faults' },
+  ],
+  Basketball: [
+    { key: 'points',         label: 'Points' },
+    { key: 'rebounds',       label: 'Rebounds' },
+    { key: 'assists',        label: 'Assists' },
+    { key: 'blocks',         label: 'Blocks' },
+    { key: 'steals',         label: 'Steals' },
+    { key: 'three_pointers', label: '3-Pointers' },
+  ],
+  Badminton: [
+    { key: 'sets_won',       label: 'Sets Won' },
+    { key: 'points_scored',  label: 'Points Scored' },
+    { key: 'smashes',        label: 'Smashes' },
+    { key: 'drop_shots',     label: 'Drop Shots' },
+  ],
+  Baseball: [
+    { key: 'home_runs',    label: 'Home Runs' },
+    { key: 'hits',         label: 'Hits' },
+    { key: 'rbis',         label: 'RBIs' },
+    { key: 'batting_avg',  label: 'Batting Avg' },
+    { key: 'stolen_bases', label: 'Stolen Bases' },
+  ],
 };
 
 const MENU_ITEMS = [
@@ -83,6 +128,8 @@ export default function ProfileScreen() {
   // Sports & stats
   const [mySports, setMySports] = useState<ProfileSport[]>([]);
   const [ranking, setRanking] = useState<MyRanking | null>(null);
+  const [playerStats, setPlayerStats] = useState<PlayerStat[]>([]);
+  const [selectedStatSport, setSelectedStatSport] = useState('');
   const [showAddSport, setShowAddSport] = useState(false);
   const [addingSport, setAddingSport] = useState(false);
   const [newSport, setNewSport] = useState('Football');
@@ -91,9 +138,15 @@ export default function ProfileScreen() {
 
   const loadProfile = useCallback(async () => {
     if (!user) return;
-    const [sports, rank] = await Promise.all([fetchMySports(user.id), fetchMyRanking()]);
+    const [sports, rank, stats] = await Promise.all([
+      fetchMySports(user.id),
+      fetchMyRanking(),
+      fetchPlayerStats(user.id),
+    ]);
     setMySports(sports);
     setRanking(rank);
+    setPlayerStats(stats);
+    if (stats.length > 0) setSelectedStatSport(stats[0].sport);
   }, [user]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
@@ -212,6 +265,114 @@ export default function ProfileScreen() {
             </Text>
           </View>
         )}
+
+        {/* Player Stats */}
+        {(() => {
+          const currentStat = playerStats.find((s) => s.sport === selectedStatSport);
+          const winRate = currentStat && currentStat.matches > 0
+            ? Math.round((currentStat.wins / currentStat.matches) * 100)
+            : 0;
+          return (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Player Stats</Text>
+              {playerStats.length === 0 ? (
+                <View style={styles.emptyStatsCard}>
+                  <Ionicons name="stats-chart-outline" size={36} color="#d1d5db" />
+                  <Text style={styles.emptyStatsText}>No stats yet. Play some matches!</Text>
+                </View>
+              ) : (
+                <>
+                  {/* Sport tabs */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={{ marginBottom: 12 }}
+                    contentContainerStyle={{ gap: 8, flexDirection: 'row' }}
+                  >
+                    {playerStats.map((s) => (
+                      <TouchableOpacity
+                        key={s.sport}
+                        style={[
+                          styles.statSportTab,
+                          selectedStatSport === s.sport && styles.statSportTabActive,
+                        ]}
+                        onPress={() => setSelectedStatSport(s.sport)}
+                      >
+                        <Text style={styles.statSportTabEmoji}>
+                          {SPORT_EMOJIS[s.sport] ?? '🏆'}
+                        </Text>
+                        <Text style={[
+                          styles.statSportTabText,
+                          selectedStatSport === s.sport && styles.statSportTabTextActive,
+                        ]}>
+                          {s.sport}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+
+                  {currentStat && (
+                    <View style={styles.statsDetailCard}>
+                      {/* W / L / D / Played row */}
+                      <View style={styles.wldRow}>
+                        <View style={styles.wldItem}>
+                          <Text style={[styles.wldNum, { color: '#16a34a' }]}>{currentStat.wins}</Text>
+                          <Text style={styles.wldLbl}>Won</Text>
+                        </View>
+                        <View style={styles.wldDivider} />
+                        <View style={styles.wldItem}>
+                          <Text style={[styles.wldNum, { color: '#ef4444' }]}>{currentStat.losses}</Text>
+                          <Text style={styles.wldLbl}>Lost</Text>
+                        </View>
+                        {currentStat.draws > 0 && (
+                          <>
+                            <View style={styles.wldDivider} />
+                            <View style={styles.wldItem}>
+                              <Text style={[styles.wldNum, { color: '#f59e0b' }]}>{currentStat.draws}</Text>
+                              <Text style={styles.wldLbl}>Draw</Text>
+                            </View>
+                          </>
+                        )}
+                        <View style={styles.wldDivider} />
+                        <View style={styles.wldItem}>
+                          <Text style={styles.wldNum}>{currentStat.matches}</Text>
+                          <Text style={styles.wldLbl}>Played</Text>
+                        </View>
+                      </View>
+
+                      {/* Win rate bar */}
+                      <View style={styles.winRateSection}>
+                        <View style={styles.winRateHeader}>
+                          <Text style={styles.winRateLabel}>Win Rate</Text>
+                          <Text style={styles.winRatePct}>{winRate}%</Text>
+                        </View>
+                        <View style={styles.winRateBarBg}>
+                          <View style={[styles.winRateBarFill, { width: `${winRate}%` as any }]} />
+                        </View>
+                      </View>
+
+                      {/* Sport-specific stat grid */}
+                      {SPORT_STAT_FIELDS[currentStat.sport] && (
+                        <View style={styles.sportStatsGrid}>
+                          {SPORT_STAT_FIELDS[currentStat.sport]
+                            .filter(({ key }) => currentStat.sportStats[key] !== undefined)
+                            .map(({ key, label }) => (
+                              <View key={key} style={styles.sportStatCell}>
+                                <Text style={styles.sportStatValue}>
+                                  {String(currentStat.sportStats[key])}
+                                </Text>
+                                <Text style={styles.sportStatLabel}>{label}</Text>
+                              </View>
+                            ))}
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+          );
+        })()}
 
         {/* My Sports */}
         <View style={styles.section}>
@@ -763,4 +924,90 @@ const styles = StyleSheet.create({
     borderRadius: 12, alignItems: 'center', marginTop: 8,
   },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  // Player Stats section
+  emptyStatsCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 32,
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  emptyStatsText: { color: '#9ca3af', fontSize: 14 },
+  statSportTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  statSportTabActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  statSportTabEmoji: { fontSize: 16 },
+  statSportTabText: { color: '#374151', fontWeight: '600', fontSize: 13 },
+  statSportTabTextActive: { color: '#fff' },
+  statsDetailCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  wldRow: {
+    flexDirection: 'row',
+    paddingVertical: 18,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  wldItem: { flex: 1, alignItems: 'center' },
+  wldNum: { fontSize: 24, fontWeight: '800', color: '#111827' },
+  wldLbl: { fontSize: 11, color: '#6b7280', marginTop: 2 },
+  wldDivider: { width: 1, backgroundColor: '#e5e7eb' },
+  winRateSection: {
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  winRateHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  winRateLabel: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  winRatePct: { fontSize: 13, fontWeight: '700', color: '#16a34a' },
+  winRateBarBg: {
+    height: 8,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  winRateBarFill: {
+    height: 8,
+    backgroundColor: '#16a34a',
+    borderRadius: 4,
+  },
+  sportStatsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  sportStatCell: {
+    width: '50%',
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+    borderRightWidth: 1,
+    borderRightColor: '#f3f4f6',
+    alignItems: 'center',
+  },
+  sportStatValue: { fontSize: 22, fontWeight: '800', color: '#111827' },
+  sportStatLabel: { fontSize: 11, color: '#6b7280', marginTop: 3 },
 });

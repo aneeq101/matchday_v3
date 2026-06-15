@@ -6,6 +6,15 @@ export interface ProfileSport extends Sport {
   details: Record<string, string>;
 }
 
+export interface PlayerStat {
+  sport: string;
+  matches: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  sportStats: Record<string, string | number>;
+}
+
 export interface MyRanking {
   matches: number;
   wins: number;
@@ -16,10 +25,11 @@ export interface MyRanking {
 }
 
 export async function fetchMySports(userId: string): Promise<ProfileSport[]> {
+  const resolvedId = MOCK_ID_TO_UUID[userId] ?? userId;
   const { data, error } = await supabase
     .from('profile_sports')
     .select('*')
-    .eq('profile_id', userId)
+    .eq('profile_id', resolvedId)
     .order('created_at', { ascending: true });
 
   if (error || !data) return [];
@@ -84,6 +94,41 @@ export async function fetchMyRanking(): Promise<MyRanking | null> {
     areaTotal: (row.area_total as number) ?? 1,
     area: (row.area as string) ?? '',
   };
+}
+
+// Maps mock player IDs ('1'–'6') used when DB fetch falls back to the real demo UUIDs
+const MOCK_ID_TO_UUID: Record<string, string> = {
+  '1': '00000000-0000-0000-0000-000000000001',
+  '2': '00000000-0000-0000-0000-000000000002',
+  '3': '00000000-0000-0000-0000-000000000003',
+  '4': '00000000-0000-0000-0000-000000000004',
+  '5': '00000000-0000-0000-0000-000000000005',
+  '6': '00000000-0000-0000-0000-000000000006',
+};
+
+export async function fetchPlayerStats(userId: string): Promise<PlayerStat[]> {
+  const resolvedId = MOCK_ID_TO_UUID[userId] ?? userId;
+  const { data, error } = await supabase
+    .from('player_stats')
+    .select('sport, matches, wins, losses, draws, sport_stats')
+    .eq('profile_id', resolvedId)
+    .order('matches', { ascending: false });
+
+  if (error) {
+    console.warn('[fetchPlayerStats] error for', resolvedId, error.message);
+    return [];
+  }
+  if (!data) return [];
+  return data.map((row: Record<string, unknown>) => ({
+    sport: row.sport as string,
+    matches: (row.matches as number) ?? 0,
+    wins: (row.wins as number) ?? 0,
+    losses: (row.losses as number) ?? 0,
+    draws: (row.draws as number) ?? 0,
+    sportStats: (typeof row.sport_stats === 'object' && row.sport_stats !== null
+      ? row.sport_stats
+      : {}) as Record<string, string | number>,
+  }));
 }
 
 export async function updateProfileStats(

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,11 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Player } from '../data/mockData';
+import { fetchPlayerStats, fetchMySports, type PlayerStat, type ProfileSport } from '../lib/profile';
 
 interface Props {
   player: Player | null;
@@ -23,8 +25,91 @@ const SKILL_COLORS: Record<string, string> = {
   Advanced: '#ef4444',
 };
 
+const SPORT_EMOJIS: Record<string, string> = {
+  Football: '⚽', Cricket: '🏏', Tennis: '🎾',
+  Basketball: '🏀', Hockey: '🏑', Badminton: '🏸', Baseball: '⚾',
+};
+
+const SPORT_STAT_FIELDS: Record<string, { key: string; label: string }[]> = {
+  Football: [
+    { key: 'goals',        label: 'Goals' },
+    { key: 'assists',      label: 'Assists' },
+    { key: 'yellow_cards', label: 'Yellow Cards' },
+    { key: 'red_cards',    label: 'Red Cards' },
+  ],
+  Cricket: [
+    { key: 'runs',        label: 'Total Runs' },
+    { key: 'wickets',     label: 'Wickets' },
+    { key: 'batting_avg', label: 'Batting Avg' },
+    { key: 'bowling_avg', label: 'Bowling Avg' },
+    { key: 'centuries',   label: 'Centuries' },
+    { key: 'fifties',     label: 'Fifties' },
+  ],
+  Tennis: [
+    { key: 'aces',            label: 'Aces' },
+    { key: 'sets_won',        label: 'Sets Won' },
+    { key: 'games_won',       label: 'Games Won' },
+    { key: 'first_serve_pct', label: 'First Serve %' },
+    { key: 'double_faults',   label: 'Double Faults' },
+  ],
+  Basketball: [
+    { key: 'points',         label: 'Points' },
+    { key: 'rebounds',       label: 'Rebounds' },
+    { key: 'assists',        label: 'Assists' },
+    { key: 'blocks',         label: 'Blocks' },
+    { key: 'steals',         label: 'Steals' },
+    { key: 'three_pointers', label: '3-Pointers' },
+  ],
+  Badminton: [
+    { key: 'sets_won',      label: 'Sets Won' },
+    { key: 'points_scored', label: 'Points Scored' },
+    { key: 'smashes',       label: 'Smashes' },
+    { key: 'drop_shots',    label: 'Drop Shots' },
+  ],
+  Baseball: [
+    { key: 'home_runs',    label: 'Home Runs' },
+    { key: 'hits',         label: 'Hits' },
+    { key: 'rbis',         label: 'RBIs' },
+    { key: 'batting_avg',  label: 'Batting Avg' },
+    { key: 'stolen_bases', label: 'Stolen Bases' },
+  ],
+};
+
 export default function PlayerProfileModal({ player, onClose, onMessage }: Props) {
+  const [sports, setSports] = useState<ProfileSport[]>([]);
+  const [playerStats, setPlayerStats] = useState<PlayerStat[]>([]);
+  const [selectedStatSport, setSelectedStatSport] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!player) return;
+    setSports([]);
+    setPlayerStats([]);
+    setSelectedStatSport('');
+    setLoading(true);
+
+    Promise.all([
+      fetchMySports(player.id),
+      fetchPlayerStats(player.id),
+    ]).then(([sp, st]) => {
+      // Fall back to the pre-fetched sports if DB returns nothing
+      setSports(sp.length > 0 ? sp : player.sports.map((s, i) => ({ ...s, id: String(i), details: {} })));
+      setPlayerStats(st);
+      if (st.length > 0) setSelectedStatSport(st[0].sport);
+      setLoading(false);
+    }).catch((err) => {
+      console.warn('[PlayerProfileModal] fetch error:', err);
+      setSports(player.sports.map((s, i) => ({ ...s, id: String(i), details: {} })));
+      setLoading(false);
+    });
+  }, [player?.id]);
+
   if (!player) return null;
+
+  const currentStat = playerStats.find((s) => s.sport === selectedStatSport);
+  const winRate = currentStat && currentStat.matches > 0
+    ? Math.round((currentStat.wins / currentStat.matches) * 100)
+    : 0;
 
   return (
     <Modal visible={!!player} animationType="slide" transparent>
@@ -43,7 +128,7 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
             <Text style={styles.profileName}>{player.name}</Text>
             <View style={styles.locationRow}>
               <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.85)" />
-              <Text style={styles.profileLocation}>{player.area}, Lahore</Text>
+              <Text style={styles.profileLocation}>{player.area}</Text>
             </View>
             <View style={styles.joinRow}>
               <Ionicons name="calendar-outline" size={12} color="rgba(255,255,255,0.7)" />
@@ -52,7 +137,7 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
           </View>
 
           <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-            {/* Stats */}
+            {/* Summary stats */}
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
                 <Text style={styles.statNum}>{player.stats.matches}</Text>
@@ -70,7 +155,6 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
               </View>
             </View>
 
-            {/* Privacy */}
             {player.privacy === 'private' && (
               <View style={styles.privacyBadge}>
                 <Ionicons name="lock-closed" size={14} color="#6b7280" />
@@ -84,20 +168,129 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
               <Text style={styles.bioText}>{player.bio}</Text>
             </View>
 
-            {/* Sports */}
+            {/* Sports & Skills */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Sports & Skills</Text>
-              <View style={styles.sportsGrid}>
-                {player.sports.map((s, i) => (
-                  <View key={i} style={styles.sportCard}>
-                    <Text style={styles.sportEmoji}>{s.emoji}</Text>
-                    <Text style={styles.sportName}>{s.name}</Text>
-                    <View style={[styles.skillBadge, { backgroundColor: SKILL_COLORS[s.skill] }]}>
-                      <Text style={styles.skillBadgeText}>{s.skill}</Text>
+              {loading ? (
+                <ActivityIndicator size="small" color="#16a34a" style={{ marginTop: 8 }} />
+              ) : (
+                <View style={styles.sportsGrid}>
+                  {sports.map((s, i) => (
+                    <View key={s.id ?? i} style={styles.sportCard}>
+                      <Text style={styles.sportEmoji}>{s.emoji || SPORT_EMOJIS[s.name] || '🏆'}</Text>
+                      <Text style={styles.sportName}>{s.name}</Text>
+                      <View style={[styles.skillBadge, { backgroundColor: SKILL_COLORS[s.skill] }]}>
+                        <Text style={styles.skillBadgeText}>{s.skill}</Text>
+                      </View>
+                      {Object.entries(s.details ?? {}).map(([k, v]) => (
+                        <Text key={k} style={styles.sportDetail}>{k}: {v}</Text>
+                      ))}
                     </View>
-                  </View>
-                ))}
-              </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Player Stats */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Player Stats</Text>
+              {loading ? (
+                <ActivityIndicator size="small" color="#16a34a" style={{ marginTop: 4 }} />
+              ) : playerStats.length === 0 ? (
+                <View style={styles.emptyStats}>
+                  <Ionicons name="stats-chart-outline" size={30} color="#d1d5db" />
+                  <Text style={styles.emptyStatsText}>No stats recorded yet</Text>
+                </View>
+              ) : (
+                <>
+                  {/* Sport tabs */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={{ marginBottom: 12 }}
+                    contentContainerStyle={{ gap: 8, flexDirection: 'row' }}
+                  >
+                    {playerStats.map((s) => (
+                      <TouchableOpacity
+                        key={s.sport}
+                        style={[
+                          styles.statSportTab,
+                          selectedStatSport === s.sport && styles.statSportTabActive,
+                        ]}
+                        onPress={() => setSelectedStatSport(s.sport)}
+                      >
+                        <Text style={styles.statSportTabEmoji}>
+                          {SPORT_EMOJIS[s.sport] ?? '🏆'}
+                        </Text>
+                        <Text style={[
+                          styles.statSportTabText,
+                          selectedStatSport === s.sport && styles.statSportTabTextActive,
+                        ]}>
+                          {s.sport}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+
+                  {currentStat && (
+                    <View style={styles.statsDetailCard}>
+                      {/* W / L / D / Played */}
+                      <View style={styles.wldRow}>
+                        <View style={styles.wldItem}>
+                          <Text style={[styles.wldNum, { color: '#16a34a' }]}>{currentStat.wins}</Text>
+                          <Text style={styles.wldLbl}>Won</Text>
+                        </View>
+                        <View style={styles.wldDivider} />
+                        <View style={styles.wldItem}>
+                          <Text style={[styles.wldNum, { color: '#ef4444' }]}>{currentStat.losses}</Text>
+                          <Text style={styles.wldLbl}>Lost</Text>
+                        </View>
+                        {currentStat.draws > 0 && (
+                          <>
+                            <View style={styles.wldDivider} />
+                            <View style={styles.wldItem}>
+                              <Text style={[styles.wldNum, { color: '#f59e0b' }]}>{currentStat.draws}</Text>
+                              <Text style={styles.wldLbl}>Draw</Text>
+                            </View>
+                          </>
+                        )}
+                        <View style={styles.wldDivider} />
+                        <View style={styles.wldItem}>
+                          <Text style={styles.wldNum}>{currentStat.matches}</Text>
+                          <Text style={styles.wldLbl}>Played</Text>
+                        </View>
+                      </View>
+
+                      {/* Win rate */}
+                      <View style={styles.winRateSection}>
+                        <View style={styles.winRateHeader}>
+                          <Text style={styles.winRateLabel}>Win Rate</Text>
+                          <Text style={styles.winRatePct}>{winRate}%</Text>
+                        </View>
+                        <View style={styles.winRateBarBg}>
+                          <View style={[styles.winRateBarFill, { width: `${winRate}%` as any }]} />
+                        </View>
+                      </View>
+
+                      {/* Sport-specific grid */}
+                      {SPORT_STAT_FIELDS[currentStat.sport] && (
+                        <View style={styles.sportStatsGrid}>
+                          {SPORT_STAT_FIELDS[currentStat.sport]
+                            .filter(({ key }) => currentStat.sportStats[key] !== undefined)
+                            .map(({ key, label }) => (
+                              <View key={key} style={styles.sportStatCell}>
+                                <Text style={styles.sportStatValue}>
+                                  {String(currentStat.sportStats[key])}
+                                </Text>
+                                <Text style={styles.sportStatLabel}>{label}</Text>
+                              </View>
+                            ))}
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
             </View>
 
             {/* Actions */}
@@ -132,16 +325,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '90%',
+    maxHeight: '92%',
   },
   handle: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#d1d5db',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 0,
+    width: 40, height: 4, backgroundColor: '#d1d5db',
+    borderRadius: 2, alignSelf: 'center',
+    marginTop: 10, marginBottom: 0,
   },
   profileHeader: {
     alignItems: 'center',
@@ -152,182 +341,113 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   closeBtn: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    position: 'absolute', top: 16, right: 16,
+    width: 32, height: 32, borderRadius: 16,
     backgroundColor: 'rgba(0,0,0,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
   avatarLg: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 80, height: 80, borderRadius: 40,
     backgroundColor: 'rgba(255,255,255,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.6)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 3, borderColor: 'rgba(255,255,255,0.6)',
   },
-  avatarInitialsLg: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '700',
-  },
-  profileName: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '700',
-    marginTop: 12,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  profileLocation: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 14,
-  },
-  joinRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  joinText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 12,
-  },
-  scroll: {
-    flex: 1,
-  },
+  avatarInitialsLg: { color: '#fff', fontSize: 28, fontWeight: '700' },
+  profileName: { color: '#fff', fontSize: 22, fontWeight: '700', marginTop: 12 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  profileLocation: { color: 'rgba(255,255,255,0.85)', fontSize: 14 },
+  joinRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  joinText: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
+  scroll: { flex: 1 },
   statsRow: {
     flexDirection: 'row',
     backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    marginHorizontal: 16, marginTop: 16,
+    borderRadius: 12, padding: 16,
+    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
   },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statNum: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  statLbl: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 2,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#e5e7eb',
-  },
+  statItem: { flex: 1, alignItems: 'center' },
+  statNum: { fontSize: 22, fontWeight: '700', color: '#111827' },
+  statLbl: { fontSize: 12, color: '#6b7280', marginTop: 2 },
+  statDivider: { width: 1, backgroundColor: '#e5e7eb' },
   privacyBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#f3f4f6',
-    marginHorizontal: 16,
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#f3f4f6', marginHorizontal: 16, marginTop: 12,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
   },
-  privacyText: {
-    color: '#6b7280',
-    fontSize: 13,
-  },
-  section: {
-    marginHorizontal: 16,
-    marginTop: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 10,
-  },
-  bioText: {
-    color: '#6b7280',
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  sportsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
+  privacyText: { color: '#6b7280', fontSize: 13 },
+  section: { marginHorizontal: 16, marginTop: 20 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 10 },
+  bioText: { color: '#6b7280', fontSize: 14, lineHeight: 22 },
+  sportsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   sportCard: {
+    backgroundColor: '#f9fafb', borderRadius: 12, padding: 14,
+    alignItems: 'center', minWidth: 100,
+    borderWidth: 1, borderColor: '#e5e7eb',
+  },
+  sportEmoji: { fontSize: 28, marginBottom: 6 },
+  sportName: { fontSize: 13, fontWeight: '600', color: '#111827', marginBottom: 6 },
+  skillBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  skillBadgeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
+  sportDetail: { fontSize: 10, color: '#6b7280', marginTop: 2 },
+  // Player Stats
+  emptyStats: {
+    alignItems: 'center', gap: 8, paddingVertical: 20,
+    backgroundColor: '#f9fafb', borderRadius: 12,
+    borderWidth: 1, borderColor: '#e5e7eb',
+  },
+  emptyStatsText: { color: '#9ca3af', fontSize: 13 },
+  statSportTab: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 20, borderWidth: 1, borderColor: '#e5e7eb',
     backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    padding: 14,
+  },
+  statSportTabActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  statSportTabEmoji: { fontSize: 16 },
+  statSportTabText: { color: '#374151', fontWeight: '600', fontSize: 13 },
+  statSportTabTextActive: { color: '#fff' },
+  statsDetailCard: {
+    backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden',
+    borderWidth: 1, borderColor: '#e5e7eb',
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
+  },
+  wldRow: {
+    flexDirection: 'row', paddingVertical: 16, paddingHorizontal: 8,
+    borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+  },
+  wldItem: { flex: 1, alignItems: 'center' },
+  wldNum: { fontSize: 22, fontWeight: '800', color: '#111827' },
+  wldLbl: { fontSize: 11, color: '#6b7280', marginTop: 2 },
+  wldDivider: { width: 1, backgroundColor: '#e5e7eb' },
+  winRateSection: {
+    padding: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+  },
+  winRateHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  winRateLabel: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  winRatePct: { fontSize: 13, fontWeight: '700', color: '#16a34a' },
+  winRateBarBg: { height: 8, backgroundColor: '#f3f4f6', borderRadius: 4, overflow: 'hidden' },
+  winRateBarFill: { height: 8, backgroundColor: '#16a34a', borderRadius: 4 },
+  sportStatsGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  sportStatCell: {
+    width: '50%', padding: 14,
+    borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+    borderRightWidth: 1, borderRightColor: '#f3f4f6',
     alignItems: 'center',
-    minWidth: 100,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
   },
-  sportEmoji: {
-    fontSize: 28,
-    marginBottom: 6,
-  },
-  sportName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 6,
-  },
-  skillBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  skillBadgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
-  },
+  sportStatValue: { fontSize: 20, fontWeight: '800', color: '#111827' },
+  sportStatLabel: { fontSize: 11, color: '#6b7280', marginTop: 3 },
+  // Actions
   messageBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#16a34a',
-    marginHorizontal: 16,
-    marginTop: 24,
-    paddingVertical: 14,
-    borderRadius: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#16a34a', marginHorizontal: 16, marginTop: 24,
+    paddingVertical: 14, borderRadius: 12,
   },
-  messageBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  messageBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   privateNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginHorizontal: 16,
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginHorizontal: 16, marginTop: 16, padding: 12,
+    backgroundColor: '#f3f4f6', borderRadius: 10,
   },
-  privateNoteText: {
-    color: '#6b7280',
-    fontSize: 13,
-  },
+  privateNoteText: { color: '#6b7280', fontSize: 13 },
 });
