@@ -143,12 +143,25 @@ export default function ProfileScreen() {
       fetchMyRanking(),
       fetchPlayerStats(user.id),
     ]);
-    setMySports(sports);
     setRanking(rank);
 
-    // Add placeholder 0-stat entries for sports in profile_sports but not yet in player_stats
+    // Merge: show sports-only-in-player_stats as virtual My Sports cards
+    // (SQL patches seeded player_stats without creating profile_sports rows)
+    const realSportNames = new Set(sports.map((s) => s.name));
+    const virtualSports: ProfileSport[] = stats
+      .filter((s) => !realSportNames.has(s.sport))
+      .map((s) => ({
+        id: `virtual-${s.sport}`,
+        name: s.sport,
+        skill: 'Intermediate' as ProfileSport['skill'],
+        emoji: SPORT_EMOJIS[s.sport] ?? '🏆',
+        details: {},
+      }));
+    setMySports([...sports, ...virtualSports]);
+
+    // Placeholder 0-stat entries for profile_sports that have no player_stats row yet
     const sportsWithStats = new Set(stats.map((s) => s.sport));
-    const placeholders: PlayerStat[] = sports
+    const placeholders: PlayerStat[] = [...sports, ...virtualSports]
       .filter((s) => !sportsWithStats.has(s.name))
       .map((s) => ({ sport: s.name, matches: 0, wins: 0, losses: 0, draws: 0, sportStats: {} }));
     const merged = [...stats, ...placeholders];
@@ -199,6 +212,9 @@ export default function ProfileScreen() {
         text: 'Remove', style: 'destructive',
         onPress: async () => {
           setMySports((prev) => prev.filter((s) => s.id !== sport.id));
+          setPlayerStats((prev) => prev.filter((s) => s.sport !== sport.name));
+          // Virtual entries (id starts with 'virtual-') only exist in player_stats, not profile_sports
+          if (sport.id.startsWith('virtual-')) return;
           await removeSport(sport.id);
         },
       },
