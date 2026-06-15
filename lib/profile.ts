@@ -52,17 +52,15 @@ export async function addSport(params: {
   emoji: string;
   details: Record<string, string>;
 }): Promise<ProfileSport | null> {
-  // Delete any existing row for this sport first, then insert fresh.
-  // Avoids upsert/onConflict issues with unique indexes vs. constraints.
-  const { error: delErr } = await supabase
+  // Delete any existing row first to avoid unique-index conflicts
+  await supabase
     .from('profile_sports')
     .delete()
     .eq('profile_id', params.userId)
     .eq('sport', params.sport);
 
-  if (delErr) console.warn('[addSport] delete error:', delErr.message, delErr.code);
-
-  const { data, error } = await supabase
+  // INSERT (no chained .select() — chained selects after insert can fail under some RLS configs)
+  const { error: insertErr } = await supabase
     .from('profile_sports')
     .insert({
       profile_id: params.userId,
@@ -70,15 +68,34 @@ export async function addSport(params: {
       skill: params.skill,
       emoji: params.emoji,
       details: params.details,
-    })
-    .select()
-    .single();
+    });
 
-  if (error) {
-    console.warn('[addSport] insert error:', error.message, 'code:', error.code);
+  if (insertErr) {
+    console.warn('[addSport] insert error:', insertErr.message, 'code:', insertErr.code);
     return null;
   }
-  if (!data) return null;
+
+  // Fetch the row we just inserted
+  const { data, error: fetchErr } = await supabase
+    .from('profile_sports')
+    .select('*')
+    .eq('profile_id', params.userId)
+    .eq('sport', params.sport)
+    .single();
+
+  if (fetchErr || !data) {
+    // Insert succeeded but SELECT failed — return a synthetic object so the UI updates immediately.
+    // loadProfile() will replace it with the real DB row on next mount.
+    console.warn('[addSport] fetch-after-insert error:', fetchErr?.message);
+    return {
+      id: `pending-${Date.now()}`,
+      name: params.sport,
+      skill: params.skill as Sport['skill'],
+      emoji: params.emoji,
+      details: params.details,
+    };
+  }
+
   const row = data as Record<string, unknown>;
   return {
     id: row.id as string,

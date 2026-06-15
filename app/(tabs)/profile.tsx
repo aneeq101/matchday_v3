@@ -194,7 +194,7 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'Could not save sport. Please try again.');
       return;
     }
-    // Optimistic: show sport immediately in My Sports
+    // Show sport immediately — addSport always returns non-null when INSERT succeeds
     setMySports((prev) => {
       const filtered = prev.filter((s) => s.name !== result.name);
       return [...filtered, result];
@@ -202,8 +202,6 @@ export default function ProfileScreen() {
     setSelectedStatSport(result.name);
     setShowAddSport(false);
     setNewDetails({});
-    // Background reload confirms the DB state
-    loadProfile();
   };
 
   const handleRemoveSport = (sport: ProfileSport) => {
