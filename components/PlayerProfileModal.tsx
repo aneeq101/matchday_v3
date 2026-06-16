@@ -19,6 +19,8 @@ import {
   type ProfileSport,
   type FullProfile,
 } from '../lib/profile';
+import { useAuth } from '../lib/AuthContext';
+import { isFollowing, followUser, unfollowUser } from '../lib/follows';
 
 interface Props {
   player: Player | null;
@@ -83,11 +85,14 @@ const SPORT_STAT_FIELDS: Record<string, { key: string; label: string }[]> = {
 };
 
 export default function PlayerProfileModal({ player, onClose, onMessage }: Props) {
+  const { user } = useAuth();
   const [sports, setSports]               = useState<ProfileSport[]>([]);
   const [playerStats, setPlayerStats]     = useState<PlayerStat[]>([]);
   const [selectedStatSport, setSelectedStatSport] = useState('');
   const [fullProfile, setFullProfile]     = useState<FullProfile | null>(null);
   const [loading, setLoading]             = useState(false);
+  const [following, setFollowing]         = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
 
   useEffect(() => {
     if (!player) return;
@@ -95,9 +100,10 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
     setPlayerStats([]);
     setSelectedStatSport('');
     setFullProfile(null);
+    setFollowing(false);
     setLoading(true);
 
-    Promise.all([
+    const profilePromise = Promise.all([
       fetchMySports(player.id),
       fetchPlayerStats(player.id),
       fetchFullProfile(player.id),
@@ -116,7 +122,26 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
       setSports(player.sports.map((s, i) => ({ ...s, id: String(i), details: {} })));
       setLoading(false);
     });
-  }, [player?.id]);
+
+    if (user && user.id !== player.id) {
+      isFollowing(user.id, player.id).then(setFollowing);
+    }
+
+    return () => { void profilePromise; };
+  }, [player?.id, user?.id]);
+
+  const toggleFollow = async () => {
+    if (!user || !player || followLoading) return;
+    setFollowLoading(true);
+    if (following) {
+      const ok = await unfollowUser(user.id, player.id);
+      if (ok) setFollowing(false);
+    } else {
+      const ok = await followUser(user.id, player.id);
+      if (ok) setFollowing(true);
+    }
+    setFollowLoading(false);
+  };
 
   if (!player) return null;
 
@@ -326,11 +351,36 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
               </View>
 
               {/* Actions */}
-              {player.privacy !== 'private' && onMessage && (
-                <TouchableOpacity style={styles.messageBtn} onPress={() => onMessage(player)}>
-                  <Ionicons name="chatbubble-outline" size={18} color="#fff" />
-                  <Text style={styles.messageBtnText}>Send Message</Text>
-                </TouchableOpacity>
+              {user && user.id !== player.id && (
+                <View style={styles.actionsRow}>
+                  <TouchableOpacity
+                    style={[styles.followBtn, following && styles.followingBtn]}
+                    onPress={toggleFollow}
+                    disabled={followLoading}
+                  >
+                    {followLoading ? (
+                      <ActivityIndicator size="small" color={following ? '#6b7280' : '#fff'} />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name={following ? 'checkmark' : 'person-add-outline'}
+                          size={16}
+                          color={following ? '#6b7280' : '#fff'}
+                        />
+                        <Text style={[styles.followBtnText, following && styles.followingBtnText]}>
+                          {following ? 'Following' : 'Follow'}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+
+                  {player.privacy !== 'private' && onMessage && (
+                    <TouchableOpacity style={styles.messageBtn} onPress={() => onMessage(player)}>
+                      <Ionicons name="chatbubble-outline" size={18} color="#16a34a" />
+                      <Text style={styles.messageBtnText}>Message</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               )}
               {player.privacy === 'private' && (
                 <View style={styles.privateNote}>
@@ -473,12 +523,26 @@ const styles = StyleSheet.create({
   },
   sportStatValue: { fontSize: 20, fontWeight: '800', color: '#111827' },
   sportStatLabel: { fontSize: 11, color: '#6b7280', marginTop: 3 },
-  messageBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#16a34a', marginHorizontal: 16, marginTop: 24,
-    paddingVertical: 14, borderRadius: 12,
+  actionsRow: {
+    flexDirection: 'row', gap: 10,
+    marginHorizontal: 16, marginTop: 24,
   },
-  messageBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  followBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#16a34a', paddingVertical: 13, borderRadius: 12,
+  },
+  followingBtn: {
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1, borderColor: '#e5e7eb',
+  },
+  followBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  followingBtnText: { color: '#6b7280' },
+  messageBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#f0fdf4', paddingVertical: 13, borderRadius: 12,
+    borderWidth: 1, borderColor: '#bbf7d0',
+  },
+  messageBtnText: { color: '#16a34a', fontSize: 15, fontWeight: '700' },
   privateNote: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     marginHorizontal: 16, marginTop: 16, padding: 12,
