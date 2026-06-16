@@ -20,6 +20,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import { fetchMyMatches, createMatch, cancelMatch, fetchMyTournamentCount } from '../../lib/matches';
 import { type Booking, type MatchItem } from '../../data/mockData';
+import DatePickerField from '../../components/DatePickerField';
+import LocationPickerModal from '../../components/LocationPickerModal';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 
@@ -74,13 +76,14 @@ export default function MyTurfScreen() {
   const [cancellingBooking, setCancellingBooking] = useState(false);
 
   // Create Match modal
-  const [showCreateMatch, setShowCreateMatch] = useState(false);
-  const [matchTitle, setMatchTitle]           = useState('');
-  const [matchSport, setMatchSport]           = useState('Football');
-  const [matchFormat, setMatchFormat]         = useState('11v11');
-  const [matchDate, setMatchDate]             = useState('');
-  const [matchLocation, setMatchLocation]     = useState('');
-  const [creatingMatch, setCreatingMatch]     = useState(false);
+  const [showCreateMatch, setShowCreateMatch]       = useState(false);
+  const [matchTitle, setMatchTitle]                 = useState('');
+  const [matchSport, setMatchSport]                 = useState('Football');
+  const [matchFormat, setMatchFormat]               = useState('11v11');
+  const [matchDate, setMatchDate]                   = useState<Date | null>(null);
+  const [matchLocation, setMatchLocation]           = useState('');
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [creatingMatch, setCreatingMatch]           = useState(false);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -130,15 +133,19 @@ export default function MyTurfScreen() {
   };
 
   const handleCreateMatch = async () => {
-    if (!user || !matchTitle.trim() || !matchDate.trim() || !matchLocation.trim()) return;
+    if (!user || !matchTitle.trim() || !matchDate || !matchLocation.trim()) return;
     setCreatingMatch(true);
+
+    const formattedDate = matchDate.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+    });
 
     const newMatch = await createMatch({
       userId:        user.id,
       title:         matchTitle.trim(),
       sport:         matchSport,
       playersFormat: matchFormat,
-      matchDate:     matchDate.trim(),
+      matchDate:     formattedDate,
       location:      matchLocation.trim(),
     });
 
@@ -149,7 +156,7 @@ export default function MyTurfScreen() {
     setCreatingMatch(false);
     setShowCreateMatch(false);
     setMatchTitle('');
-    setMatchDate('');
+    setMatchDate(null);
     setMatchLocation('');
   };
 
@@ -412,25 +419,27 @@ export default function MyTurfScreen() {
                 ))}
               </View>
 
-              <TextInput
-                style={styles.input}
-                placeholder="Date & time (e.g. Sat Jun 21 at 5 PM)"
-                placeholderTextColor="#9ca3af"
+              <DatePickerField
                 value={matchDate}
-                onChangeText={setMatchDate}
+                onChange={setMatchDate}
+                placeholder="Select match date"
               />
-              <TextInput
-                style={styles.input}
-                placeholder="Location"
-                placeholderTextColor="#9ca3af"
-                value={matchLocation}
-                onChangeText={setMatchLocation}
-              />
+
+              <TouchableOpacity
+                style={[styles.input, styles.locationTrigger]}
+                onPress={() => setShowLocationPicker(true)}
+              >
+                <Ionicons name="location-outline" size={18} color={matchLocation ? '#111827' : '#9ca3af'} />
+                <Text style={[styles.locationTriggerText, !matchLocation && { color: '#9ca3af' }]} numberOfLines={1}>
+                  {matchLocation || 'Pick location from map'}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.primaryBtn, { marginTop: 4 }]}
                 onPress={handleCreateMatch}
-                disabled={creatingMatch || !matchTitle.trim() || !matchDate.trim() || !matchLocation.trim()}
+                disabled={creatingMatch || !matchTitle.trim() || !matchDate || !matchLocation.trim()}
               >
                 {creatingMatch
                   ? <ActivityIndicator size="small" color="#fff" />
@@ -442,6 +451,14 @@ export default function MyTurfScreen() {
           </SafeAreaView>
         </View>
       </Modal>
+
+      {/* Location Picker */}
+      <LocationPickerModal
+        visible={showLocationPicker}
+        sport={matchSport}
+        onSelect={(loc) => { setMatchLocation(loc); setShowLocationPicker(false); }}
+        onClose={() => setShowLocationPicker(false)}
+      />
 
       {/* Notification Modal */}
       <Modal visible={notifVisible} animationType="fade" transparent>
@@ -715,6 +732,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 11,
+    fontSize: 14,
+    color: '#111827',
+  },
+  locationTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#fff',
+  },
+  locationTriggerText: {
+    flex: 1,
     fontSize: 14,
     color: '#111827',
   },

@@ -24,6 +24,7 @@ import { VENUES, venueDistanceKm, type Venue } from '../../data/mockData';
 import { formatDistance, type Coord } from '../../utils/geo';
 import { useUserLocation } from '../../hooks/useUserLocation';
 import BookMap from '../../components/BookMap';
+import DatePickerField from '../../components/DatePickerField';
 
 const LIVE_SEARCH_ENABLED = false;
 const PEEK_HEIGHT = 168; // px visible when sheet is at its lowest snap
@@ -144,7 +145,7 @@ export default function BookScreen() {
   const [confirmed, setConfirmed]         = useState(false);
 
   // Booking form
-  const [selectedDate, setSelectedDate]         = useState('');
+  const [selectedDate, setSelectedDate]         = useState<Date | null>(null);
   const [selectedTime, setSelectedTime]         = useState('');
   const [selectedDuration, setSelectedDuration] = useState(1);
   const [selectedSport, setSelectedSport]       = useState('Football');
@@ -316,7 +317,9 @@ export default function BookScreen() {
         venue_name:      bookingVenue.name,
         venue_address:   bookingVenue.address,
         sport:           selectedSport,
-        date:            selectedDate,
+        date:            selectedDate
+                           ? selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+                           : '',
         time_slot:       selectedTime,
         duration_hours:  selectedDuration,
         players_count:   Number(playersCount) || 10,
@@ -332,7 +335,7 @@ export default function BookScreen() {
   };
   const resetBooking  = () => {
     setConfirmed(false); setBookingVenue(null);
-    setSelectedDate(''); setSelectedTime('');
+    setSelectedDate(null); setSelectedTime('');
     setSelectedDuration(1); setSelectedSport('Football');
     setPlayersCount('10'); setSpecialRequests('');
   };
@@ -524,12 +527,10 @@ export default function BookScreen() {
                 </View>
 
                 <Text style={styles.fieldLabel}>Date</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="e.g. May 25, 2025"
-                  placeholderTextColor="#9ca3af"
+                <DatePickerField
                   value={selectedDate}
-                  onChangeText={setSelectedDate}
+                  onChange={setSelectedDate}
+                  placeholder="Select a date"
                 />
 
                 <Text style={styles.fieldLabel}>Time Slot</Text>
@@ -633,7 +634,7 @@ export default function BookScreen() {
               {selectedDate && (
                 <View style={styles.confirmRow}>
                   <Ionicons name="calendar-outline" size={16} color="#16a34a" />
-                  <Text style={styles.confirmRowText}>{selectedDate}</Text>
+                  <Text style={styles.confirmRowText}>{selectedDate?.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</Text>
                 </View>
               )}
               {selectedTime && (
