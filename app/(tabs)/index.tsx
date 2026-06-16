@@ -267,38 +267,35 @@ export default function HoodScreen() {
                   <Text style={styles.statText}>{lookingCount} Looking</Text>
                 </TouchableOpacity>
               </View>
+
+              {SHOW_QUICK_STRIP && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.quickStripContent}
+                >
+                  {QUICK_ACTIONS.map(({ key, icon, label }) => (
+                    <TouchableOpacity
+                      key={key}
+                      style={styles.quickBtn}
+                      onPress={() => {
+                        if (key === 'players') { setShowPlayersModal(true); }
+                        else if (key === 'looking') { router.push('/looking-now'); }
+                        else if (key === 'match')   { router.push('/(tabs)/myturf'); }
+                        else if (key === 'book')    { router.push('/(tabs)/book'); }
+                        else if (key === 'earn')    { router.push('/(tabs)/earn'); }
+                      }}
+                    >
+                      <Ionicons name={icon as any} size={16} color="#fff" />
+                      <Text style={styles.quickBtnLabel}>{label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
             </SafeAreaView>
           </View>
         </ImageBackground>
       </View>
-
-      {SHOW_QUICK_STRIP && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.quickStrip}
-          contentContainerStyle={styles.quickStripContent}
-        >
-          {QUICK_ACTIONS.map(({ key, icon, label, color }) => (
-            <TouchableOpacity
-              key={key}
-              style={styles.quickBtn}
-              onPress={() => {
-                if (key === 'players') { setShowPlayersModal(true); }
-                else if (key === 'looking') { router.push('/looking-now'); }
-                else if (key === 'match')   { router.push('/(tabs)/myturf'); }
-                else if (key === 'book')    { router.push('/(tabs)/book'); }
-                else if (key === 'earn')    { router.push('/(tabs)/earn'); }
-              }}
-            >
-              <View style={[styles.quickBtnIcon, { backgroundColor: color + '18' }]}>
-                <Ionicons name={icon as any} size={20} color={color} />
-              </View>
-              <Text style={styles.quickBtnLabel}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
 
       <ScrollView
         style={styles.feed}
@@ -837,34 +834,28 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.3)',
   },
   statText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  quickStrip: {
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
   quickStripContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 10,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 12,
+    gap: 8,
     flexDirection: 'row',
   },
   quickBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    minWidth: 68,
-  },
-  quickBtnIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   quickBtnLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#374151',
-    textAlign: 'center',
+    color: '#fff',
   },
   feed: { flex: 1 },
   feedContent: { padding: 12, gap: 12, paddingBottom: 80 },
