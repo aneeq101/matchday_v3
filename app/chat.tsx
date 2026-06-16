@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,8 @@ import {
   markConversationRead,
 } from '../lib/chatService';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+
+const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -105,7 +108,8 @@ export default function ChatScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
+      <View style={styles.bgOverlay} pointerEvents="none" />
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <SafeAreaView style={styles.safeHeader} edges={['top']}>
         <View style={styles.header}>
@@ -173,7 +177,7 @@ export default function ChatScreen() {
           </View>
         </SafeAreaView>
       </KeyboardAvoidingView>
-    </View>
+    </ImageBackground>
   );
 }
 
@@ -193,7 +197,8 @@ function MessageBubble({ message, showTime }: { message: Message; showTime: bool
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f3f4f6' },
+  root: { flex: 1 },
+  bgOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,10,2,0.38)' },
   safeHeader: { backgroundColor: '#16a34a' },
   header: {
     flexDirection: 'row',

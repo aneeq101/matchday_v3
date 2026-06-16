@@ -9,12 +9,15 @@ import {
   StatusBar,
   ActivityIndicator,
   Image,
+  ImageBackground,
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { CONVERSATIONS, type Conversation } from '../data/mockData';
+
+const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
 import { useAuth } from '../lib/AuthContext';
 import { fetchConversations } from '../lib/chatService';
 
@@ -50,8 +53,9 @@ export default function MessagesScreen() {
   );
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#16a34a" />
+    <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
+      <View style={styles.bgOverlay} pointerEvents="none" />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <View style={styles.searchWrapper}>
         <View style={styles.searchBox}>
           <Ionicons name="search" size={18} color="#9ca3af" />
@@ -104,7 +108,7 @@ export default function MessagesScreen() {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
-    </View>
+    </ImageBackground>
   );
 }
 
@@ -161,35 +165,36 @@ function ConversationRow({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
+  root: { flex: 1 },
+  bgOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,10,2,0.38)' },
   searchWrapper: {
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-    backgroundColor: '#fff',
+    borderBottomColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.93)',
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: 'rgba(0,0,0,0.06)',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
   searchInput: { flex: 1, fontSize: 14, color: '#111827' },
   list: { paddingVertical: 4 },
-  separator: { height: 1, backgroundColor: '#f3f4f6', marginLeft: 72 },
+  separator: { height: 1, backgroundColor: 'rgba(255,255,255,0.2)', marginLeft: 72 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     gap: 12,
   },
   rowUnread: {
-    backgroundColor: '#f0fdf4',
+    backgroundColor: 'rgba(240,253,244,0.97)',
   },
   avatarImg: {
     width: 52,
@@ -222,6 +227,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#374151' },
-  emptySub: { color: '#9ca3af', fontSize: 14 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
+  emptySub: { color: 'rgba(255,255,255,0.7)', fontSize: 14 },
 });
