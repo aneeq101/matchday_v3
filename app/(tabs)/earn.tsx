@@ -27,6 +27,7 @@ import {
   createTournament as dbCreateTournament,
 } from '../../lib/tournaments';
 
+
 const TYPE_COLORS: Record<EventType, string> = {
   tournament: '#8b5cf6',
   league: '#3b82f6',
@@ -53,6 +54,8 @@ export default function EarnScreen() {
   const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState('All');
   const [registerEvent, setRegisterEvent] = useState<Tournament | null>(null);
+  const [leaveEvent, setLeaveEvent] = useState<Tournament | null>(null);
+  const [leaving, setLeaving] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [registeredIds, setRegisteredIds] = useState<Set<string>>(new Set());
   const [registerSuccess, setRegisterSuccess] = useState(false);
@@ -108,6 +111,28 @@ export default function EarnScreen() {
       setRegisterSuccess(false);
       setRegisterEvent(null);
     }, 1600);
+  };
+
+  const handleLeave = async () => {
+    if (!leaveEvent || !user) return;
+    setLeaving(true);
+    const ok = await unregisterFromTournament(leaveEvent.id, user.id);
+    if (ok) {
+      setRegisteredIds((prev) => {
+        const next = new Set(prev);
+        next.delete(leaveEvent.id);
+        return next;
+      });
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === leaveEvent.id
+            ? { ...e, participants: Math.max(0, e.participants - 1) }
+            : e
+        )
+      );
+    }
+    setLeaving(false);
+    setLeaveEvent(null);
   };
 
   const handleCreate = async () => {
@@ -199,6 +224,7 @@ export default function EarnScreen() {
             event={event}
             registered={registeredIds.has(event.id)}
             onRegister={() => setRegisterEvent(event)}
+            onLeave={() => setLeaveEvent(event)}
           />
         ))}
         <View style={{ height: 20 }} />
@@ -262,6 +288,48 @@ export default function EarnScreen() {
 
                 <View style={{ height: 20 }} />
               </ScrollView>
+            )}
+          </SafeAreaView>
+        </View>
+      </Modal>
+
+      {/* Leave Event Modal */}
+      <Modal visible={!!leaveEvent} animationType="fade" transparent>
+        <View style={styles.sheetOverlay}>
+          <SafeAreaView style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>Leave Event</Text>
+              <TouchableOpacity onPress={() => setLeaveEvent(null)}>
+                <Ionicons name="close" size={24} color="#111827" />
+              </TouchableOpacity>
+            </View>
+            {leaveEvent && (
+              <View style={styles.sheetContent}>
+                <Text style={styles.leaveText}>
+                  Are you sure you want to leave{' '}
+                  <Text style={{ fontWeight: '700' }}>{leaveEvent.name}</Text>?
+                </Text>
+                <View style={styles.leaveActions}>
+                  <TouchableOpacity
+                    style={styles.leaveCancelBtn}
+                    onPress={() => setLeaveEvent(null)}
+                  >
+                    <Text style={styles.leaveCancelText}>Keep Spot</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.leaveConfirmBtn}
+                    onPress={handleLeave}
+                    disabled={leaving}
+                  >
+                    {leaving
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={styles.leaveConfirmText}>Leave</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+                <View style={{ height: 20 }} />
+              </View>
             )}
           </SafeAreaView>
         </View>
@@ -380,10 +448,12 @@ function EventCard({
   event,
   registered,
   onRegister,
+  onLeave,
 }: {
   event: Tournament;
   registered: boolean;
   onRegister: () => void;
+  onLeave: () => void;
 }) {
   const progress = event.maxParticipants > 0 ? event.participants / event.maxParticipants : 0;
   const typeColor = TYPE_COLORS[event.type];
@@ -428,9 +498,14 @@ function EventCard({
           )}
         </View>
         {registered ? (
-          <View style={styles.registeredBadge}>
-            <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
-            <Text style={styles.registeredText}>Registered</Text>
+          <View style={styles.registeredRow}>
+            <View style={styles.registeredBadge}>
+              <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
+              <Text style={styles.registeredText}>Registered</Text>
+            </View>
+            <TouchableOpacity style={styles.leaveSmallBtn} onPress={onLeave}>
+              <Text style={styles.leaveSmallText}>Leave</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <TouchableOpacity
@@ -514,6 +589,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   registerBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  registeredRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   registeredBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -524,6 +600,33 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   registeredText: { color: '#16a34a', fontWeight: '600', fontSize: 13 },
+  leaveSmallBtn: {
+    borderWidth: 1.5,
+    borderColor: '#ef4444',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  leaveSmallText: { color: '#ef4444', fontWeight: '600', fontSize: 12 },
+  leaveText: { color: '#374151', fontSize: 15, textAlign: 'center', marginBottom: 20, lineHeight: 22 },
+  leaveActions: { flexDirection: 'row', gap: 12 },
+  leaveCancelBtn: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: '#d1d5db',
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  leaveCancelText: { color: '#6b7280', fontWeight: '700', fontSize: 15 },
+  leaveConfirmBtn: {
+    flex: 1,
+    backgroundColor: '#ef4444',
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  leaveConfirmText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   // Sheet
   sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: {

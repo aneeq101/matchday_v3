@@ -35,6 +35,25 @@ const TIME_SLOTS = [
   '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
   '6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM',
 ];
+
+function slotToHour(slot: string): number {
+  const [timePart, meridiem] = slot.split(' ');
+  let hour = parseInt(timePart.split(':')[0], 10);
+  if (meridiem === 'PM' && hour !== 12) hour += 12;
+  if (meridiem === 'AM' && hour === 12) hour = 0;
+  return hour;
+}
+
+function isSlotPast(slot: string, date: Date | null): boolean {
+  if (!date) return false;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const sel  = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  if (sel > today) return false;
+  if (sel < today) return true;
+  return slotToHour(slot) <= now.getHours();
+}
+
 const BOOKING_SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton', 'Baseball'];
 const DURATIONS = [1, 2, 3];
 
@@ -551,7 +570,11 @@ export default function BookScreen() {
                 </Text>
                 <DatePickerField
                   value={selectedDate}
-                  onChange={(d) => { setSelectedDate(d); setBookingError(''); }}
+                  onChange={(d) => {
+                    setSelectedDate(d);
+                    setBookingError('');
+                    if (selectedTime && isSlotPast(selectedTime, d)) setSelectedTime('');
+                  }}
                   placeholder="Select a date"
                 />
 
@@ -559,17 +582,21 @@ export default function BookScreen() {
                   Time Slot<Text style={styles.required}> *</Text>
                 </Text>
                 <View style={styles.timeGrid}>
-                  {TIME_SLOTS.map((t) => (
-                    <TouchableOpacity
-                      key={t}
-                      style={[styles.timeSlot, selectedTime === t && styles.timeSlotActive]}
-                      onPress={() => { setSelectedTime(t); setBookingError(''); }}
-                    >
-                      <Text style={[styles.timeSlotText, selectedTime === t && styles.timeSlotTextActive]}>
-                        {t}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                  {TIME_SLOTS.map((t) => {
+                    const past = isSlotPast(t, selectedDate);
+                    return (
+                      <TouchableOpacity
+                        key={t}
+                        disabled={past}
+                        style={[styles.timeSlot, selectedTime === t && styles.timeSlotActive, past && styles.timeSlotDisabled]}
+                        onPress={() => { setSelectedTime(t); setBookingError(''); }}
+                      >
+                        <Text style={[styles.timeSlotText, selectedTime === t && styles.timeSlotTextActive, past && styles.timeSlotTextDisabled]}>
+                          {t}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
 
                 <Text style={styles.fieldLabel}>Duration</Text>
@@ -945,9 +972,11 @@ const styles = StyleSheet.create({
   },
   timeGrid:        { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
   timeSlot:        { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb' },
-  timeSlotActive:  { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  timeSlotText:    { color: '#6b7280', fontSize: 12 },
-  timeSlotTextActive: { color: '#fff', fontWeight: '600' },
+  timeSlotActive:   { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  timeSlotDisabled: { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb', opacity: 0.45 },
+  timeSlotText:     { color: '#6b7280', fontSize: 12 },
+  timeSlotTextActive:   { color: '#fff', fontWeight: '600' },
+  timeSlotTextDisabled: { color: '#d1d5db' },
   durationRow:     { flexDirection: 'row', gap: 10, marginBottom: 14 },
   durationBtn:     { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', backgroundColor: '#f9fafb' },
   durationBtnActive:     { backgroundColor: '#16a34a', borderColor: '#16a34a' },

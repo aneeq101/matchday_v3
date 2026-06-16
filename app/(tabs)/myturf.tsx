@@ -23,8 +23,12 @@ import {
   fetchMyTournamentCount, joinMatch, leaveMatch,
   fetchOpenMatches, fetchJoinedMatches,
 } from '../../lib/matches';
+import {
+  fetchMyRegistrations,
+  unregisterFromTournament,
+} from '../../lib/tournaments';
 import { getFormatsForSport } from '../../lib/sportRules';
-import { type Booking, type MatchItem } from '../../data/mockData';
+import { type Booking, type MatchItem, type Tournament } from '../../data/mockData';
 import DatePickerField from '../../components/DatePickerField';
 import LocationPickerModal from '../../components/LocationPickerModal';
 
@@ -36,6 +40,24 @@ const TIME_SLOTS = [
   '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
   '6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM',
 ];
+
+function slotToHour(slot: string): number {
+  const [timePart, meridiem] = slot.split(' ');
+  let hour = parseInt(timePart.split(':')[0], 10);
+  if (meridiem === 'PM' && hour !== 12) hour += 12;
+  if (meridiem === 'AM' && hour === 12) hour = 0;
+  return hour;
+}
+
+function isSlotPast(slot: string, date: Date | null): boolean {
+  if (!date) return false;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const sel  = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  if (sel > today) return false;
+  if (sel < today) return true;
+  return slotToHour(slot) <= now.getHours();
+}
 
 function sportEmoji(sport: string): string {
   const s = sport.toLowerCase();
@@ -78,6 +100,7 @@ export default function MyTurfScreen() {
   const [openMatches, setOpenMatches]       = useState<MatchItem[]>([]);
   const [joinedMatches, setJoinedMatches]   = useState<MatchItem[]>([]);
   const [joinedMatchIds, setJoinedMatchIds] = useState<Set<string>>(new Set());
+  const [myRegistrations, setMyRegistrations] = useState<Tournament[]>([]);
   const [tournamentCount, setTournamentCount] = useState(0);
   const [loading, setLoading]               = useState(false);
   const [refreshing, setRefreshing]         = useState(false);
@@ -114,7 +137,7 @@ export default function MyTurfScreen() {
     if (!user) return;
     setLoading(true);
 
-    const [bData, mData, openData, joinedData, tCount] = await Promise.all([
+    const [bData, mData, openData, joinedData, tCount, regs] = await Promise.all([
       supabase
         .from('bookings')
         .select('*')
@@ -124,6 +147,7 @@ export default function MyTurfScreen() {
       fetchOpenMatches(user.id),
       fetchJoinedMatches(user.id),
       fetchMyTournamentCount(user.id),
+      fetchMyRegistrations(user.id),
     ]);
 
     if (!bData.error && bData.data) {
@@ -134,6 +158,7 @@ export default function MyTurfScreen() {
     setJoinedMatches(joinedData);
     setJoinedMatchIds(new Set(joinedData.map((m) => m.id)));
     setTournamentCount(tCount);
+    setMyRegistrations(regs);
     setLoading(false);
   }, [user]);
 
@@ -266,6 +291,15 @@ export default function MyTurfScreen() {
     }
   };
 
+  const handleLeaveEvent = async (eventId: string) => {
+    if (!user) return;
+    const ok = await unregisterFromTournament(eventId, user.id);
+    if (ok) {
+      setMyRegistrations((prev) => prev.filter((e) => e.id !== eventId));
+      setTournamentCount((c) => Math.max(0, c - 1));
+    }
+  };
+
   const upcomingBookings = bookings.filter((b) => b.status !== 'Cancelled');
   // Open matches excludes ones the user has already joined (those go to "Joined Matches")
   const displayedOpenMatches = openMatches.filter((m) => !joinedMatchIds.has(m.id));
@@ -364,6 +398,20 @@ export default function MyTurfScreen() {
                 joining={joining === m.id}
                 onPress={() => setSelectedMatch(m)}
                 onLeave={() => handleLeaveMatch(m.id)}
+              />
+            ))}
+          </>
+        )}
+
+        {/* My Events (Play to Earn) */}
+        {myRegistrations.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>My Events (Play to Earn)</Text>
+            {myRegistrations.map((event) => (
+              <EarnEventCard
+                key={event.id}
+                event={event}
+                onLeave={() => handleLeaveEvent(event.id)}
               />
             ))}
           </>
@@ -644,7 +692,11 @@ export default function MyTurfScreen() {
               </Text>
               <DatePickerField
                 value={matchDate}
-                onChange={(d) => { setMatchDate(d); setCreateError(''); }}
+                onChange={(d) => {
+                  setMatchDate(d);
+                  setCreateError('');
+                  if (matchTime && isSlotPast(matchTime, d)) setMatchTime('');
+                }}
                 placeholder="Select match date"
               />
 
@@ -652,15 +704,19 @@ export default function MyTurfScreen() {
                 Time<Text style={styles.required}> *</Text>
               </Text>
               <View style={styles.timeGrid}>
-                {TIME_SLOTS.map((t) => (
-                  <TouchableOpacity
-                    key={t}
-                    style={[styles.timeSlot, matchTime === t && styles.timeSlotActive]}
-                    onPress={() => { setMatchTime(t); setCreateError(''); }}
-                  >
-                    <Text style={[styles.timeSlotText, matchTime === t && styles.timeSlotTextActive]}>{t}</Text>
-                  </TouchableOpacity>
-                ))}
+                {TIME_SLOTS.map((t) => {
+                  const past = isSlotPast(t, matchDate);
+                  return (
+                    <TouchableOpacity
+                      key={t}
+                      disabled={past}
+                      style={[styles.timeSlot, matchTime === t && styles.timeSlotActive, past && styles.timeSlotDisabled]}
+                      onPress={() => { setMatchTime(t); setCreateError(''); }}
+                    >
+                      <Text style={[styles.timeSlotText, matchTime === t && styles.timeSlotTextActive, past && styles.timeSlotTextDisabled]}>{t}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               <Text style={styles.fieldLabel}>
@@ -884,6 +940,57 @@ function OpenMatchCard({ match, isJoined, joining, onPress, onJoin, onLeave }: {
         </View>
       )}
     </TouchableOpacity>
+  );
+}
+
+const EVENT_TYPE_COLORS: Record<string, string> = {
+  tournament: '#8b5cf6',
+  league:     '#3b82f6',
+  match:      '#16a34a',
+};
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  tournament: 'Tournament',
+  league:     'League',
+  match:      'Match',
+};
+
+function EarnEventCard({ event, onLeave }: { event: Tournament; onLeave: () => void }) {
+  const typeColor = EVENT_TYPE_COLORS[event.type] ?? '#16a34a';
+  const typeLabel = EVENT_TYPE_LABELS[event.type] ?? event.type;
+  return (
+    <View style={[styles.earnCard, { borderLeftColor: typeColor }]}>
+      <View style={styles.earnTop}>
+        <Text style={styles.earnEmoji}>{event.sportEmoji}</Text>
+        <View style={{ flex: 1 }}>
+          <View style={styles.earnTitleRow}>
+            <Text style={styles.earnName} numberOfLines={1}>{event.name}</Text>
+            <View style={[styles.earnTypeBadge, { backgroundColor: typeColor + '20' }]}>
+              <Text style={[styles.earnTypeBadgeText, { color: typeColor }]}>{typeLabel}</Text>
+            </View>
+          </View>
+          <Text style={styles.earnMeta}>
+            {event.date}{event.location ? `  ·  ${event.location}` : ''}
+          </Text>
+          <View style={styles.earnFooter}>
+            {event.entryFee > 0 && (
+              <Text style={styles.earnFee}>Entry: PKR {event.entryFee.toLocaleString()}</Text>
+            )}
+            {event.prizePool > 0 && (
+              <Text style={styles.earnPrize}>🏆 PKR {event.prizePool.toLocaleString()}</Text>
+            )}
+          </View>
+        </View>
+      </View>
+      <View style={styles.earnActions}>
+        <View style={styles.registeredBadge}>
+          <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
+          <Text style={styles.registeredBadgeText}>Registered</Text>
+        </View>
+        <TouchableOpacity style={styles.earnLeaveBtn} onPress={onLeave}>
+          <Text style={styles.earnLeaveBtnText}>Leave</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
@@ -1186,9 +1293,11 @@ const styles = StyleSheet.create({
     borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb',
     backgroundColor: '#f9fafb',
   },
-  timeSlotActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  timeSlotText: { fontSize: 12, color: '#374151', fontWeight: '500' },
-  timeSlotTextActive: { color: '#fff' },
+  timeSlotActive:       { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  timeSlotDisabled:     { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb', opacity: 0.45 },
+  timeSlotText:         { fontSize: 12, color: '#374151', fontWeight: '500' },
+  timeSlotTextActive:   { color: '#fff' },
+  timeSlotTextDisabled: { color: '#d1d5db' },
   pill: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -1212,6 +1321,47 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   errorText: { color: '#ef4444', fontSize: 13, fontWeight: '600', flex: 1 },
+  // Earn event cards
+  earnCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderLeftWidth: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  earnTop: { flexDirection: 'row', gap: 12, marginBottom: 10 },
+  earnEmoji: { fontSize: 32, paddingTop: 2 },
+  earnTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  earnName: { flex: 1, fontWeight: '700', color: '#111827', fontSize: 14 },
+  earnTypeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  earnTypeBadgeText: { fontSize: 11, fontWeight: '700' },
+  earnMeta: { color: '#6b7280', fontSize: 12, marginBottom: 6 },
+  earnFooter: { flexDirection: 'row', gap: 12 },
+  earnFee: { color: '#374151', fontSize: 12, fontWeight: '600' },
+  earnPrize: { color: '#16a34a', fontSize: 12, fontWeight: '700' },
+  earnActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  registeredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  registeredBadgeText: { color: '#16a34a', fontWeight: '600', fontSize: 12 },
+  earnLeaveBtn: {
+    borderWidth: 1.5,
+    borderColor: '#ef4444',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  earnLeaveBtnText: { color: '#ef4444', fontWeight: '600', fontSize: 13 },
   // Notifications
   centeredOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-start', alignItems: 'flex-end', padding: 16, paddingTop: 80 },
   notifBox: {

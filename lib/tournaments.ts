@@ -64,6 +64,20 @@ export async function unregisterFromTournament(
   return !error;
 }
 
+export async function fetchMyRegistrations(userId: string): Promise<Tournament[]> {
+  const { data, error } = await supabase
+    .from('tournament_registrations')
+    .select('registered_at, tournaments(*)')
+    .eq('user_id', userId)
+    .order('registered_at', { ascending: false });
+
+  if (error || !data?.length) return [];
+
+  return data
+    .filter((r) => r.tournaments)
+    .map((r) => dbToTournament(r.tournaments as unknown as Record<string, unknown>));
+}
+
 export async function createTournament(
   params: {
     name: string;
