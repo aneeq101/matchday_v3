@@ -30,6 +30,18 @@ import { fetchPosts, createPost, toggleLike, fetchLikedPostIds, uploadPostMedia 
 import { fetchPlayers } from '../../lib/players';
 import { getOrCreateConversation } from '../../lib/chatService';
 
+// ─── Quick-strip feature flag — set to false to roll back instantly ───────────
+const SHOW_QUICK_STRIP = true;
+
+const QUICK_ACTIONS = [
+  { key: 'players',   icon: 'people-outline',        label: 'Find Players',    color: '#16a34a' },
+  { key: 'looking',   icon: 'eye-outline',            label: 'Looking Now',     color: '#3b82f6' },
+  { key: 'match',     icon: 'football-outline',       label: 'Organize Match',  color: '#f59e0b' },
+  { key: 'book',      icon: 'calendar-outline',       label: 'Book Venue',      color: '#8b5cf6' },
+  { key: 'earn',      icon: 'trophy-outline',         label: 'Tournaments',     color: '#ef4444' },
+] as const;
+// ─────────────────────────────────────────────────────────────────────────────
+
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 
 const SKILL_COLORS: Record<string, string> = {
@@ -259,6 +271,34 @@ export default function HoodScreen() {
           </View>
         </ImageBackground>
       </View>
+
+      {SHOW_QUICK_STRIP && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.quickStrip}
+          contentContainerStyle={styles.quickStripContent}
+        >
+          {QUICK_ACTIONS.map(({ key, icon, label, color }) => (
+            <TouchableOpacity
+              key={key}
+              style={styles.quickBtn}
+              onPress={() => {
+                if (key === 'players') { setShowPlayersModal(true); }
+                else if (key === 'looking') { router.push('/looking-now'); }
+                else if (key === 'match')   { router.push('/(tabs)/myturf'); }
+                else if (key === 'book')    { router.push('/(tabs)/book'); }
+                else if (key === 'earn')    { router.push('/(tabs)/earn'); }
+              }}
+            >
+              <View style={[styles.quickBtnIcon, { backgroundColor: color + '18' }]}>
+                <Ionicons name={icon as any} size={20} color={color} />
+              </View>
+              <Text style={styles.quickBtnLabel}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       <ScrollView
         style={styles.feed}
@@ -797,6 +837,35 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.3)',
   },
   statText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  quickStrip: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  quickStripContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
+    flexDirection: 'row',
+  },
+  quickBtn: {
+    alignItems: 'center',
+    gap: 6,
+    minWidth: 68,
+  },
+  quickBtnIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickBtnLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#374151',
+    textAlign: 'center',
+  },
   feed: { flex: 1 },
   feedContent: { padding: 12, gap: 12, paddingBottom: 80 },
   fab: {
