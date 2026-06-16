@@ -34,11 +34,9 @@ import { getOrCreateConversation } from '../../lib/chatService';
 const SHOW_QUICK_STRIP = true;
 
 const QUICK_ACTIONS = [
-  { key: 'players',   icon: 'people-outline',        label: 'Find Players',    color: '#16a34a' },
-  { key: 'looking',   icon: 'eye-outline',            label: 'Looking Now',     color: '#3b82f6' },
-  { key: 'match',     icon: 'football-outline',       label: 'Organize Match',  color: '#f59e0b' },
-  { key: 'book',      icon: 'calendar-outline',       label: 'Book Venue',      color: '#8b5cf6' },
-  { key: 'earn',      icon: 'trophy-outline',         label: 'Tournaments',     color: '#ef4444' },
+  { key: 'match', icon: 'football-outline', label: 'Organize Match' },
+  { key: 'book',  icon: 'calendar-outline',  label: 'Book Venue'    },
+  { key: 'earn',  icon: 'trophy-outline',    label: 'Tournaments'   },
 ] as const;
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -269,28 +267,22 @@ export default function HoodScreen() {
               </View>
 
               {SHOW_QUICK_STRIP && (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.quickStripContent}
-                >
+                <View style={styles.quickStripRow}>
                   {QUICK_ACTIONS.map(({ key, icon, label }) => (
                     <TouchableOpacity
                       key={key}
                       style={styles.quickBtn}
                       onPress={() => {
-                        if (key === 'players') { setShowPlayersModal(true); }
-                        else if (key === 'looking') { router.push('/looking-now'); }
-                        else if (key === 'match')   { router.push('/(tabs)/myturf'); }
-                        else if (key === 'book')    { router.push('/(tabs)/book'); }
-                        else if (key === 'earn')    { router.push('/(tabs)/earn'); }
+                        if (key === 'match') { router.push('/(tabs)/myturf?action=createMatch'); }
+                        else if (key === 'book') { router.push('/(tabs)/book'); }
+                        else if (key === 'earn') { router.push('/(tabs)/earn'); }
                       }}
                     >
-                      <Ionicons name={icon as any} size={16} color="#fff" />
+                      <Ionicons name={icon as any} size={15} color="#fff" />
                       <Text style={styles.quickBtnLabel}>{label}</Text>
                     </TouchableOpacity>
                   ))}
-                </ScrollView>
+                </View>
               )}
             </SafeAreaView>
           </View>
@@ -834,27 +826,28 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.3)',
   },
   statText: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  quickStripContent: {
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 12,
-    gap: 8,
+  quickStripRow: {
     flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 14,
+    gap: 8,
   },
   quickBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    borderColor: 'rgba(255,255,255,0.38)',
+    borderRadius: 22,
+    paddingVertical: 10,
   },
   quickBtnLabel: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#fff',
   },
   feed: { flex: 1 },

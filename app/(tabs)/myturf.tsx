@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
 import {
@@ -97,6 +97,15 @@ function dbToBooking(row: Record<string, unknown>): Booking {
 export default function MyTurfScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { action } = useLocalSearchParams<{ action?: string }>();
+
+  useEffect(() => {
+    if (action === 'createMatch') {
+      setShowCreateMatch(true);
+      // Clear the param so re-entering the tab doesn't re-trigger
+      router.replace('/(tabs)/myturf');
+    }
+  }, [action]);
 
   const [bookings, setBookings]             = useState<Booking[]>([]);
   const [matches, setMatches]               = useState<MatchItem[]>([]);
