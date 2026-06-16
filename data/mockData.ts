@@ -77,7 +77,11 @@ export interface Booking {
   date: string;
   time: string;
   price: number;
-  status: 'Confirmed' | 'Pending';
+  status: 'Confirmed' | 'Pending' | 'Cancelled';
+  duration?: number;
+  players?: number;
+  address?: string;
+  specialRequests?: string;
 }
 
 export interface MatchItem {
