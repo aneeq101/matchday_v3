@@ -25,7 +25,7 @@ import { formatDistance, type Coord } from '../../utils/geo';
 import { useUserLocation } from '../../hooks/useUserLocation';
 import BookMap from '../../components/BookMap';
 import DatePickerField from '../../components/DatePickerField';
-import { getBookingMaxPlayers } from '../../lib/sportRules';
+import { getFormatsForSport } from '../../lib/sportRules';
 
 const LIVE_SEARCH_ENABLED = false;
 const PEEK_HEIGHT = 168; // px visible when sheet is at its lowest snap
@@ -169,7 +169,8 @@ export default function BookScreen() {
   const [selectedTime, setSelectedTime]         = useState('');
   const [selectedDuration, setSelectedDuration] = useState(1);
   const [selectedSport, setSelectedSport]       = useState('Football');
-  const [playersCount, setPlayersCount]         = useState('10');
+  const [selectedFormat, setSelectedFormat]     = useState('3v3');
+  const [selectedMaxPlayers, setSelectedMaxPlayers] = useState(6);
   const [specialRequests, setSpecialRequests]   = useState('');
   const [bookingError, setBookingError]         = useState('');
 
@@ -291,6 +292,15 @@ export default function BookScreen() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [location?.latitude, location?.longitude, radius, selectedFilter.osmSport]);
 
+  // Reset format to first valid option whenever sport changes
+  useEffect(() => {
+    const formats = getFormatsForSport(selectedSport);
+    if (formats.length > 0) {
+      setSelectedFormat(formats[0].format);
+      setSelectedMaxPlayers(formats[0].maxPlayers);
+    }
+  }, [selectedSport]);
+
   // ── Venue filtering ──
   const searchSportMockVenues = VENUES.filter((v) => {
     if (!v.coord) return false;
@@ -340,12 +350,6 @@ export default function BookScreen() {
       setBookingError('Please select a time slot');
       return;
     }
-    const maxP = getBookingMaxPlayers(selectedSport);
-    const numP = Number(playersCount) || 0;
-    if (numP < 2 || numP > maxP) {
-      setBookingError(`${selectedSport} allows 2–${maxP} players`);
-      return;
-    }
     setBookingError('');
 
     if (user) {
@@ -360,7 +364,8 @@ export default function BookScreen() {
                            : '',
         time_slot:       selectedTime,
         duration_hours:  selectedDuration,
-        players_count:   Number(playersCount) || 10,
+        players_count:   selectedMaxPlayers,
+        players_format:  selectedFormat,
         special_requests: specialRequests || null,
         total_price:     totalPrice,
         status:          'confirmed',
@@ -375,7 +380,8 @@ export default function BookScreen() {
     setConfirmed(false); setBookingVenue(null);
     setSelectedDate(null); setSelectedTime('');
     setSelectedDuration(1); setSelectedSport('Football');
-    setPlayersCount('10'); setSpecialRequests('');
+    setSelectedFormat('3v3'); setSelectedMaxPlayers(6);
+    setSpecialRequests('');
     setBookingError('');
   };
 
@@ -629,18 +635,21 @@ export default function BookScreen() {
                   ))}
                 </View>
 
-                <Text style={styles.fieldLabel}>Number of Players</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="e.g. 10"
-                  placeholderTextColor="#9ca3af"
-                  keyboardType="numeric"
-                  value={playersCount}
-                  onChangeText={(v) => { setPlayersCount(v); setBookingError(''); }}
-                />
-                <Text style={styles.fieldHint}>
-                  Max {getBookingMaxPlayers(selectedSport)} players for {selectedSport}
-                </Text>
+                <Text style={styles.fieldLabel}>Format</Text>
+                <View style={styles.sportRow}>
+                  {getFormatsForSport(selectedSport).map((f) => (
+                    <TouchableOpacity
+                      key={f.format}
+                      style={[styles.sportChip, selectedFormat === f.format && styles.sportChipActive]}
+                      onPress={() => { setSelectedFormat(f.format); setSelectedMaxPlayers(f.maxPlayers); setBookingError(''); }}
+                    >
+                      <Text style={[styles.sportChipText, selectedFormat === f.format && styles.sportChipTextActive]}>
+                        {f.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.fieldHint}>Max {selectedMaxPlayers} players total</Text>
 
                 <Text style={styles.fieldLabel}>Special Requests (optional)</Text>
                 <TextInput
