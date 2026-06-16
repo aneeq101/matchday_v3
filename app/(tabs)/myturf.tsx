@@ -35,7 +35,7 @@ import LocationPickerModal from '../../components/LocationPickerModal';
 import NotifBell from '../../components/NotifBell';
 import { createNotification } from '../../lib/notifications';
 
-const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
+const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
 
 const SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton', 'Baseball'];
 const TIME_SLOTS = [
@@ -337,10 +337,11 @@ export default function MyTurfScreen() {
     : 0;
 
   return (
-    <View style={styles.root}>
+    <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
+      <View style={styles.bgOverlay} pointerEvents="none" />
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <View style={styles.safeHeader}>
-        <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.headerBg} resizeMode="cover">
+        <View style={styles.headerBg}>
           <View style={styles.headerOverlay}>
             <SafeAreaView edges={['top']}>
               <View style={styles.header}>
@@ -349,7 +350,7 @@ export default function MyTurfScreen() {
               </View>
             </SafeAreaView>
           </View>
-        </ImageBackground>
+        </View>
       </View>
 
       <ScrollView
@@ -788,7 +789,7 @@ export default function MyTurfScreen() {
       />
 
       {/* Notification Modal */}
-    </View>
+    </ImageBackground>
   );
 }
 
@@ -998,10 +999,11 @@ function EarnEventCard({ event, onLeave }: { event: Tournament; onLeave: () => v
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f3f4f6' },
+  root: { flex: 1 },
+  bgOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,10,2,0.38)' },
   safeHeader: { overflow: 'hidden' },
   headerBg: { width: '100%' },
-  headerOverlay: { backgroundColor: 'rgba(0,0,0,0.40)' },
+  headerOverlay: { backgroundColor: 'rgba(0,0,0,0.18)' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1017,7 +1019,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginBottom: 20,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 14,
     padding: 16,
     shadowColor: '#000',
@@ -1029,15 +1031,15 @@ const styles = StyleSheet.create({
   statNum: { fontSize: 24, fontWeight: '800', color: '#16a34a' },
   statLbl: { fontSize: 12, color: '#6b7280', marginTop: 2 },
   sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, marginTop: 6 },
-  sectionTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 10, marginTop: 6 },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: '#fff', marginBottom: 10, marginTop: 6 },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#f0fdf4', borderRadius: 8, borderWidth: 1, borderColor: '#bbf7d0' },
   addBtnText: { color: '#16a34a', fontWeight: '600', fontSize: 13 },
   emptyState: { alignItems: 'center', paddingVertical: 28, gap: 6 },
-  emptyText:   { color: '#9ca3af', fontSize: 14, fontWeight: '600' },
-  emptySubText:{ color: '#d1d5db', fontSize: 12 },
+  emptyText:   { color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '600' },
+  emptySubText:{ color: 'rgba(255,255,255,0.45)', fontSize: 12 },
   emptyAction: { color: '#16a34a', fontWeight: '600', fontSize: 13, marginTop: 2 },
   bookingCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
@@ -1065,7 +1067,7 @@ const styles = StyleSheet.create({
   },
   confirmedText: { color: '#16a34a', fontSize: 12, fontWeight: '600' },
   matchCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
@@ -1078,7 +1080,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   openMatchCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
@@ -1169,7 +1171,7 @@ const styles = StyleSheet.create({
   quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   quickBtn: {
     width: '47%',
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 14,
     padding: 16,
     alignItems: 'center',
@@ -1189,13 +1191,13 @@ const styles = StyleSheet.create({
   // Sheet / Modals
   sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.98)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '90%',
   },
   createSheet: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.98)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     height: '92%',
@@ -1325,7 +1327,7 @@ const styles = StyleSheet.create({
   errorText: { color: '#ef4444', fontSize: 13, fontWeight: '600', flex: 1 },
   // Earn event cards
   earnCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,

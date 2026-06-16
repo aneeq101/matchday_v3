@@ -17,7 +17,10 @@ import {
   Keyboard,
   Platform,
   KeyboardAvoidingView,
+  ImageBackground,
 } from 'react-native';
+
+const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { VENUES, venueDistanceKm, type Venue } from '../../data/mockData';
@@ -395,8 +398,9 @@ export default function BookScreen() {
   };
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+    <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
+      <View style={styles.bgOverlay} pointerEvents="none" />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       {/* ── Top bar: search + sport filters ── */}
       <SafeAreaView edges={['top']} style={styles.topBar}>
@@ -735,7 +739,7 @@ export default function BookScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ImageBackground>
   );
 }
 
@@ -784,11 +788,12 @@ function VenueCard({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fff' },
+  root: { flex: 1 },
+  bgOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,10,2,0.38)' },
 
   // ── Top bar ──
   topBar: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.95)',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     shadowColor: '#000',
@@ -852,7 +857,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.97)',
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     shadowColor: '#000',
@@ -895,7 +900,7 @@ const styles = StyleSheet.create({
 
   // ── Venue card ──
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 14,
     flexDirection: 'row',
     overflow: 'hidden',
@@ -932,7 +937,7 @@ const styles = StyleSheet.create({
 
   // ── Booking modal ──
   sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalSheet:   { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '94%' },
+  modalSheet:   { backgroundColor: 'rgba(255,255,255,0.98)', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '94%' },
   modalHandle:  { width: 40, height: 4, backgroundColor: '#d1d5db', borderRadius: 2, alignSelf: 'center', marginTop: 10 },
   modalHeader:  {
     flexDirection: 'row',
@@ -1022,7 +1027,7 @@ const styles = StyleSheet.create({
 
   // ── Success ──
   successOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  successCard:    { backgroundColor: '#fff', borderRadius: 24, padding: 28, alignItems: 'center', width: '100%', maxWidth: 360 },
+  successCard:    { backgroundColor: 'rgba(255,255,255,0.97)', borderRadius: 24, padding: 28, alignItems: 'center', width: '100%', maxWidth: 360 },
   successTitle:   { fontSize: 24, fontWeight: '800', color: '#111827', marginBottom: 8 },
   successSub:     { color: '#6b7280', fontSize: 14, textAlign: 'center', marginBottom: 20, lineHeight: 22 },
   confirmDetails: { width: '100%', gap: 10, marginBottom: 24 },

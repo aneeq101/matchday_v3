@@ -25,6 +25,7 @@ import { formatDistance } from '../../utils/geo';
 import { useUserLocation } from '../../hooks/useUserLocation';
 import PlayerProfileModal from '../../components/PlayerProfileModal';
 import NotifBell from '../../components/NotifBell';
+import RadiusSlider from '../../components/RadiusSlider';
 import { useAuth } from '../../lib/AuthContext';
 import { fetchPosts, createPost, toggleLike, fetchLikedPostIds, uploadPostMedia } from '../../lib/posts';
 import { fetchPlayers } from '../../lib/players';
@@ -40,7 +41,7 @@ const QUICK_ACTIONS = [
 ] as const;
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
+const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
 
 const SKILL_COLORS: Record<string, string> = {
   Beginner: '#3b82f6',
@@ -60,7 +61,7 @@ const LOOKING_FOR_OPTIONS = [
 const SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Hockey', 'Badminton'];
 const SKILL_LEVELS: Array<'Beginner' | 'Intermediate' | 'Advanced'> = ['Beginner', 'Intermediate', 'Advanced'];
 const RADII = ['1 km', '3 km', '5 km', '10 km', '15 km'];
-const PLAYER_RADIUS_OPTIONS = [1, 3, 5, 10, 20];
+const PLAYER_RADIUS_MAX = 20;
 
 export default function HoodScreen() {
   const router = useRouter();
@@ -240,10 +241,11 @@ export default function HoodScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
+      <View style={styles.bgOverlay} pointerEvents="none" />
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <View style={styles.safeHeader}>
-        <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.headerBg} resizeMode="cover">
+        <View style={styles.headerBg}>
           <View style={styles.headerOverlay}>
             <SafeAreaView edges={['top']}>
               <View style={styles.header}>
@@ -286,7 +288,7 @@ export default function HoodScreen() {
               )}
             </SafeAreaView>
           </View>
-        </ImageBackground>
+        </View>
       </View>
 
       <ScrollView
@@ -353,7 +355,7 @@ export default function HoodScreen() {
       {/* Players List Modal */}
       <Modal visible={showPlayersModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <SafeAreaView style={styles.modalContainer}>
+          <SafeAreaView style={styles.modalContainer} edges={['bottom']}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Players Nearby</Text>
               <TouchableOpacity onPress={() => setShowPlayersModal(false)}>
@@ -372,44 +374,37 @@ export default function HoodScreen() {
               />
             </View>
 
-            {/* Radius selector */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.radiusBar}
-              contentContainerStyle={styles.radiusBarContent}
-            >
-              {PLAYER_RADIUS_OPTIONS.map((r) => (
-                <TouchableOpacity
-                  key={r}
-                  style={[styles.radiusPill, playerRadius === r && styles.radiusPillActive]}
-                  onPress={() => setPlayerRadius(r)}
-                >
-                  <Ionicons name="radio-button-on" size={12} color={playerRadius === r ? '#fff' : '#6b7280'} />
-                  <Text style={[styles.radiusPillText, playerRadius === r && styles.radiusPillTextActive]}>
-                    {r} km
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            {/* Distance slider */}
+            <View style={styles.sliderRow}>
+              <Text style={styles.sliderLabel}>Distance</Text>
+              <RadiusSlider
+                value={playerRadius}
+                minimumValue={1}
+                maximumValue={PLAYER_RADIUS_MAX}
+                step={1}
+                onValueChange={(v) => setPlayerRadius(Math.round(v))}
+                style={styles.sliderTrack}
+              />
+              <Text style={styles.sliderValue}>{playerRadius} km</Text>
+            </View>
 
-            <View style={styles.pillDivider} />
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillRow}>
+            {/* Sport filter */}
+            <View style={styles.sportFilterRow}>
               {allSports.map((s) => (
                 <TouchableOpacity
                   key={s}
-                  style={[styles.pill, sportFilter === s && styles.pillActive]}
+                  style={[styles.sportChip, sportFilter === s && styles.sportChipActive]}
                   onPress={() => setSportFilter(s)}
                 >
-                  <Text style={[styles.pillText, sportFilter === s && styles.pillTextActive]}>{s}</Text>
+                  <Text style={[styles.sportChipText, sportFilter === s && styles.sportChipTextActive]}>{s}</Text>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </View>
 
             <FlatList
               data={filteredPlayers}
               keyExtractor={(item) => item.id}
+              style={{ flex: 1 }}
               contentContainerStyle={{ padding: 16 }}
               renderItem={({ item }) => (
                 <PlayerCard
@@ -442,7 +437,7 @@ export default function HoodScreen() {
       {/* Create Post Modal */}
       <Modal visible={showCreateModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <SafeAreaView style={styles.modalContainer}>
+          <SafeAreaView style={styles.modalContainer} edges={['bottom']}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Create Post</Text>
               <TouchableOpacity onPress={() => { setShowCreateModal(false); setPickedMedia(null); }}>
@@ -597,7 +592,7 @@ export default function HoodScreen() {
           });
         }}
       />
-    </View>
+    </ImageBackground>
   );
 }
 
@@ -798,10 +793,11 @@ function PlayerCard({
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f3f4f6' },
+  root: { flex: 1 },
+  bgOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,10,2,0.38)' },
   safeHeader: { overflow: 'hidden' },
   headerBg: { width: '100%' },
-  headerOverlay: { backgroundColor: 'rgba(0,0,0,0.40)' },
+  headerOverlay: { backgroundColor: 'rgba(0,0,0,0.18)' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -873,7 +869,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   postCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 14,
     padding: 14,
     shadowColor: '#000',
@@ -937,7 +933,7 @@ const styles = StyleSheet.create({
   actionText: { color: '#6b7280', fontSize: 13 },
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContainer: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%' },
+  modalContainer: { backgroundColor: 'rgba(255,255,255,0.97)', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%', flex: 1 },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -950,29 +946,48 @@ const styles = StyleSheet.create({
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    margin: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: 6,
+    marginHorizontal: 12,
+    marginVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     backgroundColor: '#f3f4f6',
-    borderRadius: 10,
+    borderRadius: 8,
   },
-  searchInput: { flex: 1, fontSize: 14, color: '#111827' },
-  pillRow: { paddingHorizontal: 12, marginBottom: 4 },
-  pill: {
+  searchInput: { flex: 1, fontSize: 13, color: '#111827' },
+  sliderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 14,
+    paddingTop: 4,
+    paddingBottom: 2,
+    gap: 8,
+  },
+  sliderLabel: { fontSize: 11, color: '#6b7280', fontWeight: '500', width: 52 },
+  sliderTrack: { flex: 1 },
+  sliderValue: { fontSize: 11, color: '#111827', fontWeight: '700', width: 34, textAlign: 'right' },
+  sportFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  sportChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
     backgroundColor: '#f3f4f6',
-    marginRight: 8,
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
-  pillActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  pillText: { color: '#6b7280', fontSize: 13, fontWeight: '500' },
-  pillTextActive: { color: '#fff' },
+  sportChipActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  sportChipText: { fontSize: 11, color: '#6b7280', fontWeight: '500' },
+  sportChipTextActive: { color: '#fff', fontWeight: '600' },
   playerCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 12,
     padding: 12,
     marginBottom: 10,
@@ -1096,21 +1111,4 @@ const styles = StyleSheet.create({
   radiusTextActive: { color: '#16a34a', fontWeight: '700' },
   sentRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sentText: { color: '#16a34a', fontWeight: '700', fontSize: 15 },
-  radiusBar: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  radiusBarContent: { paddingHorizontal: 12, paddingVertical: 8, gap: 8, flexDirection: 'row' },
-  radiusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  radiusPillActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  radiusPillText: { fontSize: 13, color: '#374151', fontWeight: '500' },
-  radiusPillTextActive: { color: '#fff' },
-  pillDivider: { height: 1, backgroundColor: '#f3f4f6', marginHorizontal: 12 },
 });

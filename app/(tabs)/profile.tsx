@@ -23,7 +23,7 @@ import { fetchMySports, addSport, removeSport, fetchPlayerStats, upsertSportStat
 import { fetchFollowCounts } from '../../lib/follows';
 import NotifBell from '../../components/NotifBell';
 
-const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
+const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
 import { useRouter } from 'expo-router';
 
 const SKILL_COLORS: Record<string, string> = {
@@ -277,12 +277,13 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
+      <View style={styles.bgOverlay} pointerEvents="none" />
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         {/* Header */}
-        <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.profileHeader} resizeMode="cover">
+        <View style={styles.profileHeader}>
           <View style={styles.profileHeaderOverlay}>
           <SafeAreaView edges={['top']}>
             <View style={styles.headerTop}>
@@ -310,7 +311,7 @@ export default function ProfileScreen() {
             </View>
           </SafeAreaView>
           </View>
-        </ImageBackground>
+        </View>
 
         {/* Stats Card */}
         {(() => {
@@ -798,12 +799,13 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f3f4f6' },
+  root: { flex: 1 },
+  bgOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,10,2,0.38)' },
   scroll: { flex: 1 },
   content: { paddingBottom: 32 },
   profileHeader: {
@@ -811,7 +813,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   profileHeaderOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.40)',
+    backgroundColor: 'rgba(0,0,0,0.18)',
   },
   headerTop: {
     flexDirection: 'row',
@@ -843,7 +845,7 @@ const styles = StyleSheet.create({
   profileLocation: { color: 'rgba(255,255,255,0.8)', fontSize: 14 },
   statsCard: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     marginHorizontal: 16,
     marginTop: -28,
     borderRadius: 16,
@@ -861,12 +863,12 @@ const styles = StyleSheet.create({
   statDivider: { width: 1, backgroundColor: '#e5e7eb' },
   section: { marginHorizontal: 16, marginBottom: 20 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  sectionTitle: { fontSize: 17, fontWeight: '700', color: '#111827' },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: '#fff' },
   addSportBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   addSportText: { color: '#16a34a', fontWeight: '600', fontSize: 14 },
   sportsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   sportCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 14,
     padding: 14,
     alignItems: 'center',
@@ -895,7 +897,7 @@ const styles = StyleSheet.create({
   },
   addSportCardText: { fontSize: 13, color: '#9ca3af', marginTop: 4 },
   privacyCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1,
@@ -914,7 +916,7 @@ const styles = StyleSheet.create({
   changeBtnText: { color: '#16a34a', fontWeight: '600', fontSize: 13 },
   divider: { height: 1, backgroundColor: '#f3f4f6', marginLeft: 14 },
   menuCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1,
@@ -1012,7 +1014,7 @@ const styles = StyleSheet.create({
   // Add Sport Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalSheet: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.98)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     height: '85%',
@@ -1088,7 +1090,7 @@ const styles = StyleSheet.create({
   },
   // Player Stats section
   emptyStatsCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 14,
     padding: 32,
     alignItems: 'center',
@@ -1113,7 +1115,7 @@ const styles = StyleSheet.create({
   statSportTabText: { color: '#374151', fontWeight: '600', fontSize: 13 },
   statSportTabTextActive: { color: '#fff' },
   statsDetailCard: {
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
