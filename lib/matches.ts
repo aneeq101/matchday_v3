@@ -111,6 +111,27 @@ export async function fetchOpenMatches(userId: string): Promise<MatchItem[]> {
     .map(rowToMatchItem);
 }
 
+export async function fetchJoinedMatches(userId: string): Promise<MatchItem[]> {
+  const { data: playerRows, error } = await supabase
+    .from('match_players')
+    .select('match_id')
+    .eq('player_id', userId);
+
+  if (error || !playerRows?.length) return [];
+
+  const matchIds = playerRows.map((r: Record<string, unknown>) => r.match_id as string);
+
+  const { data } = await supabase
+    .from('matches')
+    .select('*')
+    .in('id', matchIds)
+    .neq('creator_id', userId)
+    .neq('status', 'cancelled')
+    .order('created_at', { ascending: false });
+
+  return (data ?? []).map(rowToMatchItem);
+}
+
 export async function fetchJoinedMatchIds(userId: string): Promise<Set<string>> {
   const { data } = await supabase
     .from('match_players')

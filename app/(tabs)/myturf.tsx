@@ -21,7 +21,7 @@ import { useAuth } from '../../lib/AuthContext';
 import {
   fetchMyMatches, createMatch, cancelMatch,
   fetchMyTournamentCount, joinMatch, leaveMatch,
-  fetchOpenMatches, fetchJoinedMatchIds,
+  fetchOpenMatches, fetchJoinedMatches,
 } from '../../lib/matches';
 import { getFormatsForSport } from '../../lib/sportRules';
 import { type Booking, type MatchItem } from '../../data/mockData';
@@ -76,6 +76,7 @@ export default function MyTurfScreen() {
   const [bookings, setBookings]             = useState<Booking[]>([]);
   const [matches, setMatches]               = useState<MatchItem[]>([]);
   const [openMatches, setOpenMatches]       = useState<MatchItem[]>([]);
+  const [joinedMatches, setJoinedMatches]   = useState<MatchItem[]>([]);
   const [joinedMatchIds, setJoinedMatchIds] = useState<Set<string>>(new Set());
   const [tournamentCount, setTournamentCount] = useState(0);
   const [loading, setLoading]               = useState(false);
@@ -113,7 +114,7 @@ export default function MyTurfScreen() {
     if (!user) return;
     setLoading(true);
 
-    const [bData, mData, openData, tCount, joinedIds] = await Promise.all([
+    const [bData, mData, openData, joinedData, tCount] = await Promise.all([
       supabase
         .from('bookings')
         .select('*')
@@ -121,8 +122,8 @@ export default function MyTurfScreen() {
         .order('created_at', { ascending: false }),
       fetchMyMatches(user.id),
       fetchOpenMatches(user.id),
+      fetchJoinedMatches(user.id),
       fetchMyTournamentCount(user.id),
-      fetchJoinedMatchIds(user.id),
     ]);
 
     if (!bData.error && bData.data) {
@@ -130,8 +131,9 @@ export default function MyTurfScreen() {
     }
     setMatches(mData);
     setOpenMatches(openData);
+    setJoinedMatches(joinedData);
+    setJoinedMatchIds(new Set(joinedData.map((m) => m.id)));
     setTournamentCount(tCount);
-    setJoinedMatchIds(joinedIds);
     setLoading(false);
   }, [user]);
 
@@ -206,11 +208,21 @@ export default function MyTurfScreen() {
     const success = await joinMatch(matchId, user.id);
     if (success) {
       setJoinedMatchIds((prev) => new Set([...prev, matchId]));
+
+      // Increment count in openMatches and move to joinedMatches
       setOpenMatches((prev) =>
         prev.map((m) => m.id === matchId
           ? { ...m, currentPlayers: (m.currentPlayers ?? 0) + 1 }
           : m),
       );
+      const joining = openMatches.find((m) => m.id === matchId);
+      if (joining) {
+        setJoinedMatches((prev) => [
+          { ...joining, currentPlayers: (joining.currentPlayers ?? 0) + 1 },
+          ...prev,
+        ]);
+      }
+
       if (selectedMatch?.id === matchId) {
         setSelectedMatch((prev) => prev
           ? { ...prev, currentPlayers: (prev.currentPlayers ?? 0) + 1 }
@@ -230,6 +242,7 @@ export default function MyTurfScreen() {
         next.delete(matchId);
         return next;
       });
+      setJoinedMatches((prev) => prev.filter((m) => m.id !== matchId));
       setOpenMatches((prev) =>
         prev.map((m) => m.id === matchId
           ? { ...m, currentPlayers: Math.max(0, (m.currentPlayers ?? 0) - 1) }
@@ -254,6 +267,8 @@ export default function MyTurfScreen() {
   };
 
   const upcomingBookings = bookings.filter((b) => b.status !== 'Cancelled');
+  // Open matches excludes ones the user has already joined (those go to "Joined Matches")
+  const displayedOpenMatches = openMatches.filter((m) => !joinedMatchIds.has(m.id));
 
   // Match detail helpers
   const isOwnMatch = selectedMatch?.creatorId === user?.id;
@@ -326,7 +341,7 @@ export default function MyTurfScreen() {
             <Text style={styles.addBtnText}>Organize</Text>
           </TouchableOpacity>
         </View>
-        {!loading && matches.length === 0 && (
+        {!loading && matches.length === 0 && joinedMatches.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="football-outline" size={36} color="#d1d5db" />
             <Text style={styles.emptyText}>No matches yet</Text>
@@ -339,20 +354,35 @@ export default function MyTurfScreen() {
           <MatchCard key={m.id} match={m} onPress={() => setSelectedMatch(m)} />
         ))}
 
+        {joinedMatches.length > 0 && (
+          <>
+            <Text style={styles.subSectionTitle}>Joined Matches</Text>
+            {joinedMatches.map((m) => (
+              <JoinedMatchCard
+                key={m.id}
+                match={m}
+                joining={joining === m.id}
+                onPress={() => setSelectedMatch(m)}
+                onLeave={() => handleLeaveMatch(m.id)}
+              />
+            ))}
+          </>
+        )}
+
         {/* Open Matches */}
         <Text style={styles.sectionTitle}>Open Matches Near You</Text>
-        {!loading && openMatches.length === 0 && (
+        {!loading && displayedOpenMatches.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={36} color="#d1d5db" />
             <Text style={styles.emptyText}>No open matches</Text>
             <Text style={styles.emptySubText}>Be the first to organize one</Text>
           </View>
         )}
-        {openMatches.map((m) => (
+        {displayedOpenMatches.map((m) => (
           <OpenMatchCard
             key={m.id}
             match={m}
-            isJoined={joinedMatchIds.has(m.id)}
+            isJoined={false}
             joining={joining === m.id}
             onPress={() => setSelectedMatch(m)}
             onJoin={() => handleJoinMatch(m.id)}
@@ -764,6 +794,41 @@ function MatchCard({ match, onPress }: { match: MatchItem; onPress: () => void }
   );
 }
 
+function JoinedMatchCard({ match, joining, onPress, onLeave }: {
+  match: MatchItem;
+  joining: boolean;
+  onPress: () => void;
+  onLeave: () => void;
+}) {
+  return (
+    <TouchableOpacity style={[styles.matchCard, styles.joinedMatchBorder]} onPress={onPress}>
+      <View style={styles.matchLeft}>
+        <Text style={styles.matchEmoji}>{match.sportEmoji}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.matchTitle} numberOfLines={1}>{match.title}</Text>
+          <Text style={styles.matchMeta}>{match.players} · {match.date}</Text>
+          <Text style={styles.matchMeta} numberOfLines={1}>{match.location}</Text>
+          {match.maxPlayers != null && (
+            <Text style={styles.matchSlotText}>
+              {match.currentPlayers ?? 0}/{match.maxPlayers} players
+            </Text>
+          )}
+        </View>
+      </View>
+      <TouchableOpacity
+        style={[styles.leaveBtn, joining && { opacity: 0.6 }]}
+        onPress={onLeave}
+        disabled={joining}
+      >
+        {joining
+          ? <ActivityIndicator size="small" color="#ef4444" />
+          : <Text style={styles.leaveBtnText}>Leave</Text>
+        }
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+}
+
 function OpenMatchCard({ match, isJoined, joining, onPress, onJoin, onLeave }: {
   match: MatchItem;
   isJoined: boolean;
@@ -929,6 +994,18 @@ const styles = StyleSheet.create({
   matchTitle: { fontWeight: '700', color: '#111827', fontSize: 14, marginBottom: 4 },
   matchMeta:  { color: '#6b7280', fontSize: 12, marginTop: 1 },
   matchSlotText: { color: '#16a34a', fontSize: 11, fontWeight: '600', marginTop: 4 },
+  subSectionTitle: { fontSize: 14, fontWeight: '700', color: '#6b7280', marginBottom: 8, marginTop: 6 },
+  joinedMatchBorder: { borderLeftWidth: 3, borderLeftColor: '#16a34a' },
+  leaveBtn: {
+    borderWidth: 1.5,
+    borderColor: '#ef4444',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    minWidth: 58,
+    alignItems: 'center',
+  },
+  leaveBtnText: { color: '#ef4444', fontWeight: '600', fontSize: 13 },
   viewDetailsBtn: {
     backgroundColor: '#f0fdf4',
     paddingHorizontal: 12,
