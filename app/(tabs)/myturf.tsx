@@ -639,7 +639,10 @@ export default function MyTurfScreen() {
       {/* Create Match Modal */}
       <Modal visible={showCreateMatch} animationType="slide" transparent>
         <View style={styles.sheetOverlay}>
-          <SafeAreaView style={styles.sheet}>
+          <KeyboardAvoidingView
+            style={styles.createSheet}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Organize a Match</Text>
@@ -647,7 +650,6 @@ export default function MyTurfScreen() {
                 <Ionicons name="close" size={24} color="#111827" />
               </TouchableOpacity>
             </View>
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 14 }}>
 
               <Text style={styles.fieldLabel}>
@@ -764,8 +766,7 @@ export default function MyTurfScreen() {
               </TouchableOpacity>
               <View style={{ height: 20 }} />
             </ScrollView>
-            </KeyboardAvoidingView>
-          </SafeAreaView>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -1183,6 +1184,12 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '90%',
+  },
+  createSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: '92%',
   },
   sheetHandle: {
     width: 40, height: 4,
