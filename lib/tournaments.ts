@@ -3,7 +3,7 @@ import { TOURNAMENTS, type Tournament, type EventType } from '../data/mockData';
 
 const SPORT_EMOJIS: Record<string, string> = {
   Football: '⚽', Cricket: '🏏', Tennis: '🎾',
-  Basketball: '🏀', Hockey: '🏑', Badminton: '🏸',
+  Basketball: '🏀', Badminton: '🏸', Baseball: '⚾',
 };
 
 function dbToTournament(row: Record<string, unknown>): Tournament {
@@ -87,6 +87,7 @@ export async function createTournament(
     location: string;
     entryFee: number;
     prizePool: number;
+    maxParticipants: number;
   },
   userId: string | null
 ): Promise<Tournament | null> {
@@ -102,7 +103,7 @@ export async function createTournament(
       location: params.location,
       entry_fee: params.entryFee,
       prize_pool: params.prizePool,
-      max_participants: 16,
+      max_participants: params.maxParticipants,
       participants_count: 0,
     })
     .select()

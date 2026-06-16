@@ -26,6 +26,7 @@ import {
   unregisterFromTournament,
   createTournament as dbCreateTournament,
 } from '../../lib/tournaments';
+import { getFormatsForSport } from '../../lib/sportRules';
 
 
 const TYPE_COLORS: Record<EventType, string> = {
@@ -47,7 +48,7 @@ const FILTER_TABS: Array<{ key: string; label: string }> = [
   { key: 'match', label: 'Match' },
 ];
 
-const SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Hockey', 'Badminton'];
+const SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton', 'Baseball'];
 const EVENT_TYPES: EventType[] = ['tournament', 'league', 'match'];
 
 export default function EarnScreen() {
@@ -66,6 +67,8 @@ export default function EarnScreen() {
   const [newType, setNewType] = useState<EventType>('tournament');
   const [newName, setNewName] = useState('');
   const [newSport, setNewSport] = useState('Football');
+  const [newFormat, setNewFormat] = useState('3v3');
+  const [newMaxParticipants, setNewMaxParticipants] = useState(6);
   const [newDate, setNewDate] = useState('');
   const [newLocation, setNewLocation] = useState('');
   const [newFee, setNewFee] = useState('');
@@ -83,6 +86,14 @@ export default function EarnScreen() {
   }, [user]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  useEffect(() => {
+    const formats = getFormatsForSport(newSport);
+    if (formats.length > 0) {
+      setNewFormat(formats[0].format);
+      setNewMaxParticipants(formats[0].maxPlayers);
+    }
+  }, [newSport]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -146,6 +157,7 @@ export default function EarnScreen() {
         location: newLocation || '',
         entryFee: parseInt(newFee) || 0,
         prizePool: parseInt(newPrize) || 0,
+        maxParticipants: newMaxParticipants,
       },
       user?.id ?? null
     );
@@ -155,11 +167,11 @@ export default function EarnScreen() {
       name: newName || 'New Event',
       type: newType,
       sport: newSport,
-      sportEmoji: ({ Football: '⚽', Cricket: '🏏', Tennis: '🎾', Basketball: '🏀', Hockey: '🏑', Badminton: '🏸' } as Record<string, string>)[newSport] || '🏆',
+      sportEmoji: ({ Football: '⚽', Cricket: '🏏', Tennis: '🎾', Basketball: '🏀', Badminton: '🏸', Baseball: '⚾' } as Record<string, string>)[newSport] || '🏆',
       date: newDate || 'TBD',
       location: newLocation || '',
       participants: 0,
-      maxParticipants: 16,
+      maxParticipants: newMaxParticipants,
       entryFee: parseInt(newFee) || 0,
       prizePool: parseInt(newPrize) || 0,
     };
@@ -168,6 +180,9 @@ export default function EarnScreen() {
     setSaving(false);
     setShowCreateModal(false);
     setNewName('');
+    setNewSport('Football');
+    setNewFormat('3v3');
+    setNewMaxParticipants(6);
     setNewDate('');
     setNewLocation('');
     setNewFee('');
@@ -386,6 +401,20 @@ export default function EarnScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              <Text style={styles.fieldLabel}>Format</Text>
+              <View style={styles.sportGrid}>
+                {getFormatsForSport(newSport).map((f) => (
+                  <TouchableOpacity
+                    key={f.format}
+                    style={[styles.sportChip, newFormat === f.format && styles.sportChipActive]}
+                    onPress={() => { setNewFormat(f.format); setNewMaxParticipants(f.maxPlayers); }}
+                  >
+                    <Text style={[styles.sportChipText, newFormat === f.format && styles.sportChipTextActive]}>{f.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.formatHint}>Max {newMaxParticipants} players total</Text>
 
               <Text style={styles.fieldLabel}>Date</Text>
               <TextInput
@@ -734,5 +763,6 @@ const styles = StyleSheet.create({
   sportChipActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
   sportChipText: { color: '#6b7280', fontSize: 13 },
   sportChipTextActive: { color: '#fff' },
+  formatHint: { color: '#6b7280', fontSize: 12, marginTop: -6, marginBottom: 14 },
   twoCol: { flexDirection: 'row', gap: 10 },
 });
