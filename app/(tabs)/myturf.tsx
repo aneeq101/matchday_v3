@@ -27,6 +27,11 @@ const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7
 
 const SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton', 'Baseball'];
 const FORMATS = ['2v2', '5v5', '6v6', '11v11', 'Open/Any'];
+const TIME_SLOTS = [
+  '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
+  '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
+  '6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM',
+];
 
 function sportEmoji(sport: string): string {
   const s = sport.toLowerCase();
@@ -81,6 +86,7 @@ export default function MyTurfScreen() {
   const [matchSport, setMatchSport]                 = useState('Football');
   const [matchFormat, setMatchFormat]               = useState('11v11');
   const [matchDate, setMatchDate]                   = useState<Date | null>(null);
+  const [matchTime, setMatchTime]                   = useState('');
   const [matchLocation, setMatchLocation]           = useState('');
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [creatingMatch, setCreatingMatch]           = useState(false);
@@ -133,7 +139,7 @@ export default function MyTurfScreen() {
   };
 
   const handleCreateMatch = async () => {
-    if (!user || !matchTitle.trim() || !matchDate || !matchLocation.trim()) return;
+    if (!user || !matchTitle.trim() || !matchDate || !matchTime || !matchLocation.trim()) return;
     setCreatingMatch(true);
 
     const formattedDate = matchDate.toLocaleDateString('en-US', {
@@ -145,18 +151,17 @@ export default function MyTurfScreen() {
       title:         matchTitle.trim(),
       sport:         matchSport,
       playersFormat: matchFormat,
-      matchDate:     formattedDate,
+      matchDate:     `${formattedDate} at ${matchTime}`,
       location:      matchLocation.trim(),
     });
 
-    if (newMatch) {
-      setMatches((prev) => [newMatch, ...prev]);
-    }
+    if (newMatch) setMatches((prev) => [newMatch, ...prev]);
 
     setCreatingMatch(false);
     setShowCreateMatch(false);
     setMatchTitle('');
     setMatchDate(null);
+    setMatchTime('');
     setMatchLocation('');
   };
 
@@ -425,6 +430,19 @@ export default function MyTurfScreen() {
                 placeholder="Select match date"
               />
 
+              <Text style={styles.fieldLabel}>Time</Text>
+              <View style={styles.timeGrid}>
+                {TIME_SLOTS.map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.timeSlot, matchTime === t && styles.timeSlotActive]}
+                    onPress={() => setMatchTime(t)}
+                  >
+                    <Text style={[styles.timeSlotText, matchTime === t && styles.timeSlotTextActive]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               <TouchableOpacity
                 style={[styles.input, styles.locationTrigger]}
                 onPress={() => setShowLocationPicker(true)}
@@ -439,7 +457,7 @@ export default function MyTurfScreen() {
               <TouchableOpacity
                 style={[styles.primaryBtn, { marginTop: 4 }]}
                 onPress={handleCreateMatch}
-                disabled={creatingMatch || !matchTitle.trim() || !matchDate || !matchLocation.trim()}
+                disabled={creatingMatch || !matchTitle.trim() || !matchDate || !matchTime || !matchLocation.trim()}
               >
                 {creatingMatch
                   ? <ActivityIndicator size="small" color="#fff" />
@@ -748,6 +766,15 @@ const styles = StyleSheet.create({
   },
   fieldLabel: { fontWeight: '700', color: '#111827', fontSize: 14, marginBottom: 6 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
+  timeSlot: {
+    paddingHorizontal: 10, paddingVertical: 7,
+    borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  timeSlotActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  timeSlotText: { fontSize: 12, color: '#374151', fontWeight: '500' },
+  timeSlotTextActive: { color: '#fff' },
   pill: {
     paddingHorizontal: 12,
     paddingVertical: 6,
