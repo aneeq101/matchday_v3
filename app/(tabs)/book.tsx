@@ -25,6 +25,7 @@ import { formatDistance, type Coord } from '../../utils/geo';
 import { useUserLocation } from '../../hooks/useUserLocation';
 import BookMap from '../../components/BookMap';
 import DatePickerField from '../../components/DatePickerField';
+import { getBookingMaxPlayers } from '../../lib/sportRules';
 
 const LIVE_SEARCH_ENABLED = false;
 const PEEK_HEIGHT = 168; // px visible when sheet is at its lowest snap
@@ -151,6 +152,7 @@ export default function BookScreen() {
   const [selectedSport, setSelectedSport]       = useState('Football');
   const [playersCount, setPlayersCount]         = useState('10');
   const [specialRequests, setSpecialRequests]   = useState('');
+  const [bookingError, setBookingError]         = useState('');
 
   // ── Bottom sheet animation ──
   const [bodyH, setBodyH] = useState(0);
@@ -310,6 +312,23 @@ export default function BookScreen() {
   const handleConfirm = async () => {
     if (!bookingVenue) return;
 
+    // Required field validation
+    if (!selectedDate) {
+      setBookingError('Please select a date');
+      return;
+    }
+    if (!selectedTime) {
+      setBookingError('Please select a time slot');
+      return;
+    }
+    const maxP = getBookingMaxPlayers(selectedSport);
+    const numP = Number(playersCount) || 0;
+    if (numP < 2 || numP > maxP) {
+      setBookingError(`${selectedSport} allows 2–${maxP} players`);
+      return;
+    }
+    setBookingError('');
+
     if (user) {
       // Persist to Supabase — fire-and-forget (don't block the success screen)
       supabase.from('bookings').insert({
@@ -338,6 +357,7 @@ export default function BookScreen() {
     setSelectedDate(null); setSelectedTime('');
     setSelectedDuration(1); setSelectedSport('Football');
     setPlayersCount('10'); setSpecialRequests('');
+    setBookingError('');
   };
 
   return (
@@ -526,20 +546,24 @@ export default function BookScreen() {
                   )}
                 </View>
 
-                <Text style={styles.fieldLabel}>Date</Text>
+                <Text style={styles.fieldLabel}>
+                  Date<Text style={styles.required}> *</Text>
+                </Text>
                 <DatePickerField
                   value={selectedDate}
-                  onChange={setSelectedDate}
+                  onChange={(d) => { setSelectedDate(d); setBookingError(''); }}
                   placeholder="Select a date"
                 />
 
-                <Text style={styles.fieldLabel}>Time Slot</Text>
+                <Text style={styles.fieldLabel}>
+                  Time Slot<Text style={styles.required}> *</Text>
+                </Text>
                 <View style={styles.timeGrid}>
                   {TIME_SLOTS.map((t) => (
                     <TouchableOpacity
                       key={t}
                       style={[styles.timeSlot, selectedTime === t && styles.timeSlotActive]}
-                      onPress={() => setSelectedTime(t)}
+                      onPress={() => { setSelectedTime(t); setBookingError(''); }}
                     >
                       <Text style={[styles.timeSlotText, selectedTime === t && styles.timeSlotTextActive]}>
                         {t}
@@ -585,8 +609,11 @@ export default function BookScreen() {
                   placeholderTextColor="#9ca3af"
                   keyboardType="numeric"
                   value={playersCount}
-                  onChangeText={setPlayersCount}
+                  onChangeText={(v) => { setPlayersCount(v); setBookingError(''); }}
                 />
+                <Text style={styles.fieldHint}>
+                  Max {getBookingMaxPlayers(selectedSport)} players for {selectedSport}
+                </Text>
 
                 <Text style={styles.fieldLabel}>Special Requests (optional)</Text>
                 <TextInput
@@ -608,6 +635,13 @@ export default function BookScreen() {
                     </View>
                   </View>
                 )}
+
+                {bookingError ? (
+                  <View style={styles.errorBox}>
+                    <Ionicons name="alert-circle" size={16} color="#ef4444" />
+                    <Text style={styles.errorText}>{bookingError}</Text>
+                  </View>
+                ) : null}
 
                 <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm}>
                   <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
@@ -884,6 +918,21 @@ const styles = StyleSheet.create({
   },
   liveBadgeText: { color: '#2563eb', fontSize: 10, fontWeight: '700' },
   fieldLabel: { fontWeight: '700', color: '#111827', fontSize: 14, marginBottom: 8 },
+  required: { color: '#ef4444' },
+  fieldHint: { color: '#9ca3af', fontSize: 12, marginTop: -10, marginBottom: 14 },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  errorText: { color: '#ef4444', fontSize: 13, fontWeight: '600', flex: 1 },
   formInput: {
     borderWidth: 1,
     borderColor: '#e5e7eb',

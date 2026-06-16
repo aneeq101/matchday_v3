@@ -6,6 +6,21 @@ const SPORT_EMOJIS: Record<string, string> = {
   Basketball: '🏀', Badminton: '🏸', Baseball: '⚾',
 };
 
+function rowToMatchItem(row: Record<string, unknown>): MatchItem {
+  return {
+    id:             row.id as string,
+    sport:          row.sport as string,
+    sportEmoji:     row.sport_emoji as string,
+    title:          row.title as string,
+    players:        row.players_format as string,
+    date:           row.match_date as string,
+    location:       row.location as string,
+    maxPlayers:     row.max_players as number | undefined,
+    currentPlayers: row.current_players as number | undefined,
+    creatorId:      row.creator_id as string,
+  };
+}
+
 export async function fetchMyMatches(userId: string): Promise<MatchItem[]> {
   const { data, error } = await supabase
     .from('matches')
@@ -15,15 +30,7 @@ export async function fetchMyMatches(userId: string): Promise<MatchItem[]> {
     .order('created_at', { ascending: false });
 
   if (error || !data?.length) return [];
-  return data.map((row) => ({
-    id:          row.id as string,
-    sport:       row.sport as string,
-    sportEmoji:  row.sport_emoji as string,
-    title:       row.title as string,
-    players:     row.players_format as string,
-    date:        row.match_date as string,
-    location:    row.location as string,
-  }));
+  return data.map(rowToMatchItem);
 }
 
 export async function createMatch(params: {
@@ -31,6 +38,7 @@ export async function createMatch(params: {
   title: string;
   sport: string;
   playersFormat: string;
+  maxPlayers: number;
   matchDate: string;
   location: string;
 }): Promise<MatchItem | null> {
@@ -38,13 +46,15 @@ export async function createMatch(params: {
   const { data, error } = await supabase
     .from('matches')
     .insert({
-      creator_id:     params.userId,
-      title:          params.title,
-      sport:          params.sport,
-      sport_emoji:    emoji,
-      players_format: params.playersFormat,
-      match_date:     params.matchDate,
-      location:       params.location,
+      creator_id:      params.userId,
+      title:           params.title,
+      sport:           params.sport,
+      sport_emoji:     emoji,
+      players_format:  params.playersFormat,
+      max_players:     params.maxPlayers,
+      current_players: 0,
+      match_date:      params.matchDate,
+      location:        params.location,
     })
     .select()
     .single();
@@ -53,15 +63,14 @@ export async function createMatch(params: {
     console.error('[createMatch] error:', error?.message);
     return null;
   }
-  return {
-    id:         data.id as string,
-    sport:      data.sport as string,
-    sportEmoji: data.sport_emoji as string,
-    title:      data.title as string,
-    players:    data.players_format as string,
-    date:       data.match_date as string,
-    location:   data.location as string,
-  };
+
+  // Auto-join creator as first participant
+  await supabase.from('match_players').insert({
+    match_id:  data.id,
+    player_id: params.userId,
+  });
+
+  return { ...rowToMatchItem(data), currentPlayers: 1 };
 }
 
 export async function cancelMatch(matchId: string): Promise<boolean> {
@@ -70,6 +79,48 @@ export async function cancelMatch(matchId: string): Promise<boolean> {
     .update({ status: 'cancelled' })
     .eq('id', matchId);
   return !error;
+}
+
+export async function joinMatch(matchId: string, userId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('match_players')
+    .insert({ match_id: matchId, player_id: userId });
+  if (error) {
+    console.error('[joinMatch] error:', error.message);
+    return false;
+  }
+  return true;
+}
+
+export async function leaveMatch(matchId: string, userId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('match_players')
+    .delete()
+    .eq('match_id', matchId)
+    .eq('player_id', userId);
+  return !error;
+}
+
+export async function fetchOpenMatches(userId: string): Promise<MatchItem[]> {
+  const { data, error } = await supabase
+    .from('matches')
+    .select('*')
+    .neq('creator_id', userId)
+    .eq('status', 'upcoming')
+    .order('created_at', { ascending: false });
+
+  if (error || !data?.length) return [];
+  return data
+    .filter((row) => (row.current_players as number) < (row.max_players as number))
+    .map(rowToMatchItem);
+}
+
+export async function fetchJoinedMatchIds(userId: string): Promise<Set<string>> {
+  const { data } = await supabase
+    .from('match_players')
+    .select('match_id')
+    .eq('player_id', userId);
+  return new Set((data ?? []).map((r: Record<string, unknown>) => r.match_id as string));
 }
 
 export async function fetchMyTournamentCount(userId: string): Promise<number> {

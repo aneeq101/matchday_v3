@@ -92,6 +92,9 @@ export interface MatchItem {
   players: string;
   date: string;
   location: string;
+  maxPlayers?: number;
+  currentPlayers?: number;
+  creatorId?: string;
 }
 
 export interface Conversation {

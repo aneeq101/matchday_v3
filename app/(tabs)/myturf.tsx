@@ -18,7 +18,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/AuthContext';
-import { fetchMyMatches, createMatch, cancelMatch, fetchMyTournamentCount } from '../../lib/matches';
+import {
+  fetchMyMatches, createMatch, cancelMatch,
+  fetchMyTournamentCount, joinMatch, leaveMatch,
+  fetchOpenMatches, fetchJoinedMatchIds,
+} from '../../lib/matches';
+import { getFormatsForSport } from '../../lib/sportRules';
 import { type Booking, type MatchItem } from '../../data/mockData';
 import DatePickerField from '../../components/DatePickerField';
 import LocationPickerModal from '../../components/LocationPickerModal';
@@ -26,7 +31,6 @@ import LocationPickerModal from '../../components/LocationPickerModal';
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 
 const SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton', 'Baseball'];
-const FORMATS = ['2v2', '5v5', '6v6', '11v11', 'Open/Any'];
 const TIME_SLOTS = [
   '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
   '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
@@ -71,9 +75,12 @@ export default function MyTurfScreen() {
 
   const [bookings, setBookings]             = useState<Booking[]>([]);
   const [matches, setMatches]               = useState<MatchItem[]>([]);
+  const [openMatches, setOpenMatches]       = useState<MatchItem[]>([]);
+  const [joinedMatchIds, setJoinedMatchIds] = useState<Set<string>>(new Set());
   const [tournamentCount, setTournamentCount] = useState(0);
   const [loading, setLoading]               = useState(false);
   const [refreshing, setRefreshing]         = useState(false);
+  const [joining, setJoining]               = useState<string | null>(null);
 
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [selectedMatch, setSelectedMatch]     = useState<MatchItem | null>(null);
@@ -84,32 +91,47 @@ export default function MyTurfScreen() {
   const [showCreateMatch, setShowCreateMatch]       = useState(false);
   const [matchTitle, setMatchTitle]                 = useState('');
   const [matchSport, setMatchSport]                 = useState('Football');
-  const [matchFormat, setMatchFormat]               = useState('11v11');
+  const [matchFormat, setMatchFormat]               = useState('3v3');
+  const [matchMaxPlayers, setMatchMaxPlayers]       = useState(6);
   const [matchDate, setMatchDate]                   = useState<Date | null>(null);
   const [matchTime, setMatchTime]                   = useState('');
   const [matchLocation, setMatchLocation]           = useState('');
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [creatingMatch, setCreatingMatch]           = useState(false);
+  const [createError, setCreateError]               = useState('');
+
+  // When sport changes, reset format to first valid option
+  useEffect(() => {
+    const formats = getFormatsForSport(matchSport);
+    if (formats.length > 0) {
+      setMatchFormat(formats[0].format);
+      setMatchMaxPlayers(formats[0].maxPlayers);
+    }
+  }, [matchSport]);
 
   const loadData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
 
-    const [bData, mData, tCount] = await Promise.all([
+    const [bData, mData, openData, tCount, joinedIds] = await Promise.all([
       supabase
         .from('bookings')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
       fetchMyMatches(user.id),
+      fetchOpenMatches(user.id),
       fetchMyTournamentCount(user.id),
+      fetchJoinedMatchIds(user.id),
     ]);
 
     if (!bData.error && bData.data) {
       setBookings(bData.data.map(dbToBooking));
     }
     setMatches(mData);
+    setOpenMatches(openData);
     setTournamentCount(tCount);
+    setJoinedMatchIds(joinedIds);
     setLoading(false);
   }, [user]);
 
@@ -139,18 +161,30 @@ export default function MyTurfScreen() {
   };
 
   const handleCreateMatch = async () => {
-    if (!user || !matchTitle.trim() || !matchDate || !matchTime || !matchLocation.trim()) return;
+    const missing: string[] = [];
+    if (!matchTitle.trim()) missing.push('Title');
+    if (!matchDate) missing.push('Date');
+    if (!matchTime) missing.push('Time');
+    if (!matchLocation.trim()) missing.push('Location');
+
+    if (missing.length > 0) {
+      setCreateError(`Please fill in: ${missing.join(', ')}`);
+      return;
+    }
+
+    setCreateError('');
     setCreatingMatch(true);
 
-    const formattedDate = matchDate.toLocaleDateString('en-US', {
+    const formattedDate = matchDate!.toLocaleDateString('en-US', {
       weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
     });
 
     const newMatch = await createMatch({
-      userId:        user.id,
+      userId:        user!.id,
       title:         matchTitle.trim(),
       sport:         matchSport,
       playersFormat: matchFormat,
+      maxPlayers:    matchMaxPlayers,
       matchDate:     `${formattedDate} at ${matchTime}`,
       location:      matchLocation.trim(),
     });
@@ -163,9 +197,70 @@ export default function MyTurfScreen() {
     setMatchDate(null);
     setMatchTime('');
     setMatchLocation('');
+    setCreateError('');
+  };
+
+  const handleJoinMatch = async (matchId: string) => {
+    if (!user) return;
+    setJoining(matchId);
+    const success = await joinMatch(matchId, user.id);
+    if (success) {
+      setJoinedMatchIds((prev) => new Set([...prev, matchId]));
+      setOpenMatches((prev) =>
+        prev.map((m) => m.id === matchId
+          ? { ...m, currentPlayers: (m.currentPlayers ?? 0) + 1 }
+          : m),
+      );
+      if (selectedMatch?.id === matchId) {
+        setSelectedMatch((prev) => prev
+          ? { ...prev, currentPlayers: (prev.currentPlayers ?? 0) + 1 }
+          : null);
+      }
+    }
+    setJoining(null);
+  };
+
+  const handleLeaveMatch = async (matchId: string) => {
+    if (!user) return;
+    setJoining(matchId);
+    const success = await leaveMatch(matchId, user.id);
+    if (success) {
+      setJoinedMatchIds((prev) => {
+        const next = new Set(prev);
+        next.delete(matchId);
+        return next;
+      });
+      setOpenMatches((prev) =>
+        prev.map((m) => m.id === matchId
+          ? { ...m, currentPlayers: Math.max(0, (m.currentPlayers ?? 0) - 1) }
+          : m),
+      );
+      if (selectedMatch?.id === matchId) {
+        setSelectedMatch((prev) => prev
+          ? { ...prev, currentPlayers: Math.max(0, (prev.currentPlayers ?? 0) - 1) }
+          : null);
+      }
+    }
+    setJoining(null);
+  };
+
+  const handleCancelSelectedMatch = async () => {
+    if (!selectedMatch) return;
+    const success = await cancelMatch(selectedMatch.id);
+    if (success) {
+      setMatches((prev) => prev.filter((m) => m.id !== selectedMatch.id));
+      setSelectedMatch(null);
+    }
   };
 
   const upcomingBookings = bookings.filter((b) => b.status !== 'Cancelled');
+
+  // Match detail helpers
+  const isOwnMatch = selectedMatch?.creatorId === user?.id;
+  const isJoinedMatch = selectedMatch ? joinedMatchIds.has(selectedMatch.id) : false;
+  const matchSlotsLeft = selectedMatch
+    ? (selectedMatch.maxPlayers ?? 0) - (selectedMatch.currentPlayers ?? 0)
+    : 0;
 
   return (
     <View style={styles.root}>
@@ -201,7 +296,7 @@ export default function MyTurfScreen() {
           </View>
           <View style={styles.statBox}>
             <Text style={styles.statNum}>{matches.length}</Text>
-            <Text style={styles.statLbl}>Matches</Text>
+            <Text style={styles.statLbl}>My Matches</Text>
           </View>
           <View style={styles.statBox}>
             <Text style={[styles.statNum, { color: '#f59e0b' }]}>{tournamentCount}</Text>
@@ -244,14 +339,35 @@ export default function MyTurfScreen() {
           <MatchCard key={m.id} match={m} onPress={() => setSelectedMatch(m)} />
         ))}
 
+        {/* Open Matches */}
+        <Text style={styles.sectionTitle}>Open Matches Near You</Text>
+        {!loading && openMatches.length === 0 && (
+          <View style={styles.emptyState}>
+            <Ionicons name="people-outline" size={36} color="#d1d5db" />
+            <Text style={styles.emptyText}>No open matches</Text>
+            <Text style={styles.emptySubText}>Be the first to organize one</Text>
+          </View>
+        )}
+        {openMatches.map((m) => (
+          <OpenMatchCard
+            key={m.id}
+            match={m}
+            isJoined={joinedMatchIds.has(m.id)}
+            joining={joining === m.id}
+            onPress={() => setSelectedMatch(m)}
+            onJoin={() => handleJoinMatch(m.id)}
+            onLeave={() => handleLeaveMatch(m.id)}
+          />
+        ))}
+
         {/* Quick Actions */}
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.quickGrid}>
           {[
-            { icon: 'calendar-outline' as const,  label: 'New Booking',     color: '#16a34a', onPress: () => router.push('/(tabs)/book') },
-            { icon: 'football-outline' as const,   label: 'Organize Match',  color: '#3b82f6', onPress: () => setShowCreateMatch(true) },
-            { icon: 'trophy-outline' as const,     label: 'My Tournaments',  color: '#f59e0b', onPress: () => {} },
-            { icon: 'people-outline' as const,     label: 'My Teams',        color: '#8b5cf6', onPress: () => {} },
+            { icon: 'calendar-outline' as const,  label: 'New Booking',    color: '#16a34a', onPress: () => router.push('/(tabs)/book') },
+            { icon: 'football-outline' as const,  label: 'Organize Match', color: '#3b82f6', onPress: () => setShowCreateMatch(true) },
+            { icon: 'trophy-outline' as const,    label: 'My Tournaments', color: '#f59e0b', onPress: () => {} },
+            { icon: 'people-outline' as const,    label: 'My Teams',       color: '#8b5cf6', onPress: () => {} },
           ].map((action) => (
             <TouchableOpacity key={action.label} style={styles.quickBtn} onPress={action.onPress}>
               <View style={[styles.quickIcon, { backgroundColor: action.color + '20' }]}>
@@ -285,13 +401,13 @@ export default function MyTurfScreen() {
 
                 <View style={styles.detailGrid}>
                   {[
-                    { icon: 'football-outline' as const, label: 'Sport',   value: selectedBooking.sport },
-                    { icon: 'calendar-outline' as const, label: 'Date',    value: selectedBooking.date },
-                    { icon: 'time-outline' as const,     label: 'Time',    value: selectedBooking.time },
+                    { icon: 'football-outline' as const, label: 'Sport',    value: selectedBooking.sport },
+                    { icon: 'calendar-outline' as const, label: 'Date',     value: selectedBooking.date },
+                    { icon: 'time-outline' as const,     label: 'Time',     value: selectedBooking.time },
                     ...(selectedBooking.duration ? [{ icon: 'hourglass-outline' as const, label: 'Duration', value: `${selectedBooking.duration}h` }] : []),
                     ...(selectedBooking.players  ? [{ icon: 'people-outline' as const,   label: 'Players',  value: String(selectedBooking.players) }] : []),
                     ...(selectedBooking.address  ? [{ icon: 'location-outline' as const, label: 'Address',  value: selectedBooking.address }] : []),
-                    { icon: 'cash-outline' as const,     label: 'Total',   value: `PKR ${selectedBooking.price.toLocaleString()}` },
+                    { icon: 'cash-outline' as const, label: 'Total', value: `PKR ${selectedBooking.price.toLocaleString()}` },
                   ].map((row) => (
                     <View key={row.label} style={styles.detailRow}>
                       <View style={styles.detailIcon}>
@@ -351,6 +467,22 @@ export default function MyTurfScreen() {
                   <Text style={{ fontSize: 40 }}>{selectedMatch.sportEmoji}</Text>
                 </View>
                 <Text style={styles.sheetVenueName}>{selectedMatch.title}</Text>
+
+                {/* Slot progress */}
+                {selectedMatch.maxPlayers != null && (
+                  <View style={styles.slotContainer}>
+                    <View style={styles.slotTrack}>
+                      <View style={[styles.slotFill, {
+                        width: `${Math.round(((selectedMatch.currentPlayers ?? 0) / selectedMatch.maxPlayers) * 100)}%`,
+                      }]} />
+                    </View>
+                    <Text style={styles.slotLabel}>
+                      {selectedMatch.currentPlayers ?? 0} / {selectedMatch.maxPlayers} players joined
+                      {matchSlotsLeft > 0 ? ` · ${matchSlotsLeft} spot${matchSlotsLeft !== 1 ? 's' : ''} left` : ' · Full'}
+                    </Text>
+                  </View>
+                )}
+
                 <View style={styles.detailGrid}>
                   {[
                     { icon: 'football-outline' as const,  label: 'Sport',       value: selectedMatch.sport },
@@ -369,8 +501,45 @@ export default function MyTurfScreen() {
                     </View>
                   ))}
                 </View>
-                <TouchableOpacity style={styles.primaryBtn} onPress={() => setSelectedMatch(null)}>
-                  <Text style={styles.primaryBtnText}>Close</Text>
+
+                {/* Action button based on relationship to match */}
+                {isOwnMatch ? (
+                  <TouchableOpacity style={styles.cancelBookingBtn} onPress={handleCancelSelectedMatch}>
+                    <Text style={styles.cancelBookingText}>Cancel Match</Text>
+                  </TouchableOpacity>
+                ) : isJoinedMatch ? (
+                  <TouchableOpacity
+                    style={[styles.primaryBtn, { backgroundColor: '#ef4444', marginTop: 20 }]}
+                    onPress={() => handleLeaveMatch(selectedMatch.id)}
+                    disabled={joining === selectedMatch.id}
+                  >
+                    {joining === selectedMatch.id
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={styles.primaryBtnText}>Leave Match</Text>
+                    }
+                  </TouchableOpacity>
+                ) : matchSlotsLeft > 0 ? (
+                  <TouchableOpacity
+                    style={[styles.primaryBtn, { marginTop: 20 }]}
+                    onPress={() => handleJoinMatch(selectedMatch.id)}
+                    disabled={joining === selectedMatch.id}
+                  >
+                    {joining === selectedMatch.id
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={styles.primaryBtnText}>Join Match</Text>
+                    }
+                  </TouchableOpacity>
+                ) : (
+                  <View style={[styles.primaryBtn, { backgroundColor: '#9ca3af', marginTop: 20 }]}>
+                    <Text style={styles.primaryBtnText}>Match Full</Text>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.closeBtn, { marginTop: 10 }]}
+                  onPress={() => setSelectedMatch(null)}
+                >
+                  <Text style={styles.closeBtnText}>Close</Text>
                 </TouchableOpacity>
               </ScrollView>
             )}
@@ -385,20 +554,26 @@ export default function MyTurfScreen() {
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Organize a Match</Text>
-              <TouchableOpacity onPress={() => setShowCreateMatch(false)}>
+              <TouchableOpacity onPress={() => { setShowCreateMatch(false); setCreateError(''); }}>
                 <Ionicons name="close" size={24} color="#111827" />
               </TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
+
+              <Text style={styles.fieldLabel}>
+                Match Title<Text style={styles.required}> *</Text>
+              </Text>
               <TextInput
                 style={styles.input}
-                placeholder="Match title (e.g. Sunday Kickabout)"
+                placeholder="e.g. Sunday Kickabout"
                 placeholderTextColor="#9ca3af"
                 value={matchTitle}
-                onChangeText={setMatchTitle}
+                onChangeText={(t) => { setMatchTitle(t); setCreateError(''); }}
               />
 
-              <Text style={styles.fieldLabel}>Sport</Text>
+              <Text style={styles.fieldLabel}>
+                Sport<Text style={styles.required}> *</Text>
+              </Text>
               <View style={styles.pillRow}>
                 {SPORTS.map((s) => (
                   <TouchableOpacity
@@ -411,38 +586,56 @@ export default function MyTurfScreen() {
                 ))}
               </View>
 
-              <Text style={styles.fieldLabel}>Format</Text>
+              <Text style={styles.fieldLabel}>
+                Format<Text style={styles.required}> *</Text>
+              </Text>
               <View style={styles.pillRow}>
-                {FORMATS.map((f) => (
+                {getFormatsForSport(matchSport).map((f) => (
                   <TouchableOpacity
-                    key={f}
-                    style={[styles.pill, matchFormat === f && styles.pillActive]}
-                    onPress={() => setMatchFormat(f)}
+                    key={f.format}
+                    style={[styles.pill, matchFormat === f.format && styles.pillActive]}
+                    onPress={() => {
+                      setMatchFormat(f.format);
+                      setMatchMaxPlayers(f.maxPlayers);
+                    }}
                   >
-                    <Text style={[styles.pillText, matchFormat === f && styles.pillTextActive]}>{f}</Text>
+                    <Text style={[styles.pillText, matchFormat === f.format && styles.pillTextActive]}>
+                      {f.label}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </View>
+              <Text style={styles.formatHint}>
+                Max {matchMaxPlayers} players total
+              </Text>
 
+              <Text style={styles.fieldLabel}>
+                Date<Text style={styles.required}> *</Text>
+              </Text>
               <DatePickerField
                 value={matchDate}
-                onChange={setMatchDate}
+                onChange={(d) => { setMatchDate(d); setCreateError(''); }}
                 placeholder="Select match date"
               />
 
-              <Text style={styles.fieldLabel}>Time</Text>
+              <Text style={styles.fieldLabel}>
+                Time<Text style={styles.required}> *</Text>
+              </Text>
               <View style={styles.timeGrid}>
                 {TIME_SLOTS.map((t) => (
                   <TouchableOpacity
                     key={t}
                     style={[styles.timeSlot, matchTime === t && styles.timeSlotActive]}
-                    onPress={() => setMatchTime(t)}
+                    onPress={() => { setMatchTime(t); setCreateError(''); }}
                   >
                     <Text style={[styles.timeSlotText, matchTime === t && styles.timeSlotTextActive]}>{t}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
+              <Text style={styles.fieldLabel}>
+                Location<Text style={styles.required}> *</Text>
+              </Text>
               <TouchableOpacity
                 style={[styles.input, styles.locationTrigger]}
                 onPress={() => setShowLocationPicker(true)}
@@ -454,10 +647,17 @@ export default function MyTurfScreen() {
                 <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
               </TouchableOpacity>
 
+              {createError ? (
+                <View style={styles.errorBox}>
+                  <Ionicons name="alert-circle" size={16} color="#ef4444" />
+                  <Text style={styles.errorText}>{createError}</Text>
+                </View>
+              ) : null}
+
               <TouchableOpacity
                 style={[styles.primaryBtn, { marginTop: 4 }]}
                 onPress={handleCreateMatch}
-                disabled={creatingMatch || !matchTitle.trim() || !matchDate || !matchTime || !matchLocation.trim()}
+                disabled={creatingMatch}
               >
                 {creatingMatch
                   ? <ActivityIndicator size="small" color="#fff" />
@@ -474,7 +674,7 @@ export default function MyTurfScreen() {
       <LocationPickerModal
         visible={showLocationPicker}
         sport={matchSport}
-        onSelect={(loc) => { setMatchLocation(loc); setShowLocationPicker(false); }}
+        onSelect={(loc) => { setMatchLocation(loc); setShowLocationPicker(false); setCreateError(''); }}
         onClose={() => setShowLocationPicker(false)}
       />
 
@@ -550,11 +750,74 @@ function MatchCard({ match, onPress }: { match: MatchItem; onPress: () => void }
           <Text style={styles.matchTitle} numberOfLines={1}>{match.title}</Text>
           <Text style={styles.matchMeta}>{match.players} · {match.date}</Text>
           <Text style={styles.matchMeta}>{match.location}</Text>
+          {match.maxPlayers != null && (
+            <Text style={styles.matchSlotText}>
+              {match.currentPlayers ?? 0}/{match.maxPlayers} players
+            </Text>
+          )}
         </View>
       </View>
       <View style={styles.viewDetailsBtn}>
         <Text style={styles.viewDetailsBtnText}>Details</Text>
       </View>
+    </TouchableOpacity>
+  );
+}
+
+function OpenMatchCard({ match, isJoined, joining, onPress, onJoin, onLeave }: {
+  match: MatchItem;
+  isJoined: boolean;
+  joining: boolean;
+  onPress: () => void;
+  onJoin: () => void;
+  onLeave: () => void;
+}) {
+  const max = match.maxPlayers ?? 1;
+  const current = match.currentPlayers ?? 0;
+  const pct = Math.round((current / max) * 100);
+  const slotsLeft = max - current;
+
+  return (
+    <TouchableOpacity style={styles.openMatchCard} onPress={onPress}>
+      <View style={styles.matchLeft}>
+        <Text style={styles.matchEmoji}>{match.sportEmoji}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.matchTitle} numberOfLines={1}>{match.title}</Text>
+          <Text style={styles.matchMeta}>{match.players} · {match.date}</Text>
+          <View style={styles.slotTrack}>
+            <View style={[styles.slotFill, { width: `${pct}%` }]} />
+          </View>
+          <Text style={styles.slotLabel}>
+            {current}/{max} players · {slotsLeft} spot{slotsLeft !== 1 ? 's' : ''} left
+          </Text>
+        </View>
+      </View>
+      {isJoined ? (
+        <TouchableOpacity style={styles.joinedBadge} onPress={onLeave} disabled={joining}>
+          {joining
+            ? <ActivityIndicator size="small" color="#16a34a" />
+            : <>
+                <Ionicons name="checkmark" size={14} color="#16a34a" />
+                <Text style={styles.joinedText}>Joined</Text>
+              </>
+          }
+        </TouchableOpacity>
+      ) : slotsLeft > 0 ? (
+        <TouchableOpacity
+          style={[styles.joinBtn, joining && { opacity: 0.6 }]}
+          onPress={onJoin}
+          disabled={joining}
+        >
+          {joining
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Text style={styles.joinBtnText}>Join</Text>
+          }
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.fullBadge}>
+          <Text style={styles.fullText}>Full</Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -646,10 +909,26 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
+  openMatchCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#e0f2fe',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
   matchLeft: { flexDirection: 'row', gap: 12, flex: 1 },
   matchEmoji: { fontSize: 34, paddingTop: 2 },
   matchTitle: { fontWeight: '700', color: '#111827', fontSize: 14, marginBottom: 4 },
   matchMeta:  { color: '#6b7280', fontSize: 12, marginTop: 1 },
+  matchSlotText: { color: '#16a34a', fontSize: 11, fontWeight: '600', marginTop: 4 },
   viewDetailsBtn: {
     backgroundColor: '#f0fdf4',
     paddingHorizontal: 12,
@@ -659,6 +938,54 @@ const styles = StyleSheet.create({
     borderColor: '#bbf7d0',
   },
   viewDetailsBtnText: { color: '#16a34a', fontWeight: '600', fontSize: 13 },
+  // Slot progress bar
+  slotTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#e5e7eb',
+    overflow: 'hidden',
+    marginTop: 6,
+    marginBottom: 2,
+  },
+  slotFill: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#16a34a',
+  },
+  slotLabel: { color: '#6b7280', fontSize: 11, marginTop: 2 },
+  // Match detail slot section
+  slotContainer: {
+    width: '100%',
+    marginBottom: 4,
+    marginTop: 8,
+  },
+  // Join / joined / full badges on open match cards
+  joinBtn: {
+    backgroundColor: '#16a34a',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 58,
+    alignItems: 'center',
+  },
+  joinBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  joinedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  joinedText: { color: '#16a34a', fontWeight: '700', fontSize: 13 },
+  fullBadge: {
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  fullText: { color: '#9ca3af', fontWeight: '600', fontSize: 13 },
   quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   quickBtn: {
     width: '47%',
@@ -679,7 +1006,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quickLabel: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  // Sheet
+  // Sheet / Modals
   sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#fff',
@@ -740,9 +1067,17 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     borderRadius: 10,
     alignItems: 'center',
-    marginTop: 20,
   },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  closeBtn: {
+    width: '100%',
+    borderWidth: 1.5,
+    borderColor: '#d1d5db',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  closeBtnText: { color: '#6b7280', fontWeight: '600', fontSize: 15 },
   // Create Match form
   input: {
     borderWidth: 1,
@@ -764,9 +1099,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#111827',
   },
-  fieldLabel: { fontWeight: '700', color: '#111827', fontSize: 14, marginBottom: 6 },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
-  timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
+  fieldLabel: { fontWeight: '700', color: '#111827', fontSize: 14 },
+  required: { color: '#ef4444' },
+  formatHint: { color: '#6b7280', fontSize: 12, marginTop: -8 },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   timeSlot: {
     paddingHorizontal: 10, paddingVertical: 7,
     borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb',
@@ -786,6 +1123,18 @@ const styles = StyleSheet.create({
   pillActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
   pillText: { color: '#6b7280', fontSize: 13, fontWeight: '500' },
   pillTextActive: { color: '#fff' },
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  errorText: { color: '#ef4444', fontSize: 13, fontWeight: '600', flex: 1 },
   // Notifications
   centeredOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-start', alignItems: 'flex-end', padding: 16, paddingTop: 80 },
   notifBox: {
