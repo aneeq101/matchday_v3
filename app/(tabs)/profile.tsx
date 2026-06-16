@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/AuthContext';
 import { fetchMySports, addSport, removeSport, fetchPlayerStats, upsertSportStats, type ProfileSport, type PlayerStat } from '../../lib/profile';
+import { fetchFollowCounts } from '../../lib/follows';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 import { useRouter } from 'expo-router';
@@ -97,13 +98,6 @@ const SPORT_STAT_FIELDS: Record<string, { key: string; label: string; numeric: b
   ],
 };
 
-const MENU_ITEMS = [
-  { icon: 'person-outline' as const, label: 'Edit Profile', color: '#374151' },
-  { icon: 'notifications-outline' as const, label: 'Notifications', color: '#374151' },
-  { icon: 'card-outline' as const, label: 'Payment Methods', color: '#374151' },
-  { icon: 'shield-outline' as const, label: 'Privacy & Security', color: '#374151' },
-  { icon: 'help-circle-outline' as const, label: 'Help & Support', color: '#374151' },
-];
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -133,6 +127,8 @@ export default function ProfileScreen() {
   const [messagesFrom, setMessagesFrom] = useState({ male: true, female: true, undisclosed: true });
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
+  const [followCounts, setFollowCounts] = useState({ followers: 0, following: 0 });
+
   // Sports & stats
   const [mySports, setMySports] = useState<ProfileSport[]>([]);
   const [playerStats, setPlayerStats] = useState<PlayerStat[]>([]);
@@ -159,14 +155,16 @@ export default function ProfileScreen() {
     if (!user) return;
     const key = ++loadKey.current;
 
-    const [sports, stats] = await Promise.all([
+    const [sports, stats, counts] = await Promise.all([
       fetchMySports(user.id),
       fetchPlayerStats(user.id),
+      fetchFollowCounts(user.id),
     ]);
 
     // Discard result if a newer loadProfile call has already started
     if (key !== loadKey.current) return;
 
+    setFollowCounts(counts);
     setMySports(sports);
 
     // Only show stats for sports the user has explicitly added to their profile
@@ -309,22 +307,22 @@ export default function ProfileScreen() {
           </View>
         </ImageBackground>
 
-        {/* Stats Card — aggregated from recorded player stats */}
+        {/* Stats Card */}
         {(() => {
           const totalMatches = playerStats.reduce((s, p) => s + p.matches, 0);
           const totalWins    = playerStats.reduce((s, p) => s + p.wins, 0);
           const winRate      = totalMatches > 0 ? Math.round((totalWins / totalMatches) * 100) : 0;
           return (
             <View style={styles.statsCard}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNum}>{mySports.length}</Text>
-                <Text style={styles.statLbl}>Sports</Text>
-              </View>
+              <TouchableOpacity style={styles.statItem} onPress={() => router.push({ pathname: '/followers', params: { tab: 'followers' } })}>
+                <Text style={styles.statNum}>{followCounts.followers}</Text>
+                <Text style={styles.statLbl}>Followers</Text>
+              </TouchableOpacity>
               <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statNum}>{totalMatches}</Text>
-                <Text style={styles.statLbl}>Matches</Text>
-              </View>
+              <TouchableOpacity style={styles.statItem} onPress={() => router.push({ pathname: '/followers', params: { tab: 'following' } })}>
+                <Text style={styles.statNum}>{followCounts.following}</Text>
+                <Text style={styles.statLbl}>Following</Text>
+              </TouchableOpacity>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <Text style={[styles.statNum, totalMatches > 0 && { color: '#16a34a' }]}>
@@ -537,9 +535,15 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account Settings</Text>
           <View style={styles.menuCard}>
-            {MENU_ITEMS.map((item, i) => (
+            {[
+              { icon: 'person-outline' as const,      label: 'Edit Profile',      onPress: () => router.push('/edit-profile') },
+              { icon: 'notifications-outline' as const, label: 'Notifications',   onPress: () => router.push('/notifications') },
+              { icon: 'card-outline' as const,        label: 'Payment Methods',   onPress: () => {} },
+              { icon: 'shield-outline' as const,      label: 'Privacy & Security', onPress: () => {} },
+              { icon: 'help-circle-outline' as const, label: 'Help & Support',    onPress: () => {} },
+            ].map((item, i, arr) => (
               <React.Fragment key={item.label}>
-                <TouchableOpacity style={styles.menuRow}>
+                <TouchableOpacity style={styles.menuRow} onPress={item.onPress}>
                   <View style={styles.menuLeft}>
                     <View style={styles.menuIconBox}>
                       <Ionicons name={item.icon} size={20} color="#374151" />
@@ -548,7 +552,7 @@ export default function ProfileScreen() {
                   </View>
                   <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
                 </TouchableOpacity>
-                {i < MENU_ITEMS.length - 1 && <View style={styles.divider} />}
+                {i < arr.length - 1 && <View style={styles.divider} />}
               </React.Fragment>
             ))}
           </View>

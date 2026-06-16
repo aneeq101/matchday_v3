@@ -203,6 +203,32 @@ export async function fetchFullProfile(userId: string): Promise<FullProfile | nu
   };
 }
 
+export async function fetchMyProfile(userId: string): Promise<{ name: string; bio: string; area: string } | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('name, bio, area')
+    .eq('id', userId)
+    .single();
+  if (error || !data) return null;
+  const row = data as Record<string, unknown>;
+  return {
+    name: (row.name as string) ?? '',
+    bio:  (row.bio  as string) ?? '',
+    area: (row.area as string) ?? '',
+  };
+}
+
+export async function updateProfile(
+  userId: string,
+  params: { name: string; bio: string; area: string },
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ name: params.name.trim(), bio: params.bio.trim(), area: params.area.trim() })
+    .eq('id', userId);
+  return !error;
+}
+
 export async function fetchPlayerStats(userId: string): Promise<PlayerStat[]> {
   const resolvedId = MOCK_ID_TO_UUID[userId] ?? userId;
   const { data, error } = await supabase

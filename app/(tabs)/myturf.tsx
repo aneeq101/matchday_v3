@@ -108,7 +108,6 @@ export default function MyTurfScreen() {
 
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [selectedMatch, setSelectedMatch]     = useState<MatchItem | null>(null);
-  const [notifVisible, setNotifVisible]       = useState(false);
   const [cancellingBooking, setCancellingBooking] = useState(false);
 
   // Create Match modal
@@ -320,11 +319,8 @@ export default function MyTurfScreen() {
             <SafeAreaView edges={['top']}>
               <View style={styles.header}>
                 <Text style={styles.headerTitle}>My Turf</Text>
-                <TouchableOpacity onPress={() => setNotifVisible(true)}>
-                  <View>
-                    <Ionicons name="notifications-outline" size={24} color="#fff" />
-                    <View style={styles.notifDot} />
-                  </View>
+                <TouchableOpacity onPress={() => router.push('/notifications')}>
+                  <Ionicons name="notifications-outline" size={24} color="#fff" />
                 </TouchableOpacity>
               </View>
             </SafeAreaView>
@@ -444,7 +440,7 @@ export default function MyTurfScreen() {
           {[
             { icon: 'calendar-outline' as const,  label: 'New Booking',    color: '#16a34a', onPress: () => router.push('/(tabs)/book') },
             { icon: 'football-outline' as const,  label: 'Organize Match', color: '#3b82f6', onPress: () => setShowCreateMatch(true) },
-            { icon: 'trophy-outline' as const,    label: 'My Tournaments', color: '#f59e0b', onPress: () => {} },
+            { icon: 'trophy-outline' as const,    label: 'My Tournaments', color: '#f59e0b', onPress: () => router.push('/my-tournaments') },
             { icon: 'people-outline' as const,    label: 'My Teams',       color: '#8b5cf6', onPress: () => {} },
           ].map((action) => (
             <TouchableOpacity key={action.label} style={styles.quickBtn} onPress={action.onPress}>
@@ -765,26 +761,6 @@ export default function MyTurfScreen() {
       />
 
       {/* Notification Modal */}
-      <Modal visible={notifVisible} animationType="fade" transparent>
-        <TouchableOpacity style={styles.centeredOverlay} activeOpacity={1} onPress={() => setNotifVisible(false)}>
-          <View style={styles.notifBox}>
-            <Text style={styles.notifTitle}>Notifications</Text>
-            {[
-              { icon: 'checkmark-circle' as const, color: '#16a34a', text: 'Your booking is confirmed', time: '2h ago' },
-              { icon: 'trophy' as const,           color: '#f59e0b', text: 'Ramadan Cricket Cup starts in 3 days', time: '5h ago' },
-              { icon: 'person-add' as const,       color: '#3b82f6', text: 'You have a new match invite', time: '1d ago' },
-            ].map((n, i) => (
-              <View key={i} style={styles.notifItem}>
-                <Ionicons name={n.icon} size={20} color={n.color} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.notifText}>{n.text}</Text>
-                  <Text style={styles.notifTime}>{n.time}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 }
@@ -1008,13 +984,6 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800' },
-  notifDot: {
-    position: 'absolute',
-    top: 0, right: 0,
-    width: 8, height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ef4444',
-  },
   scroll: { flex: 1 },
   content: { padding: 16, paddingBottom: 32 },
   statsRow: {
@@ -1362,20 +1331,4 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   earnLeaveBtnText: { color: '#ef4444', fontWeight: '600', fontSize: 13 },
-  // Notifications
-  centeredOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-start', alignItems: 'flex-end', padding: 16, paddingTop: 80 },
-  notifBox: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    width: 300,
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  notifTitle: { fontWeight: '700', color: '#111827', fontSize: 16, marginBottom: 12 },
-  notifItem: { flexDirection: 'row', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  notifText: { color: '#374151', fontSize: 13, lineHeight: 18 },
-  notifTime: { color: '#9ca3af', fontSize: 11, marginTop: 2 },
 });
