@@ -365,7 +365,6 @@ export default function BookScreen() {
         time_slot:       selectedTime,
         duration_hours:  selectedDuration,
         players_count:   selectedMaxPlayers,
-        players_format:  selectedFormat,
         special_requests: specialRequests || null,
         total_price:     totalPrice,
         status:          'confirmed',
