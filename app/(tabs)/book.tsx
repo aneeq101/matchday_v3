@@ -26,6 +26,7 @@ import { useUserLocation } from '../../hooks/useUserLocation';
 import BookMap from '../../components/BookMap';
 import DatePickerField from '../../components/DatePickerField';
 import { getFormatsForSport } from '../../lib/sportRules';
+import { createNotification } from '../../lib/notifications';
 
 const LIVE_SEARCH_ENABLED = false;
 const PEEK_HEIGHT = 168; // px visible when sheet is at its lowest snap
@@ -369,7 +370,16 @@ export default function BookScreen() {
         total_price:     totalPrice,
         status:          'confirmed',
       }).then(({ error }) => {
-        if (error) console.warn('Booking save error:', error.message);
+        if (error) {
+          console.warn('Booking save error:', error.message);
+        } else if (user) {
+          createNotification({
+            userId: user.id,
+            type: 'booking_confirmed',
+            title: `Booking confirmed — ${bookingVenue?.name ?? 'venue'}`,
+            body: `${selectedSport} · ${selectedDate?.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) ?? ''} · ${selectedTime}`,
+          }).catch(() => {});
+        }
       });
     }
 

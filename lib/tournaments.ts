@@ -118,6 +118,10 @@ export async function createTournament(
     })
     .select()
     .single();
-  if (error || !data) return null;
+  if (error) {
+    console.warn('[createTournament] error:', error.message, error.code, error.details);
+    return null;
+  }
+  if (!data) return null;
   return dbToTournament(data as Record<string, unknown>);
 }

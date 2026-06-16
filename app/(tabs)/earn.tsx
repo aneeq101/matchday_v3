@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   KeyboardAvoidingView,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -148,46 +149,48 @@ export default function EarnScreen() {
   };
 
   const handleCreate = async () => {
+    if (!newName.trim()) {
+      Alert.alert('Name required', 'Please enter an event name.');
+      return;
+    }
     setSaving(true);
-    const saved = await dbCreateTournament(
-      {
-        name: newName || 'New Event',
-        type: newType,
-        sport: newSport,
-        date: newDate || 'TBD',
-        location: newLocation || '',
-        entryFee: parseInt(newFee) || 0,
-        prizePool: parseInt(newPrize) || 0,
-        maxParticipants: newMaxParticipants,
-      },
-      user?.id ?? null
-    );
+    try {
+      const saved = await dbCreateTournament(
+        {
+          name: newName.trim(),
+          type: newType,
+          sport: newSport,
+          date: newDate || 'TBD',
+          location: newLocation || '',
+          entryFee: parseInt(newFee) || 0,
+          prizePool: parseInt(newPrize) || 0,
+          maxParticipants: newMaxParticipants,
+        },
+        user?.id ?? null
+      );
 
-    const newEvent: Tournament = saved ?? {
-      id: String(Date.now()),
-      name: newName || 'New Event',
-      type: newType,
-      sport: newSport,
-      sportEmoji: ({ Football: '⚽', Cricket: '🏏', Tennis: '🎾', Basketball: '🏀', Badminton: '🏸', Baseball: '⚾' } as Record<string, string>)[newSport] || '🏆',
-      date: newDate || 'TBD',
-      location: newLocation || '',
-      participants: 0,
-      maxParticipants: newMaxParticipants,
-      entryFee: parseInt(newFee) || 0,
-      prizePool: parseInt(newPrize) || 0,
-    };
+      if (!saved) {
+        Alert.alert('Error', 'Failed to save event. Please try again.');
+        setSaving(false);
+        return;
+      }
 
-    setEvents((prev) => [newEvent, ...prev]);
-    setSaving(false);
-    setShowCreateModal(false);
-    setNewName('');
-    setNewSport('Football');
-    setNewFormat('3v3');
-    setNewMaxParticipants(6);
-    setNewDate('');
-    setNewLocation('');
-    setNewFee('');
-    setNewPrize('');
+      setEvents((prev) => [saved, ...prev]);
+      setShowCreateModal(false);
+      setNewName('');
+      setNewType('tournament');
+      setNewSport('Football');
+      setNewFormat('3v3');
+      setNewMaxParticipants(6);
+      setNewDate('');
+      setNewLocation('');
+      setNewFee('');
+      setNewPrize('');
+    } catch (e) {
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -354,7 +357,10 @@ export default function EarnScreen() {
       {/* Create Event Modal */}
       <Modal visible={showCreateModal} animationType="slide" transparent>
         <View style={styles.sheetOverlay}>
-          <SafeAreaView style={styles.sheet}>
+          <KeyboardAvoidingView
+            style={styles.createSheet}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Create Event</Text>
@@ -362,7 +368,6 @@ export default function EarnScreen() {
                 <Ionicons name="close" size={24} color="#111827" />
               </TouchableOpacity>
             </View>
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
               <Text style={styles.fieldLabel}>Event Type</Text>
               <View style={styles.typeRow}>
@@ -468,8 +473,7 @@ export default function EarnScreen() {
               </TouchableOpacity>
               <View style={{ height: 20 }} />
             </ScrollView>
-            </KeyboardAvoidingView>
-          </SafeAreaView>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>
@@ -666,6 +670,12 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '92%',
+  },
+  createSheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: '88%',
   },
   sheetHandle: {
     width: 40,

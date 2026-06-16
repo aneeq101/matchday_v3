@@ -33,6 +33,7 @@ import { type Booking, type MatchItem, type Tournament } from '../../data/mockDa
 import DatePickerField from '../../components/DatePickerField';
 import LocationPickerModal from '../../components/LocationPickerModal';
 import NotifBell from '../../components/NotifBell';
+import { createNotification } from '../../lib/notifications';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 
@@ -247,6 +248,20 @@ export default function MyTurfScreen() {
           { ...joining, currentPlayers: (joining.currentPlayers ?? 0) + 1 },
           ...prev,
         ]);
+        // Notify the match creator
+        if (joining.creatorId && joining.creatorId !== user.id) {
+          const joinerName =
+            user.user_metadata?.full_name ??
+            user.user_metadata?.name ??
+            user.email?.split('@')[0] ??
+            'Someone';
+          createNotification({
+            userId: joining.creatorId,
+            type: 'match_join',
+            title: `${joinerName} joined your match`,
+            body: `${joining.sport} · ${joining.location ?? ''} · ${joining.date ?? ''}`.replace(/\s·\s$/, ''),
+          }).catch(() => {});
+        }
       }
 
       if (selectedMatch?.id === matchId) {
