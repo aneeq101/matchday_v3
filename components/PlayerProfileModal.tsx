@@ -198,6 +198,42 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
                   <Text style={styles.joinText}>Member since {displayJoin}</Text>
                 </View>
               ) : null}
+
+              {/* Follow + Message actions — visible immediately without scrolling */}
+              {user && user.id !== player.id && (
+                <View style={styles.headerActions}>
+                  <TouchableOpacity
+                    style={[styles.headerFollowBtn, following && styles.headerFollowingBtn]}
+                    onPress={toggleFollow}
+                    disabled={followLoading}
+                  >
+                    {followLoading ? (
+                      <ActivityIndicator size="small" color={following ? 'rgba(255,255,255,0.7)' : player.avatarColor} />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name={following ? 'checkmark' : 'person-add-outline'}
+                          size={15}
+                          color={following ? 'rgba(255,255,255,0.9)' : player.avatarColor}
+                        />
+                        <Text style={[styles.headerFollowText, following && styles.headerFollowingText]}>
+                          {following ? 'Following' : 'Follow'}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+
+                  {player.privacy !== 'private' && onMessage && (
+                    <TouchableOpacity
+                      style={styles.headerMsgBtn}
+                      onPress={() => onMessage(player)}
+                    >
+                      <Ionicons name="chatbubble-outline" size={15} color="rgba(255,255,255,0.9)" />
+                      <Text style={styles.headerMsgText}>Message</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
             </View>
 
             <ScrollView
@@ -363,38 +399,6 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
                 )}
               </View>
 
-              {/* Actions */}
-              {user && user.id !== player.id && (
-                <View style={styles.actionsRow}>
-                  <TouchableOpacity
-                    style={[styles.followBtn, following && styles.followingBtn]}
-                    onPress={toggleFollow}
-                    disabled={followLoading}
-                  >
-                    {followLoading ? (
-                      <ActivityIndicator size="small" color={following ? '#6b7280' : '#fff'} />
-                    ) : (
-                      <>
-                        <Ionicons
-                          name={following ? 'checkmark' : 'person-add-outline'}
-                          size={16}
-                          color={following ? '#6b7280' : '#fff'}
-                        />
-                        <Text style={[styles.followBtnText, following && styles.followingBtnText]}>
-                          {following ? 'Following' : 'Follow'}
-                        </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-
-                  {player.privacy !== 'private' && onMessage && (
-                    <TouchableOpacity style={styles.messageBtn} onPress={() => onMessage(player)}>
-                      <Ionicons name="chatbubble-outline" size={18} color="#16a34a" />
-                      <Text style={styles.messageBtnText}>Message</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
               {player.privacy === 'private' && (
                 <View style={styles.privateNote}>
                   <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
@@ -536,26 +540,25 @@ const styles = StyleSheet.create({
   },
   sportStatValue: { fontSize: 20, fontWeight: '800', color: '#111827' },
   sportStatLabel: { fontSize: 11, color: '#6b7280', marginTop: 3 },
-  actionsRow: {
+  headerActions: {
     flexDirection: 'row', gap: 10,
-    marginHorizontal: 16, marginTop: 24,
+    marginTop: 16, paddingHorizontal: 4,
   },
-  followBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#16a34a', paddingVertical: 13, borderRadius: 12,
+  headerFollowBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: '#fff', paddingVertical: 10, borderRadius: 22,
   },
-  followingBtn: {
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1, borderColor: '#e5e7eb',
+  headerFollowingBtn: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
   },
-  followBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  followingBtnText: { color: '#6b7280' },
-  messageBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#f0fdf4', paddingVertical: 13, borderRadius: 12,
-    borderWidth: 1, borderColor: '#bbf7d0',
+  headerFollowText: { fontSize: 14, fontWeight: '700', color: '#16a34a' },
+  headerFollowingText: { color: 'rgba(255,255,255,0.9)' },
+  headerMsgBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.2)', paddingVertical: 10, borderRadius: 22,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)',
   },
-  messageBtnText: { color: '#16a34a', fontSize: 15, fontWeight: '700' },
+  headerMsgText: { fontSize: 14, fontWeight: '700', color: 'rgba(255,255,255,0.9)' },
   privateNote: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     marginHorizontal: 16, marginTop: 16, padding: 12,
