@@ -64,12 +64,8 @@ export async function createMatch(params: {
     return null;
   }
 
-  // Auto-join creator as first participant
-  await supabase.from('match_players').insert({
-    match_id:  data.id,
-    player_id: params.userId,
-  });
-
+  // The auto_join_creator_trigger in Supabase handles inserting the creator
+  // into match_players (and incrementing current_players) atomically on INSERT.
   return { ...rowToMatchItem(data), currentPlayers: 1 };
 }
 
