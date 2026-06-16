@@ -18,7 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/AuthContext';
-import { fetchMySports, addSport, removeSport, fetchMyRanking, fetchPlayerStats, upsertSportStats, type ProfileSport, type MyRanking, type PlayerStat } from '../../lib/profile';
+import { fetchMySports, addSport, removeSport, fetchPlayerStats, upsertSportStats, type ProfileSport, type PlayerStat } from '../../lib/profile';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 import { useRouter } from 'expo-router';
@@ -135,7 +135,6 @@ export default function ProfileScreen() {
 
   // Sports & stats
   const [mySports, setMySports] = useState<ProfileSport[]>([]);
-  const [ranking, setRanking] = useState<MyRanking | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerStat[]>([]);
   const [selectedStatSport, setSelectedStatSport] = useState('');
   const [showAddSport, setShowAddSport] = useState(false);
@@ -160,16 +159,14 @@ export default function ProfileScreen() {
     if (!user) return;
     const key = ++loadKey.current;
 
-    const [sports, rank, stats] = await Promise.all([
+    const [sports, stats] = await Promise.all([
       fetchMySports(user.id),
-      fetchMyRanking(),
       fetchPlayerStats(user.id),
     ]);
 
     // Discard result if a newer loadProfile call has already started
     if (key !== loadKey.current) return;
 
-    setRanking(rank);
     setMySports(sports);
 
     // Only show stats for sports the user has explicitly added to their profile
@@ -312,41 +309,32 @@ export default function ProfileScreen() {
           </View>
         </ImageBackground>
 
-        {/* Stats Card */}
-        <View style={styles.statsCard}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>{ranking?.matches ?? '—'}</Text>
-            <Text style={styles.statLbl}>Matches</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNum}>{ranking?.wins ?? '—'}</Text>
-            <Text style={styles.statLbl}>Wins</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={[styles.statNum, { color: '#f59e0b' }]}>
-              {ranking ? `${ranking.winRate}%` : '—'}
-            </Text>
-            <Text style={styles.statLbl}>Win Rate</Text>
-          </View>
-        </View>
-
-        {/* Area Ranking */}
-        {ranking && ranking.areaTotal > 1 && (
-          <View style={styles.rankCard}>
-            <View style={styles.rankLeft}>
-              <Ionicons name="trophy-outline" size={20} color="#f59e0b" />
-              <View>
-                <Text style={styles.rankTitle}>Area Ranking</Text>
-                <Text style={styles.rankSub}>{ranking.area || 'Your area'}</Text>
+        {/* Stats Card — aggregated from recorded player stats */}
+        {(() => {
+          const totalMatches = playerStats.reduce((s, p) => s + p.matches, 0);
+          const totalWins    = playerStats.reduce((s, p) => s + p.wins, 0);
+          const winRate      = totalMatches > 0 ? Math.round((totalWins / totalMatches) * 100) : 0;
+          return (
+            <View style={styles.statsCard}>
+              <View style={styles.statItem}>
+                <Text style={styles.statNum}>{mySports.length}</Text>
+                <Text style={styles.statLbl}>Sports</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statNum}>{totalMatches}</Text>
+                <Text style={styles.statLbl}>Matches</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={[styles.statNum, totalMatches > 0 && { color: '#16a34a' }]}>
+                  {totalMatches > 0 ? `${winRate}%` : '—'}
+                </Text>
+                <Text style={styles.statLbl}>Win Rate</Text>
               </View>
             </View>
-            <Text style={styles.rankBadge}>
-              #{ranking.areaRank} <Text style={styles.rankOf}>of {ranking.areaTotal}</Text>
-            </Text>
-          </View>
-        )}
+          );
+        })()}
 
         {/* Player Stats */}
         {(() => {
@@ -1005,27 +993,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoutConfirmText: { color: '#fff', fontWeight: '700' },
-  // Ranking
-  rankCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginTop: -8,
-    marginBottom: 8,
-    borderRadius: 12,
-    padding: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  rankLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  rankTitle: { fontWeight: '700', color: '#111827', fontSize: 14 },
-  rankSub: { color: '#6b7280', fontSize: 12 },
-  rankBadge: { fontSize: 22, fontWeight: '800', color: '#f59e0b' },
-  rankOf: { fontSize: 14, fontWeight: '400', color: '#6b7280' },
   longPressHint: { color: '#9ca3af', fontSize: 11, textAlign: 'center', marginTop: 4 },
   sportDetail: { fontSize: 10, color: '#6b7280', marginTop: 2 },
   // Add Sport Modal
