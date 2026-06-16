@@ -29,6 +29,8 @@ import {
   createTournament as dbCreateTournament,
 } from '../../lib/tournaments';
 import { getFormatsForSport } from '../../lib/sportRules';
+import DatePickerField from '../../components/DatePickerField';
+import LocationPickerModal from '../../components/LocationPickerModal';
 
 
 const TYPE_COLORS: Record<EventType, string> = {
@@ -71,8 +73,9 @@ export default function EarnScreen() {
   const [newSport, setNewSport] = useState('Football');
   const [newFormat, setNewFormat] = useState('3v3');
   const [newMaxParticipants, setNewMaxParticipants] = useState(6);
-  const [newDate, setNewDate] = useState('');
+  const [newDate, setNewDate] = useState<Date | null>(null);
   const [newLocation, setNewLocation] = useState('');
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [newFee, setNewFee] = useState('');
   const [newPrize, setNewPrize] = useState('');
 
@@ -155,12 +158,15 @@ export default function EarnScreen() {
     }
     setSaving(true);
     try {
+      const formattedDate = newDate
+        ? newDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+        : 'TBD';
       const saved = await dbCreateTournament(
         {
           name: newName.trim(),
           type: newType,
           sport: newSport,
-          date: newDate || 'TBD',
+          date: formattedDate,
           location: newLocation || '',
           entryFee: parseInt(newFee) || 0,
           prizePool: parseInt(newPrize) || 0,
@@ -182,7 +188,7 @@ export default function EarnScreen() {
       setNewSport('Football');
       setNewFormat('3v3');
       setNewMaxParticipants(6);
-      setNewDate('');
+      setNewDate(null);
       setNewLocation('');
       setNewFee('');
       setNewPrize('');
@@ -424,22 +430,23 @@ export default function EarnScreen() {
               <Text style={styles.formatHint}>Max {newMaxParticipants} players total</Text>
 
               <Text style={styles.fieldLabel}>Date</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="e.g. Jun 30, 2025"
-                placeholderTextColor="#9ca3af"
+              <DatePickerField
                 value={newDate}
-                onChangeText={setNewDate}
+                onChange={setNewDate}
+                placeholder="Select event date"
               />
 
               <Text style={styles.fieldLabel}>Location</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="e.g. Model Town Sports Complex"
-                placeholderTextColor="#9ca3af"
-                value={newLocation}
-                onChangeText={setNewLocation}
-              />
+              <TouchableOpacity
+                style={styles.locationTrigger}
+                onPress={() => setShowLocationPicker(true)}
+              >
+                <Ionicons name="location-outline" size={18} color={newLocation ? '#111827' : '#9ca3af'} />
+                <Text style={[styles.locationTriggerText, !newLocation && { color: '#9ca3af' }]} numberOfLines={1}>
+                  {newLocation || 'Pick location from map'}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
+              </TouchableOpacity>
 
               <View style={styles.twoCol}>
                 <View style={{ flex: 1 }}>
@@ -476,6 +483,13 @@ export default function EarnScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      <LocationPickerModal
+        visible={showLocationPicker}
+        sport={newSport}
+        onSelect={(loc) => { setNewLocation(loc); setShowLocationPicker(false); }}
+        onClose={() => setShowLocationPicker(false)}
+      />
     </View>
   );
 }
@@ -742,6 +756,13 @@ const styles = StyleSheet.create({
   successRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16 },
   successText: { color: '#16a34a', fontWeight: '700', fontSize: 16 },
   formContent: { padding: 16 },
+  locationTrigger: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10,
+    backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 13,
+    marginBottom: 14,
+  },
+  locationTriggerText: { flex: 1, fontSize: 14, color: '#111827' },
   fieldLabel: { fontWeight: '700', color: '#111827', fontSize: 14, marginBottom: 8 },
   typeRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   typeChip: {
