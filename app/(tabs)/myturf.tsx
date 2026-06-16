@@ -32,6 +32,7 @@ import { getFormatsForSport } from '../../lib/sportRules';
 import { type Booking, type MatchItem, type Tournament } from '../../data/mockData';
 import DatePickerField from '../../components/DatePickerField';
 import LocationPickerModal from '../../components/LocationPickerModal';
+import NotifBell from '../../components/NotifBell';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 
@@ -320,9 +321,7 @@ export default function MyTurfScreen() {
             <SafeAreaView edges={['top']}>
               <View style={styles.header}>
                 <Text style={styles.headerTitle}>My Turf</Text>
-                <TouchableOpacity onPress={() => router.push('/notifications')}>
-                  <Ionicons name="notifications-outline" size={24} color="#fff" />
-                </TouchableOpacity>
+                <NotifBell />
               </View>
             </SafeAreaView>
           </View>

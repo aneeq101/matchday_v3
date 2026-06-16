@@ -21,6 +21,7 @@ import {
 } from '../lib/profile';
 import { useAuth } from '../lib/AuthContext';
 import { isFollowing, followUser, unfollowUser } from '../lib/follows';
+import { createNotification } from '../lib/notifications';
 
 interface Props {
   player: Player | null;
@@ -138,7 +139,19 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
       if (ok) setFollowing(false);
     } else {
       const ok = await followUser(user.id, player.id);
-      if (ok) setFollowing(true);
+      if (ok) {
+        setFollowing(true);
+        const followerName =
+          user.user_metadata?.full_name ??
+          user.user_metadata?.name ??
+          user.email?.split('@')[0] ??
+          'Someone';
+        createNotification({
+          userId: player.id,
+          type: 'new_follower',
+          title: `${followerName} started following you`,
+        }).catch(() => {});
+      }
     }
     setFollowLoading(false);
   };

@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/AuthContext';
 import { fetchMySports, addSport, removeSport, fetchPlayerStats, upsertSportStats, type ProfileSport, type PlayerStat } from '../../lib/profile';
 import { fetchFollowCounts } from '../../lib/follows';
+import NotifBell from '../../components/NotifBell';
 
 const FIELD_IMAGE = 'https://images.unsplash.com/photo-1537020724888-8c2fb2b2ae7e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxicmlnaHQlMjBmb290YmFsbCUyMGZpZWxkJTIwZ3Jhc3N8ZW58MXx8fHwxNzY1NzM5NzA0fDA&ixlib=rb-4.1.0&q=80&w=1080';
 import { useRouter } from 'expo-router';
@@ -286,9 +287,12 @@ export default function ProfileScreen() {
           <SafeAreaView edges={['top']}>
             <View style={styles.headerTop}>
               <Text style={styles.headerTitle}>Profile</Text>
-              <TouchableOpacity onPress={() => router.push('/messages')}>
-                <Ionicons name="chatbubbles-outline" size={24} color="#fff" />
-              </TouchableOpacity>
+              <View style={styles.headerIcons}>
+                <NotifBell />
+                <TouchableOpacity onPress={() => router.push('/messages')}>
+                  <Ionicons name="chatbubbles-outline" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
             </View>
             <View style={styles.avatarSection}>
               <View style={styles.avatarCircle}>
@@ -818,6 +822,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  headerIcons: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   avatarSection: { alignItems: 'center', paddingBottom: 8 },
   avatarCircle: {
     width: 88,

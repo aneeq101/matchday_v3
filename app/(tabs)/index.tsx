@@ -24,6 +24,7 @@ import { PLAYERS, POSTS, playerDistanceKm, type Player, type Post } from '../../
 import { formatDistance } from '../../utils/geo';
 import { useUserLocation } from '../../hooks/useUserLocation';
 import PlayerProfileModal from '../../components/PlayerProfileModal';
+import NotifBell from '../../components/NotifBell';
 import { useAuth } from '../../lib/AuthContext';
 import { fetchPosts, createPost, toggleLike, fetchLikedPostIds, uploadPostMedia } from '../../lib/posts';
 import { fetchPlayers } from '../../lib/players';
@@ -237,9 +238,12 @@ export default function HoodScreen() {
             <SafeAreaView edges={['top']}>
               <View style={styles.header}>
                 <Text style={styles.headerTitle}>The Hood</Text>
-                <TouchableOpacity onPress={() => router.push('/messages')}>
-                  <Ionicons name="chatbubbles-outline" size={24} color="#fff" />
-                </TouchableOpacity>
+                <View style={styles.headerIcons}>
+                  <NotifBell />
+                  <TouchableOpacity onPress={() => router.push('/messages')}>
+                    <Ionicons name="chatbubbles-outline" size={24} color="#fff" />
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={styles.statsRow}>
                 <TouchableOpacity style={styles.statCard} onPress={() => setShowPlayersModal(true)}>
@@ -778,6 +782,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  headerIcons: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   statsRow: { flexDirection: 'row', gap: 10, padding: 12, paddingTop: 4 },
   statCard: {
     flex: 1,
