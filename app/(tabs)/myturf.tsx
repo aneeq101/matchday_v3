@@ -12,6 +12,7 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -632,7 +633,8 @@ export default function MyTurfScreen() {
                 <Ionicons name="close" size={24} color="#111827" />
               </TouchableOpacity>
             </View>
-            <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 14 }}>
 
               <Text style={styles.fieldLabel}>
                 Match Title<Text style={styles.required}> *</Text>
@@ -748,6 +750,7 @@ export default function MyTurfScreen() {
               </TouchableOpacity>
               <View style={{ height: 20 }} />
             </ScrollView>
+            </KeyboardAvoidingView>
           </SafeAreaView>
         </View>
       </Modal>

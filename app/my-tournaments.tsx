@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
   StatusBar, ActivityIndicator, Platform, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../lib/AuthContext';
-import { fetchMyOrganisedTournaments } from '../lib/tournaments';
+import { fetchMyOrganisedTournaments, fetchMyRegistrations } from '../lib/tournaments';
 import type { Tournament } from '../data/mockData';
 
 const TYPE_COLORS: Record<string, string> = {
@@ -24,14 +24,19 @@ const TYPE_LABELS: Record<string, string> = {
 export default function MyTournamentsScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const [events, setEvents]       = useState<Tournament[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [organised, setOrganised]     = useState<Tournament[]>([]);
+  const [registered, setRegistered]   = useState<Tournament[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
-    const data = await fetchMyOrganisedTournaments(user.id);
-    setEvents(data);
+    const [org, reg] = await Promise.all([
+      fetchMyOrganisedTournaments(user.id),
+      fetchMyRegistrations(user.id),
+    ]);
+    setOrganised(org);
+    setRegistered(reg);
     setLoading(false);
   }, [user]);
 
@@ -43,6 +48,8 @@ export default function MyTournamentsScreen() {
     setRefreshing(false);
   };
 
+  const total = organised.length + registered.length;
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#f59e0b" />
@@ -52,7 +59,7 @@ export default function MyTournamentsScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>My Tournaments</Text>
-          <Text style={styles.headerSub}>{events.length} event{events.length !== 1 ? 's' : ''} organised</Text>
+          <Text style={styles.headerSub}>{total} event{total !== 1 ? 's' : ''} total</Text>
         </View>
       </SafeAreaView>
 
@@ -60,27 +67,45 @@ export default function MyTournamentsScreen() {
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#f59e0b" />
         </View>
+      ) : total === 0 ? (
+        <View style={styles.center}>
+          <Ionicons name="trophy-outline" size={52} color="#d1d5db" />
+          <Text style={styles.emptyTitle}>No events yet</Text>
+          <Text style={styles.emptySub}>Events you create or join in the Earn tab will appear here</Text>
+        </View>
       ) : (
-        <FlatList
-          data={events}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={events.length === 0 ? styles.emptyContainer : styles.list}
+        <ScrollView
+          contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#f59e0b" />}
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Ionicons name="trophy-outline" size={52} color="#d1d5db" />
-              <Text style={styles.emptyTitle}>No events yet</Text>
-              <Text style={styles.emptySub}>Events you create in the Earn tab will appear here</Text>
-            </View>
-          }
-          renderItem={({ item }) => <EventCard event={item} />}
-        />
+        >
+          {organised.length > 0 && (
+            <>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="shield-checkmark-outline" size={16} color="#f59e0b" />
+                <Text style={styles.sectionTitle}>Organised by You</Text>
+                <Text style={styles.sectionCount}>{organised.length}</Text>
+              </View>
+              {organised.map((item) => <EventCard key={item.id} event={item} badge="Organiser" badgeColor="#f59e0b" />)}
+            </>
+          )}
+
+          {registered.length > 0 && (
+            <>
+              <View style={[styles.sectionHeader, organised.length > 0 && { marginTop: 8 }]}>
+                <Ionicons name="person-outline" size={16} color="#16a34a" />
+                <Text style={styles.sectionTitle}>Registered / Joined</Text>
+                <Text style={styles.sectionCount}>{registered.length}</Text>
+              </View>
+              {registered.map((item) => <EventCard key={item.id} event={item} badge="Registered" badgeColor="#16a34a" />)}
+            </>
+          )}
+        </ScrollView>
       )}
     </View>
   );
 }
 
-function EventCard({ event }: { event: Tournament }) {
+function EventCard({ event, badge, badgeColor }: { event: Tournament; badge: string; badgeColor: string }) {
   const typeColor = TYPE_COLORS[event.type] ?? '#16a34a';
   const typeLabel = TYPE_LABELS[event.type] ?? event.type;
   const progress  = event.maxParticipants > 0 ? event.participants / event.maxParticipants : 0;
@@ -111,13 +136,18 @@ function EventCard({ event }: { event: Tournament }) {
         </Text>
       </View>
 
-      {/* Fee / Prize */}
-      {(event.entryFee > 0 || event.prizePool > 0) && (
-        <View style={styles.moneyRow}>
-          {event.entryFee  > 0 && <Text style={styles.feeText}>Entry: PKR {event.entryFee.toLocaleString()}</Text>}
-          {event.prizePool > 0 && <Text style={styles.prizeText}>🏆 PKR {event.prizePool.toLocaleString()}</Text>}
+      {/* Fee / Prize + role badge */}
+      <View style={styles.cardFooter}>
+        <View style={[styles.roleBadge, { backgroundColor: badgeColor + '18' }]}>
+          <Text style={[styles.roleBadgeText, { color: badgeColor }]}>{badge}</Text>
         </View>
-      )}
+        {(event.entryFee > 0 || event.prizePool > 0) && (
+          <View style={styles.moneyRow}>
+            {event.entryFee  > 0 && <Text style={styles.feeText}>Entry: PKR {event.entryFee.toLocaleString()}</Text>}
+            {event.prizePool > 0 && <Text style={styles.prizeText}>🏆 PKR {event.prizePool.toLocaleString()}</Text>}
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -137,10 +167,18 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
   headerSub: { color: 'rgba(255,255,255,0.85)', fontSize: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 10, paddingHorizontal: 32 },
-  emptyContainer: { flex: 1 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#374151' },
   emptySub: { color: '#9ca3af', fontSize: 14, textAlign: 'center' },
   list: { padding: 14, gap: 12, paddingBottom: 40 },
+  sectionHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginBottom: 8, marginTop: 4,
+  },
+  sectionTitle: { flex: 1, fontWeight: '700', color: '#374151', fontSize: 14 },
+  sectionCount: {
+    fontSize: 12, fontWeight: '700', color: '#6b7280',
+    backgroundColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2,
+  },
   card: {
     backgroundColor: '#fff', borderRadius: 14, padding: 14,
     borderLeftWidth: 3,
@@ -157,7 +195,10 @@ const styles = StyleSheet.create({
   barBg: { flex: 1, height: 6, backgroundColor: '#f3f4f6', borderRadius: 3, overflow: 'hidden' },
   barFill: { height: 6, borderRadius: 3 },
   barLabel: { fontSize: 11, color: '#6b7280', flexShrink: 0 },
-  moneyRow: { flexDirection: 'row', gap: 14 },
+  cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  roleBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  roleBadgeText: { fontSize: 11, fontWeight: '700' },
+  moneyRow: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   feeText: { color: '#374151', fontSize: 12, fontWeight: '600' },
   prizeText: { color: '#16a34a', fontSize: 12, fontWeight: '700' },
 });

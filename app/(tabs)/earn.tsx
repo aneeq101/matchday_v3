@@ -12,6 +12,7 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -361,7 +362,8 @@ export default function EarnScreen() {
                 <Ionicons name="close" size={24} color="#111827" />
               </TouchableOpacity>
             </View>
-            <ScrollView contentContainerStyle={styles.formContent}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
               <Text style={styles.fieldLabel}>Event Type</Text>
               <View style={styles.typeRow}>
                 {EVENT_TYPES.map((t) => (
@@ -466,6 +468,7 @@ export default function EarnScreen() {
               </TouchableOpacity>
               <View style={{ height: 20 }} />
             </ScrollView>
+            </KeyboardAvoidingView>
           </SafeAreaView>
         </View>
       </Modal>

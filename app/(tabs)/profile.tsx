@@ -14,6 +14,7 @@ import {
   Alert,
   TextInput,
   ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -662,7 +663,8 @@ export default function ProfileScreen() {
                 <Ionicons name="close" size={24} color="#111827" />
               </TouchableOpacity>
             </View>
-            <ScrollView contentContainerStyle={styles.modalBody}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalBody}>
               {/* Match record row */}
               <Text style={styles.fieldLabel}>Match Record</Text>
               <View style={styles.matchRecordRow}>
@@ -709,6 +711,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
               <View style={{ height: 20 }} />
             </ScrollView>
+            </KeyboardAvoidingView>
           </SafeAreaView>
           </View>
         </View>
@@ -726,7 +729,8 @@ export default function ProfileScreen() {
                 <Ionicons name="close" size={24} color="#111827" />
               </TouchableOpacity>
             </View>
-            <ScrollView contentContainerStyle={styles.modalBody}>
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalBody}>
               <Text style={styles.fieldLabel}>Sport</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -785,6 +789,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
               <View style={{ height: 20 }} />
             </ScrollView>
+            </KeyboardAvoidingView>
           </SafeAreaView>
           </View>
         </View>

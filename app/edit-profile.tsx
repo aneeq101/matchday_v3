@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, StatusBar, Platform, ActivityIndicator, Alert,
+  ScrollView, StatusBar, Platform, ActivityIndicator, Alert, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -71,6 +71,7 @@ export default function EditProfileScreen() {
           <ActivityIndicator size="large" color="#16a34a" />
         </View>
       ) : (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <View style={styles.avatarSection}>
             <View style={styles.avatarCircle}>
@@ -115,6 +116,7 @@ export default function EditProfileScreen() {
 
           <Text style={styles.hint}>Email cannot be changed here. Manage it in account settings.</Text>
         </ScrollView>
+        </KeyboardAvoidingView>
       )}
     </View>
   );
