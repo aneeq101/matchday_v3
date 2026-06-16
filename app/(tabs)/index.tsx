@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { PLAYERS, POSTS, playerDistanceKm, type Player, type Post } from '../../data/mockData';
 import { formatDistance } from '../../utils/geo';
 import { useUserLocation } from '../../hooks/useUserLocation';
@@ -81,7 +82,7 @@ export default function HoodScreen() {
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [posts, setPosts] = useState<Post[]>(POSTS);
   const [posting, setPosting] = useState(false);
-  const [pickedMedia, setPickedMedia] = useState<{ uri: string; type: 'image' | 'video' } | null>(null);
+  const [pickedMedia, setPickedMedia] = useState<{ uri: string; type: 'image' | 'video'; mimeType?: string } | null>(null);
 
   const allSports = ['All', ...SPORTS];
 
@@ -158,7 +159,7 @@ export default function HoodScreen() {
     if (status !== 'granted') return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
@@ -166,6 +167,7 @@ export default function HoodScreen() {
       setPickedMedia({
         uri: asset.uri,
         type: asset.type === 'video' ? 'video' : 'image',
+        mimeType: asset.mimeType ?? undefined,
       });
     }
   };
@@ -179,7 +181,7 @@ export default function HoodScreen() {
     let mediaUrl: string | undefined;
     let mediaType: 'image' | 'video' | undefined;
     if (pickedMedia && user) {
-      const uploaded = await uploadPostMedia(user.id, pickedMedia.uri, pickedMedia.type);
+      const uploaded = await uploadPostMedia(user.id, pickedMedia.uri, pickedMedia.type, pickedMedia.mimeType);
       if (uploaded) { mediaUrl = uploaded; mediaType = pickedMedia.type; }
     }
 
@@ -207,6 +209,8 @@ export default function HoodScreen() {
       lookingFor,
       likes: 0,
       comments: 0,
+      mediaUrl,
+      mediaType,
     };
     setPosts((prev) => [newPost, ...prev]);
     setPosting(false);
@@ -408,7 +412,7 @@ export default function HoodScreen() {
           <SafeAreaView style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Create Post</Text>
-              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+              <TouchableOpacity onPress={() => { setShowCreateModal(false); setPickedMedia(null); }}>
                 <Ionicons name="close" size={24} color="#111827" />
               </TouchableOpacity>
             </View>
@@ -426,7 +430,11 @@ export default function HoodScreen() {
               {/* Media picker */}
               {pickedMedia ? (
                 <View style={styles.mediaPreviewBox}>
-                  <Image source={{ uri: pickedMedia.uri }} style={styles.mediaPreview} resizeMode="cover" />
+                  {pickedMedia.type === 'image' ? (
+                    <Image source={{ uri: pickedMedia.uri }} style={styles.mediaPreview} resizeMode="cover" />
+                  ) : (
+                    <PickedVideoPreview uri={pickedMedia.uri} />
+                  )}
                   <TouchableOpacity style={styles.mediaRemoveBtn} onPress={() => setPickedMedia(null)}>
                     <Ionicons name="close-circle" size={22} color="#ef4444" />
                   </TouchableOpacity>
@@ -560,6 +568,30 @@ export default function HoodScreen() {
   );
 }
 
+function PostVideoPlayer({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p) => { p.loop = true; });
+  return (
+    <VideoView
+      player={player}
+      style={styles.postMedia}
+      contentFit="cover"
+      nativeControls
+    />
+  );
+}
+
+function PickedVideoPreview({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p) => { p.loop = false; });
+  return (
+    <VideoView
+      player={player}
+      style={styles.mediaPreview}
+      contentFit="cover"
+      nativeControls
+    />
+  );
+}
+
 function PostCard({
   post,
   liked,
@@ -599,6 +631,9 @@ function PostCard({
       {/* Media */}
       {post.mediaUrl && post.mediaType === 'image' && (
         <Image source={{ uri: post.mediaUrl }} style={styles.postMedia} resizeMode="cover" />
+      )}
+      {post.mediaUrl && post.mediaType === 'video' && (
+        <PostVideoPlayer uri={post.mediaUrl} />
       )}
 
       <View style={styles.tagRow}>

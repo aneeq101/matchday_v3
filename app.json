@@ -35,7 +35,8 @@
           "locationAlwaysAndWhenInUsePermission": "MatchDay needs your location to show venues and players near you."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

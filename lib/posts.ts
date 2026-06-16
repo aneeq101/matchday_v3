@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from './supabase';
 import { POSTS, type Post } from '../data/mockData';
 
@@ -46,23 +48,61 @@ export async function fetchPosts(): Promise<Post[]> {
 export async function uploadPostMedia(
   userId: string,
   uri: string,
-  type: 'image' | 'video'
+  type: 'image' | 'video',
+  mimeType?: string
 ): Promise<string | null> {
-  const ext = type === 'image' ? 'jpg' : 'mp4';
+  const contentType = mimeType ?? (type === 'image' ? 'image/jpeg' : 'video/mp4');
+  const ext = contentType.split('/')[1]?.replace('quicktime', 'mov') ?? (type === 'image' ? 'jpg' : 'mp4');
   const path = `${userId}/${Date.now()}.${ext}`;
-  const contentType = type === 'image' ? 'image/jpeg' : 'video/mp4';
 
-  const response = await fetch(uri);
-  const blob = await response.blob();
+  try {
+    // Videos can be 100 MB+ — loading into an ArrayBuffer OOMs on Android.
+    // Use FileSystem.uploadAsync for native video: it streams the file directly.
+    if (type === 'video' && Platform.OS !== 'web') {
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token ?? anonKey;
 
-  const { error } = await supabase.storage
-    .from('post-media')
-    .upload(path, blob, { contentType, upsert: false });
+      const uploadUrl = `${supabaseUrl}/storage/v1/object/post-media/${path}`;
+      const result = await FileSystem.uploadAsync(uploadUrl, uri, {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': contentType,
+          'x-upsert': 'false',
+        },
+      });
 
-  if (error) return null;
+      if (result.status < 200 || result.status >= 300) {
+        console.error('[uploadPostMedia] video upload failed:', result.status, result.body);
+        return null;
+      }
 
-  const { data } = supabase.storage.from('post-media').getPublicUrl(path);
-  return data.publicUrl;
+      const { data } = supabase.storage.from('post-media').getPublicUrl(path);
+      return data.publicUrl;
+    }
+
+    // Images are small — ArrayBuffer is fine on all platforms including web.
+    const response = await fetch(uri);
+    const arrayBuffer = await response.arrayBuffer();
+
+    const { error } = await supabase.storage
+      .from('post-media')
+      .upload(path, arrayBuffer, { contentType, upsert: false });
+
+    if (error) {
+      console.error('[uploadPostMedia] storage error:', error.message);
+      return null;
+    }
+
+    const { data } = supabase.storage.from('post-media').getPublicUrl(path);
+    return data.publicUrl;
+  } catch (err) {
+    console.error('[uploadPostMedia] error:', err);
+    return null;
+  }
 }
 
 export async function createPost(params: {
