@@ -30,6 +30,7 @@ import BookMap from '../../components/BookMap';
 import DatePickerField from '../../components/DatePickerField';
 import { getFormatsForSport } from '../../lib/sportRules';
 import { createNotification } from '../../lib/notifications';
+import { fetchVenues } from '../../lib/venues';
 
 const LIVE_SEARCH_ENABLED = false;
 const PEEK_HEIGHT = 168; // px visible when sheet is at its lowest snap
@@ -162,6 +163,7 @@ export default function BookScreen() {
   const [searchText, setSearchText]       = useState('');
   const [radius, setRadius]               = useState(5);
   const [selectedFilter, setSelectedFilter] = useState<SportFilter>(SPORT_FILTERS[0]);
+  const [dbVenues, setDbVenues]           = useState<Venue[]>(VENUES);
   const [liveVenues, setLiveVenues]       = useState<Venue[]>([]);
   const [liveLoading, setLiveLoading]     = useState(false);
   const [liveError, setLiveError]         = useState(false);
@@ -278,6 +280,11 @@ export default function BookScreen() {
     }),
   ).current;
 
+  // Load venues from Supabase — renders mock instantly, swaps in DB data on load
+  useEffect(() => {
+    fetchVenues().then(setDbVenues);
+  }, []);
+
   // ── Live venue search ──
   useEffect(() => {
     if (!LIVE_SEARCH_ENABLED) return;
@@ -306,7 +313,7 @@ export default function BookScreen() {
   }, [selectedSport]);
 
   // ── Venue filtering ──
-  const searchSportMockVenues = VENUES.filter((v) => {
+  const searchSportMockVenues = dbVenues.filter((v) => {
     if (!v.coord) return false;
     const matchSearch =
       searchText === '' ||
