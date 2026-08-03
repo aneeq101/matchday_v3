@@ -84,7 +84,7 @@ utils/
 
 **BOOKING_SPORTS:** `['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton', 'Baseball']`
 
-**Currency note:** UI shows "PKR" hardcoded — known bug, not yet fixed. GTA venue prices are in CAD but displayed with PKR label.
+**Currency note:** UI shows "CAD" hardcoded (fixed 2026-08-03 — was "PKR", a mislabel left over from when venues/tournaments were Lahore-based). Matches Book and Play to Earn screens, both GTA-based now.
 
 **Map vs List venue sets (important):**
 - `mapVenues` = search + sport filter only, **no radius filter** — markers never disappear when user zooms or changes radius

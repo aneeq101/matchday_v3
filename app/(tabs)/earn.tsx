@@ -59,6 +59,8 @@ export default function EarnScreen() {
   const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState('All');
   const [registerEvent, setRegisterEvent] = useState<Tournament | null>(null);
+  const [registering, setRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState('');
   const [leaveEvent, setLeaveEvent] = useState<Tournament | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -109,20 +111,40 @@ export default function EarnScreen() {
   const filtered = activeFilter === 'All' ? events : events.filter((e) => e.type === activeFilter);
 
   const handleRegister = async () => {
-    if (!registerEvent) return;
-    setRegisterSuccess(true);
-    if (user) {
-      await registerForTournament(registerEvent.id, user.id);
+    if (!registerEvent || registering) return;
+    setRegisterError('');
+
+    if (!user) {
       setRegisteredIds((prev) => new Set(prev).add(registerEvent.id));
-      // Increment local count
-      setEvents((prev) =>
-        prev.map((e) =>
-          e.id === registerEvent.id ? { ...e, participants: e.participants + 1 } : e
-        )
-      );
-    } else {
-      setRegisteredIds((prev) => new Set(prev).add(registerEvent.id));
+      setRegisterSuccess(true);
+      setTimeout(() => {
+        setRegisterSuccess(false);
+        setRegisterEvent(null);
+      }, 1600);
+      return;
     }
+
+    if (registerEvent.maxParticipants > 0 && registerEvent.participants >= registerEvent.maxParticipants) {
+      setRegisterError('This event is full.');
+      return;
+    }
+
+    setRegistering(true);
+    const { ok, error } = await registerForTournament(registerEvent.id, user.id);
+    setRegistering(false);
+
+    if (!ok) {
+      setRegisterError(error ?? 'Failed to register. Please try again.');
+      return;
+    }
+
+    setRegisteredIds((prev) => new Set(prev).add(registerEvent.id));
+    setEvents((prev) =>
+      prev.map((e) =>
+        e.id === registerEvent.id ? { ...e, participants: e.participants + 1 } : e
+      )
+    );
+    setRegisterSuccess(true);
     setTimeout(() => {
       setRegisterSuccess(false);
       setRegisterEvent(null);
@@ -156,6 +178,15 @@ export default function EarnScreen() {
       Alert.alert('Name required', 'Please enter an event name.');
       return;
     }
+    if (newDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const selected = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate());
+      if (selected < today) {
+        Alert.alert('Invalid date', 'Event date cannot be in the past.');
+        return;
+      }
+    }
     setSaving(true);
     try {
       const formattedDate = newDate
@@ -168,8 +199,8 @@ export default function EarnScreen() {
           sport: newSport,
           date: formattedDate,
           location: newLocation || '',
-          entryFee: parseInt(newFee) || 0,
-          prizePool: parseInt(newPrize) || 0,
+          entryFee: Math.max(0, parseInt(newFee) || 0),
+          prizePool: Math.max(0, parseInt(newPrize) || 0),
           maxParticipants: newMaxParticipants,
         },
         user?.id ?? null
@@ -249,7 +280,7 @@ export default function EarnScreen() {
             key={event.id}
             event={event}
             registered={registeredIds.has(event.id)}
-            onRegister={() => setRegisterEvent(event)}
+            onRegister={() => { setRegisterError(''); setRegisterEvent(event); }}
             onLeave={() => setLeaveEvent(event)}
           />
         ))}
@@ -281,15 +312,15 @@ export default function EarnScreen() {
                   <Text style={styles.feeTitle}>Fee Breakdown</Text>
                   <View style={styles.feeRow}>
                     <Text style={styles.feeLbl}>Entry Fee</Text>
-                    <Text style={styles.feeVal}>PKR {registerEvent.entryFee.toLocaleString()}</Text>
+                    <Text style={styles.feeVal}>CAD {registerEvent.entryFee.toLocaleString()}</Text>
                   </View>
                   <View style={styles.feeRow}>
                     <Text style={styles.feeLbl}>Platform Fee</Text>
-                    <Text style={styles.feeVal}>PKR 0</Text>
+                    <Text style={styles.feeVal}>CAD 0</Text>
                   </View>
                   <View style={[styles.feeRow, styles.feeTotalRow]}>
                     <Text style={styles.feeTotalLbl}>Total</Text>
-                    <Text style={styles.feeTotalVal}>PKR {registerEvent.entryFee.toLocaleString()}</Text>
+                    <Text style={styles.feeTotalVal}>CAD {registerEvent.entryFee.toLocaleString()}</Text>
                   </View>
                 </View>
 
@@ -300,15 +331,29 @@ export default function EarnScreen() {
                   </Text>
                 </View>
 
+                {registerError !== '' && (
+                  <Text style={styles.registerErrorText}>{registerError}</Text>
+                )}
+
                 {registerSuccess ? (
                   <View style={styles.successRow}>
                     <Ionicons name="checkmark-circle" size={22} color="#16a34a" />
                     <Text style={styles.successText}>Successfully Registered!</Text>
                   </View>
                 ) : (
-                  <TouchableOpacity style={styles.confirmBtn} onPress={handleRegister}>
-                    <Ionicons name="trophy-outline" size={18} color="#fff" />
-                    <Text style={styles.confirmBtnText}>Confirm Registration</Text>
+                  <TouchableOpacity
+                    style={[styles.confirmBtn, registering && styles.confirmBtnDisabled]}
+                    onPress={handleRegister}
+                    disabled={registering}
+                  >
+                    {registering ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="trophy-outline" size={18} color="#fff" />
+                        <Text style={styles.confirmBtnText}>Confirm Registration</Text>
+                      </>
+                    )}
                   </TouchableOpacity>
                 )}
 
@@ -451,7 +496,7 @@ export default function EarnScreen() {
 
               <View style={styles.twoCol}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldLabel}>Entry Fee (PKR)</Text>
+                  <Text style={styles.fieldLabel}>Entry Fee (CAD)</Text>
                   <TextInput
                     style={styles.formInput}
                     placeholder="0"
@@ -462,7 +507,7 @@ export default function EarnScreen() {
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldLabel}>Prize Pool (PKR)</Text>
+                  <Text style={styles.fieldLabel}>Prize Pool (CAD)</Text>
                   <TextInput
                     style={styles.formInput}
                     placeholder="0"
@@ -507,6 +552,7 @@ function EventCard({
   onLeave: () => void;
 }) {
   const progress = event.maxParticipants > 0 ? event.participants / event.maxParticipants : 0;
+  const isFull = event.maxParticipants > 0 && event.participants >= event.maxParticipants;
   const typeColor = TYPE_COLORS[event.type];
 
   return (
@@ -543,9 +589,9 @@ function EventCard({
 
       <View style={styles.eventFooter}>
         <View>
-          <Text style={styles.feeLabel}>Entry: <Text style={styles.feeAmount}>PKR {event.entryFee.toLocaleString()}</Text></Text>
+          <Text style={styles.feeLabel}>Entry: <Text style={styles.feeAmount}>CAD {event.entryFee.toLocaleString()}</Text></Text>
           {event.prizePool > 0 && (
-            <Text style={styles.prizeLabel}>Prize: <Text style={styles.prizeAmount}>PKR {event.prizePool.toLocaleString()}</Text></Text>
+            <Text style={styles.prizeLabel}>Prize: <Text style={styles.prizeAmount}>CAD {event.prizePool.toLocaleString()}</Text></Text>
           )}
         </View>
         {registered ? (
@@ -557,6 +603,10 @@ function EventCard({
             <TouchableOpacity style={styles.leaveSmallBtn} onPress={onLeave}>
               <Text style={styles.leaveSmallText}>Leave</Text>
             </TouchableOpacity>
+          </View>
+        ) : isFull ? (
+          <View style={styles.fullBadge}>
+            <Text style={styles.fullBadgeText}>Event Full</Text>
           </View>
         ) : (
           <TouchableOpacity
@@ -652,6 +702,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   registeredText: { color: '#16a34a', fontWeight: '600', fontSize: 13 },
+  fullBadge: {
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 8,
+  },
+  fullBadgeText: { color: '#6b7280', fontWeight: '700', fontSize: 13 },
   leaveSmallBtn: {
     borderWidth: 1.5,
     borderColor: '#ef4444',
@@ -755,6 +812,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   confirmBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  confirmBtnDisabled: { opacity: 0.6 },
+  registerErrorText: { color: '#ef4444', fontSize: 13, textAlign: 'center', marginBottom: 12 },
   successRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16 },
   successText: { color: '#16a34a', fontWeight: '700', fontSize: 16 },
   formContent: { padding: 16 },

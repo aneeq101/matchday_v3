@@ -45,11 +45,18 @@ export async function fetchRegisteredIds(userId: string): Promise<Set<string>> {
 export async function registerForTournament(
   tournamentId: string,
   userId: string
-): Promise<boolean> {
+): Promise<{ ok: boolean; error?: string }> {
   const { error } = await supabase
     .from('tournament_registrations')
     .insert({ tournament_id: tournamentId, user_id: userId });
-  return !error;
+  if (!error) return { ok: true };
+  if (error.code === '23505') {
+    return { ok: false, error: 'You are already registered for this event.' };
+  }
+  if (error.message?.toLowerCase().includes('full')) {
+    return { ok: false, error: 'This event is full.' };
+  }
+  return { ok: false, error: 'Failed to register. Please try again.' };
 }
 
 export async function unregisterFromTournament(

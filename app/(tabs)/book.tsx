@@ -575,7 +575,7 @@ export default function BookScreen() {
                     <Text style={styles.venueSummaryAddr}>{bookingVenue.address}</Text>
                     {bookingVenue.pricePerHour > 0 ? (
                       <Text style={styles.venueSummaryPrice}>
-                        PKR {bookingVenue.pricePerHour.toLocaleString()}/hr
+                        CAD {bookingVenue.pricePerHour.toLocaleString()}/hr
                       </Text>
                     ) : (
                       <Text style={[styles.venueSummaryPrice, { color: '#6b7280' }]}>
@@ -685,9 +685,9 @@ export default function BookScreen() {
                   <View style={styles.totalBox}>
                     <View style={styles.totalRow}>
                       <Text style={styles.totalLbl}>
-                        PKR {bookingVenue.pricePerHour.toLocaleString()} × {selectedDuration}h
+                        CAD {bookingVenue.pricePerHour.toLocaleString()} × {selectedDuration}h
                       </Text>
-                      <Text style={styles.totalAmt}>PKR {totalPrice.toLocaleString()}</Text>
+                      <Text style={styles.totalAmt}>CAD {totalPrice.toLocaleString()}</Text>
                     </View>
                   </View>
                 )}
@@ -736,7 +736,7 @@ export default function BookScreen() {
               {totalPrice > 0 && (
                 <View style={styles.confirmRow}>
                   <Ionicons name="cash-outline" size={16} color="#16a34a" />
-                  <Text style={styles.confirmRowText}>PKR {totalPrice.toLocaleString()}</Text>
+                  <Text style={styles.confirmRowText}>CAD {totalPrice.toLocaleString()}</Text>
                 </View>
               )}
             </View>
@@ -779,7 +779,7 @@ function VenueCard({
         <View style={styles.cardBottomRow}>
           {venue.pricePerHour > 0 ? (
             <Text style={styles.cardPrice}>
-              PKR {venue.pricePerHour.toLocaleString()}
+              CAD {venue.pricePerHour.toLocaleString()}
               <Text style={styles.perHr}>/hr</Text>
             </Text>
           ) : (
