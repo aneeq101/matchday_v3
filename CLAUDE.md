@@ -6,7 +6,7 @@ Auto-loaded by Claude Code at session start. Keep this current as the project ev
 
 ## What This App Is
 
-**MatchDay** — Expo (React Native + web) sports social network and venue booking app. Players find nearby players, organise matches, join tournaments, and book sports venues. Uses real GPS. No backend yet — all data is local mock data.
+**MatchDay** — Expo (React Native + web) sports social network and venue booking app. Players find nearby players, organise matches, join tournaments, and book sports venues. Uses real GPS. Backend is Supabase (auth, Postgres + PostGIS, Realtime, Storage); screens show local mock data first and fall back to it if the database can't be reached.
 
 **Owner / git user:** aneeq101 | **Repo:** aneeq101/matchday_v3 | **Branch:** main
 
@@ -206,7 +206,7 @@ Full plan in `PLAN.md`. Summary:
 - **Privacy & Security** — `app/privacy.tsx` (show-in-nearby, push toggle, change password, sign out everywhere, delete account via `delete_my_account()` RPC). Profile tab Privacy & Messaging card now persists to `profiles` (`privacy`, `allow_messages`, `messages_from`) via `lib/settings.ts`; enforced server-side in `get_or_create_conversation` (raises `MESSAGES_DISABLED`) — use `openConversation()` from `lib/chatService.ts` to get a user-facing error. "Friends Only" = `privacy='private'` → visible only to people the user follows (profiles_select policy).
 - **Help & Support** — `app/help.tsx` (FAQ + contact form → `support_tickets`), `lib/support.ts`.
 - **Nearby players (PostGIS)** — `profiles.latitude/longitude/location` (+ sync trigger), `nearby_players(lat,lng,radius_km)` RPC; Hood saves user location and calls `fetchNearbyPlayers()`; falls back to demo players if RPC fails / nobody nearby.
-- **Push notifications** — `lib/push.ts` (expo-notifications), tokens in private `push_tokens` table. DB triggers send via Expo push API using `pg_net`: every `notifications` row + every chat message. Needs `npx eas init` (EAS projectId) + a dev/production build; not supported on web or Expo Go Android.
+- **Push notifications** — `lib/push.ts` (expo-notifications), tokens in private `push_tokens` table. DB triggers send via Expo push API using `pg_net`: every `notifications` row + every chat message. EAS project linked 2026-09-30 (`@aneeq101/matchday-v3`, projectId `9fc1c7c7-af97-4887-a623-6f9c13d2b077` in app.json). Still needs Firebase/FCM + a build — see "Your to-do list". Not supported on web or Expo Go Android.
 - **Payment Methods** — intentionally still "coming soon" (Stripe deferred).
 - **EAS** — `eas.json` added (development / preview APK / production). `@supabase/supabase-js` pinned to **2.105.4**: 2.106+ contains a dynamic `import()` that Hermes can't compile, which breaks release builds.
 
@@ -223,8 +223,61 @@ Full plan in `PLAN.md`. Summary:
 - **Challenge venues**: "Where" opens `components/VenueList.tsx` — venues from `fetchVenues()` filtered to the challenge's sport, nearest first, or type a custom place.
 - SQL was tested locally against a Postgres+PostGIS container with Supabase stubs (auth.uid, roles, net.http_post) replaying all lib/db migrations.
 
+## Progress log
+
+| Date | What was done | Commit |
+|---|---|---|
+| 2026-08-03 | Venues moved to Supabase; Play to Earn registration made foolproof; tournaments moved to GTA/CAD | `0c4076c`, `143556b` |
+| 2026-09-30 | My Teams, Statistics, Privacy & Security, Help & Support, persisted privacy/messaging settings, PostGIS nearby players, push notification plumbing, eas.json, supabase-js pinned | `96cd848` |
+| 2026-09-30 | Tournament brackets (knockout + league), challenge matches, challenge venue picker, sport-based min/max entry rules, sign-up counter/guard RLS bug fixed | `d737d31` |
+| 2026-09-30 | EAS project linked (`eas init`) — push setup started, waiting on Firebase | (this commit) |
+
+**SQL status:** every file in `lib/db/` has been run in Supabase (latest: `patch_phase4_complete.sql`, `patch_brackets_challenges.sql`, `patch_event_rules.sql`, all 2026-09-30). Nothing pending.
+
+## Your to-do list (things only the owner can do)
+
+1. **Firebase for Android push (needed before the first build):**
+   1. console.firebase.google.com → Create project "MatchDay".
+   2. Add an **Android** app, package name `com.matchday.app` → download `google-services.json` → put it in the project root next to `app.json`.
+   3. Project settings → Service accounts → **Generate new private key** → upload that JSON at expo.dev → matchday-v3 → Credentials → Android → FCM V1 service account key. Do **not** put this key in the repo.
+   4. Tell Claude — it will add `android.googleServicesFile` to app.json, start `eas build --profile preview --platform android` (APK, builds on Expo's servers), and send a test push once the app is installed and signed in.
+2. **iPhone push (optional):** needs a paid Apple Developer account ($99/yr). Decide whether to do iOS now or later.
+3. **Codespace idle timeout:** github.com/settings/codespaces → Default idle timeout → 240 min (may only apply to new codespaces). Current codespace is 30 min.
+4. **Try the new features in the app** (never clicked through by Claude — only DB-tested): create a tournament, sign up, start it, enter results; send a challenge to a demo player and record a result; pick a venue in a challenge.
+5. **Later:** Stripe (Phase 5); App Store / Play Store developer accounts for submission.
+
 ## What's NOT Done Yet (Backend / Features)
 
 - Payments / Stripe (Phase 5)
-- `npx eas init` + first EAS build, App Store / Play Store submission, Sentry/analytics (Phase 6)
+- Push: Firebase/FCM credentials + first EAS build (see to-do list); App Store / Play Store submission; Sentry/analytics (Phase 6)
 - The Hood demo players/posts are still Lahore-themed (kept intentionally as dummy data)
+
+## ⚠️ Bring up at the start of the next session (review only — NOT implemented yet)
+
+The owner asked (2026-09-30) to be reminded of these next time and to decide before any work starts. Nothing below has been changed.
+
+### Redundancies found
+1. **Three different "match" concepts.** (a) *Organize Match* in My Turf (`matches` / `match_players` tables, `lib/matches.ts`); (b) Play to Earn events of type **"Match"** (`tournaments.type = 'match'`, "Sunday Pickup Football"); (c) **Challenges** (`challenges` table). (a) and (b) are basically the same thing (a pickup game people join). Suggest: drop the "Match" type from Play to Earn and keep Organize Match; keep Challenges as the competitive 1-v-1 / team-v-team option.
+2. **Tournament lists shown in three places.** Play to Earn tab, `app/my-tournaments.tsx`, and the "My Events" section in My Turf all list the same events with three different card designs. Suggest one shared `EventCard` component, and consider making My Tournaments a filter ("Mine") on the Play to Earn tab instead of a separate screen.
+3. **Two sign-up flows for events.** The Register sheet in `earn.tsx` (player events) and the Sign Up button on `app/tournament.tsx` (all events). Suggest the list's button always opens the details page, so there's one flow.
+4. **Two venue pickers.** `components/LocationPickerModal.tsx` (map + list, all venues, uses mock `VENUES`) and `components/VenueList.tsx` (list, filtered by sport, uses live DB venues). Suggest one picker filtered by sport, using DB venues, with an optional map view.
+5. **Stats in two places.** Profile tab stats + Record Stats vs `app/statistics.tsx`. Fine to keep both, but the Profile section could become a compact summary that links to Statistics.
+6. **Repeated code (copy-pasted in many files):** the UUID check (5 files), sport→emoji maps (9 places), event type colours/labels (4 files), the confirm dialog (6 screens), the coloured back-button header (12 screens). Suggest shared `lib/constants.ts` (emoji, colours, UUID) + `components/ConfirmDialog.tsx` + `components/ScreenHeader.tsx`.
+7. **Notifications created in two ways.** Some from the app (`createNotification`, 6 calls — team joins/invites, match joins, follows), some by the database (tournaments, challenges). Moving the remaining ones into DB functions would make them reliable and stop anyone faking a notification (the `notifications_insert` policy currently allows any insert).
+8. **Very large screen files.** `myturf.tsx` (~1380 lines), `profile.tsx` (~1150), `index.tsx` (~1140), `book.tsx` (~1045), `earn.tsx` (~1000). Hard to maintain; split into section components.
+9. **Leftover mock data shown to signed-in users.** The Hood starts with mock players/posts (Lahore-themed), Messages shows mock conversations when signed out, and mock venues are used in `LocationPickerModal`. Decide what should stay as demo content.
+10. **Alert buttons that don't work on web.** `Alert.alert` with Cancel/Confirm buttons does nothing on web in `comments.tsx` (delete comment), `profile.tsx` (remove sport) and `auth/callback.tsx`. Replace with the in-app confirm dialog.
+
+### UI / UX improvement ideas
+1. **One clear home for competing.** The Play to Earn tab name is confusing now that it holds brackets and leagues; consider "Compete" with sections: Tournaments · Leagues · Challenges.
+2. **Loading states:** 15 screens use a full-screen spinner; skeleton cards would feel faster.
+3. **Backgrounds:** 9 screens load the grass background from pollinations.ai at runtime (slow on mobile data, and breaks if that site is down). Bundle it as a local image asset.
+4. **Consistent headers and colours:** each standalone screen has its own header colour (green / purple / orange / amber / blue). Pick one header style and use colour only for accents.
+5. **Empty states with a next step** everywhere (some screens have them, some just show nothing).
+6. **Accessibility:** no `accessibilityLabel`s anywhere; icon-only buttons (bell, +, back) are invisible to screen readers. Also check text contrast on the grass background.
+7. **Bracket on phones:** big brackets (16+) need horizontal scrolling; add pinch-zoom or a "list by round" toggle, and auto-scroll to the viewer's next match.
+8. **Challenges:** show challenge wins on player profiles, add a simple leaderboard, and let people message the opponent from the challenge card.
+9. **Book a venue from a challenge:** once a venue is picked, offer "Book this court" to jump straight into the booking sheet.
+10. **Onboarding:** first-launch walkthrough (pick sports, allow location, allow notifications) instead of asking permissions cold.
+11. **Pull-to-refresh + "last updated"** consistently on all lists; show a small banner when the app is showing demo data because the database couldn't be reached.
+12. **Forms:** one date+time picker style everywhere; inline validation messages instead of pop-up alerts (Create Event still uses Alerts).

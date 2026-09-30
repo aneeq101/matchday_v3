@@ -16,7 +16,11 @@
           "apiKey": "AIzaSyCC5Cme6s4EQBadO-raF1NVDciW0HJwrL4"
         }
       },
-      "package": "com.matchday.app"
+      "package": "com.matchday.app",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "ios": {
       "supportsTablet": true,
@@ -49,6 +53,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9fc1c7c7-af97-4887-a623-6f9c13d2b077"
+      }
+    },
+    "owner": "aneeq101"
   }
 }
