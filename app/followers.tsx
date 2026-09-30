@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  StatusBar, ActivityIndicator, Platform, Image, RefreshControl,
+  StatusBar, ActivityIndicator, Platform, Image, RefreshControl, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,10 @@ import {
   fetchFollowers, fetchFollowing, followUser, unfollowUser,
   type FollowUser,
 } from '../lib/follows';
+import { fetchPlayer } from '../lib/players';
+import { openConversation } from '../lib/chatService';
+import PlayerProfileModal from '../components/PlayerProfileModal';
+import type { Player } from '../data/mockData';
 
 type Tab = 'followers' | 'following';
 
@@ -26,6 +30,19 @@ export default function FollowersScreen() {
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [toggling, setToggling]   = useState<string | null>(null);
+  const [profile, setProfile]     = useState<Player | null>(null);
+
+  const openProfile = async (id: string) => {
+    const p = await fetchPlayer(id);
+    if (p) setProfile(p);
+  };
+
+  const messagePlayer = async (p: Player) => {
+    setProfile(null);
+    const res = await openConversation(p.id);
+    if (res.error !== undefined) { Alert.alert('Can\'t message', res.error); return; }
+    router.push({ pathname: '/chat', params: { id: res.id, name: p.name, initials: p.initials, color: p.avatarColor } });
+  };
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -121,7 +138,7 @@ export default function FollowersScreen() {
             const isMe = item.id === user?.id;
             const isFollowingThem = followingIds.has(item.id);
             return (
-              <View style={styles.row}>
+              <TouchableOpacity style={styles.row} onPress={() => openProfile(item.id)} disabled={isMe} activeOpacity={0.7}>
                 {item.avatarUrl ? (
                   <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
                 ) : (
@@ -131,6 +148,7 @@ export default function FollowersScreen() {
                 )}
                 <View style={styles.rowInfo}>
                   <Text style={styles.rowName}>{item.name}</Text>
+                  {!isMe && <Text style={styles.rowHint}>View profile · Challenge</Text>}
                 </View>
                 {!isMe && (
                   <TouchableOpacity
@@ -145,11 +163,13 @@ export default function FollowersScreen() {
                         </Text>}
                   </TouchableOpacity>
                 )}
-              </View>
+              </TouchableOpacity>
             );
           }}
         />
       )}
+
+      <PlayerProfileModal player={profile} onClose={() => setProfile(null)} onMessage={messagePlayer} />
     </View>
   );
 }
@@ -172,6 +192,7 @@ const styles = StyleSheet.create({
   tabBtnActive: { borderBottomColor: '#16a34a' },
   tabText: { fontSize: 14, color: '#6b7280', fontWeight: '600' },
   tabTextActive: { color: '#16a34a' },
+  rowHint: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 10, paddingHorizontal: 32 },
   emptyContainer: { flex: 1 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#374151' },

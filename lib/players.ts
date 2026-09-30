@@ -45,6 +45,17 @@ export async function fetchPlayers(): Promise<Player[]> {
   return data.map(dbToPlayer);
 }
 
+/** One player's profile (for opening their profile from any list). Null if not found. */
+export async function fetchPlayer(id: string): Promise<Player | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*, profile_sports(*)')
+    .eq('id', id)
+    .maybeSingle();
+  if (error || !data) return PLAYERS.find((p) => p.id === id) ?? null;
+  return dbToPlayer(data as Record<string, unknown>);
+}
+
 /**
  * Real players within radiusKm of the given point, nearest first (PostGIS, server-side).
  * Returns null if the RPC isn't available so callers can fall back.

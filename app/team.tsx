@@ -11,7 +11,8 @@ import {
   fetchTeam, fetchTeamMembers, addTeamMember, removeTeamMember, deleteTeam, updateTeam,
   type Team, type TeamMember,
 } from '../lib/teams';
-import { fetchPlayers } from '../lib/players';
+import { fetchPlayers, fetchPlayer } from '../lib/players';
+import PlayerProfileModal from '../components/PlayerProfileModal';
 import { openConversation } from '../lib/chatService';
 import { createNotification } from '../lib/notifications';
 import TeamFormModal, { TEAM_SPORT_EMOJI } from '../components/TeamFormModal';
@@ -36,6 +37,13 @@ export default function TeamScreen() {
   const [players, setPlayers]       = useState<Player[]>([]);
   const [search, setSearch]         = useState('');
   const [addingId, setAddingId]     = useState<string | null>(null);
+  const [profile, setProfile]       = useState<Player | null>(null);
+
+  const openProfile = async (userId: string) => {
+    if (userId === user?.id) return;
+    const p = await fetchPlayer(userId);
+    if (p) setProfile(p);
+  };
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -241,11 +249,31 @@ export default function TeamScreen() {
           </TouchableOpacity>
         ) : null}
 
+        {/* Challenge this team (anyone who isn't in it) */}
+        {!isMember && !isCaptain && (
+          <TouchableOpacity
+            style={styles.challengeBtn}
+            onPress={() => router.push({
+              pathname: '/challenges',
+              params: { kind: 'team', opponentId: team.id, opponentName: team.name, sport: team.sport },
+            })}
+          >
+            <Ionicons name="flash" size={18} color="#f97316" />
+            <Text style={styles.challengeText}>Challenge this Team</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Members */}
         <Text style={styles.sectionTitle}>Members</Text>
         <View style={styles.listCard}>
           {members.map((m, i) => (
-            <View key={m.userId} style={[styles.memberRow, i > 0 && styles.rowDivider]}>
+            <TouchableOpacity
+              key={m.userId}
+              style={[styles.memberRow, i > 0 && styles.rowDivider]}
+              onPress={() => openProfile(m.userId)}
+              disabled={m.userId === user?.id}
+              activeOpacity={0.7}
+            >
               <View style={[styles.avatar, { backgroundColor: m.avatarColor }]}>
                 {m.avatarUrl
                   ? <Image source={{ uri: m.avatarUrl }} style={styles.avatarImg} />
@@ -267,7 +295,7 @@ export default function TeamScreen() {
                   <Ionicons name="close-circle-outline" size={20} color="#ef4444" />
                 </TouchableOpacity>
               )}
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
 
@@ -360,6 +388,15 @@ export default function TeamScreen() {
         </View>
       </Modal>
 
+      <PlayerProfileModal
+        player={profile}
+        onClose={() => setProfile(null)}
+        onMessage={(p) => {
+          setProfile(null);
+          messageMember({ userId: p.id, role: 'member', name: p.name, initials: p.initials, avatarColor: p.avatarColor });
+        }}
+      />
+
       {/* Confirm dialog */}
       <Modal visible={!!confirm} animationType="fade" transparent onRequestClose={() => setConfirm(null)}>
         <View style={styles.centerOverlay}>
@@ -421,6 +458,11 @@ const styles = StyleSheet.create({
   },
   primaryText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   btnDisabled: { backgroundColor: '#d1d5db' },
+  challengeBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: -8,
+    paddingVertical: 13, borderRadius: 12, borderWidth: 1.5, borderColor: '#fed7aa', backgroundColor: '#fff7ed', marginBottom: 20,
+  },
+  challengeText: { color: '#ea580c', fontWeight: '700', fontSize: 15 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 10 },
   listCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e5e7eb', marginBottom: 20 },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },

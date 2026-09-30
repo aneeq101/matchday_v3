@@ -22,6 +22,9 @@ import {
 import { useAuth } from '../lib/AuthContext';
 import { isFollowing, followUser, unfollowUser } from '../lib/follows';
 import { createNotification } from '../lib/notifications';
+import { useRouter } from 'expo-router';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface Props {
   player: Player | null;
@@ -86,6 +89,7 @@ const SPORT_STAT_FIELDS: Record<string, { key: string; label: string }[]> = {
 };
 
 export default function PlayerProfileModal({ player, onClose, onMessage }: Props) {
+  const router = useRouter();
   const { user } = useAuth();
   const [sports, setSports]               = useState<ProfileSport[]>([]);
   const [playerStats, setPlayerStats]     = useState<PlayerStat[]>([]);
@@ -230,6 +234,22 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
                     >
                       <Ionicons name="chatbubble-outline" size={15} color="rgba(255,255,255,0.9)" />
                       <Text style={styles.headerMsgText}>Message</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {UUID_RE.test(player.id) && (
+                    <TouchableOpacity
+                      style={styles.headerMsgBtn}
+                      onPress={() => {
+                        onClose();
+                        router.push({
+                          pathname: '/challenges',
+                          params: { kind: 'player', opponentId: player.id, opponentName: player.name },
+                        });
+                      }}
+                    >
+                      <Ionicons name="flash-outline" size={15} color="rgba(255,255,255,0.9)" />
+                      <Text style={styles.headerMsgText}>Challenge</Text>
                     </TouchableOpacity>
                   )}
                 </View>

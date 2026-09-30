@@ -1,5 +1,10 @@
 import { supabase } from './supabase';
-import { TOURNAMENTS, type Tournament, type EventType } from '../data/mockData';
+import {
+  TOURNAMENTS, type Tournament, type EventType, type EntrantType, type TournamentStatus,
+} from '../data/mockData';
+import {
+  generateKnockout, generateRoundRobin, shuffle, type BracketMatch, type Entrant,
+} from './bracket';
 
 const SPORT_EMOJIS: Record<string, string> = {
   Football: '⚽', Cricket: '🏏', Tennis: '🎾',
@@ -19,7 +24,30 @@ function dbToTournament(row: Record<string, unknown>): Tournament {
     maxParticipants: (row.max_participants as number) ?? 16,
     entryFee: (row.entry_fee as number) ?? 0,
     prizePool: (row.prize_pool as number) ?? 0,
+    entrantType: ((row.entrant_type as EntrantType) ?? 'player'),
+    minParticipants: (row.min_participants as number) ?? 2,
+    format: (row.format as string) ?? '',
+    status: ((row.status as TournamentStatus) ?? 'active'),
+    championName: (row.champion_name as string) ?? null,
+    organiserId: (row.organiser_id as string) ?? null,
   };
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Maps database error codes to messages people can act on. */
+function friendlyError(message?: string, fallback = 'Something went wrong. Please try again.'): string {
+  const m = message ?? '';
+  if (m.includes('REGISTRATION_CLOSED')) return 'Sign-ups for this event are closed.';
+  if (m.includes('TEAM_REQUIRED')) return 'Pick a team you captain to sign up.';
+  if (m.toLowerCase().includes('full')) return 'This event is full.';
+  if (m.includes('NOT_ENOUGH_ENTRANTS')) return 'Not enough sign-ups yet to start.';
+  if (m.includes('ALREADY_STARTED')) return 'This event has already started.';
+  if (m.includes('NOT_ORGANISER')) return 'Only the organiser can do this.';
+  if (m.includes('NEXT_ROUND_PLAYED')) return 'The winner has already played their next match, so this result can no longer be changed.';
+  if (m.includes('NO_DRAWS_IN_KNOCKOUT')) return 'Knockout matches need a winner.';
+  if (m.includes('MATCH_NOT_READY')) return 'Both sides of this match aren\'t decided yet.';
+  return fallback;
 }
 
 export async function fetchTournaments(): Promise<Tournament[]> {
@@ -44,31 +72,35 @@ export async function fetchRegisteredIds(userId: string): Promise<Set<string>> {
 
 export async function registerForTournament(
   tournamentId: string,
-  userId: string
+  userId: string,
+  teamId?: string | null,
 ): Promise<{ ok: boolean; error?: string }> {
   const { error } = await supabase
     .from('tournament_registrations')
-    .insert({ tournament_id: tournamentId, user_id: userId });
+    .insert({ tournament_id: tournamentId, user_id: userId, team_id: teamId ?? null });
   if (!error) return { ok: true };
   if (error.code === '23505') {
-    return { ok: false, error: 'You are already registered for this event.' };
+    return {
+      ok: false,
+      error: teamId ? 'This team (or you) is already signed up for this event.' : 'You are already registered for this event.',
+    };
   }
-  if (error.message?.toLowerCase().includes('full')) {
-    return { ok: false, error: 'This event is full.' };
-  }
-  return { ok: false, error: 'Failed to register. Please try again.' };
+  return { ok: false, error: friendlyError(error.message, 'Failed to register. Please try again.') };
 }
 
 export async function unregisterFromTournament(
   tournamentId: string,
   userId: string
 ): Promise<boolean> {
-  const { error } = await supabase
+  // .select() returns the deleted rows — none means row security blocked it
+  // (the event has already started), which is not a successful leave.
+  const { data, error } = await supabase
     .from('tournament_registrations')
     .delete()
     .eq('tournament_id', tournamentId)
-    .eq('user_id', userId);
-  return !error;
+    .eq('user_id', userId)
+    .select('tournament_id');
+  return !error && (data?.length ?? 0) > 0;
 }
 
 export async function fetchMyRegistrations(userId: string): Promise<Tournament[]> {
@@ -105,6 +137,9 @@ export async function createTournament(
     entryFee: number;
     prizePool: number;
     maxParticipants: number;
+    minParticipants: number;
+    entrantType: EntrantType;
+    format: string;
   },
   userId: string | null
 ): Promise<Tournament | null> {
@@ -121,6 +156,9 @@ export async function createTournament(
       entry_fee: params.entryFee,
       prize_pool: params.prizePool,
       max_participants: params.maxParticipants,
+      min_participants: params.minParticipants,
+      entrant_type: params.entrantType,
+      format: params.format,
       participants_count: 0,
     })
     .select()
@@ -131,4 +169,92 @@ export async function createTournament(
   }
   if (!data) return null;
   return dbToTournament(data as Record<string, unknown>);
+}
+
+// ── Tournament details, bracket and results ────────────────
+
+export async function fetchTournament(id: string): Promise<Tournament | null> {
+  if (!UUID_RE.test(id)) return TOURNAMENTS.find((t) => t.id === id) ?? null;
+  const { data, error } = await supabase.from('tournaments').select('*').eq('id', id).maybeSingle();
+  if (error || !data) return TOURNAMENTS.find((t) => t.id === id) ?? null;
+  return dbToTournament(data as Record<string, unknown>);
+}
+
+/** Everyone signed up, in sign-up order. For team events the entrant is the team. */
+export async function fetchEntrants(t: Tournament): Promise<Entrant[]> {
+  if (!UUID_RE.test(t.id)) return [];
+  const { data, error } = await supabase
+    .from('tournament_registrations')
+    .select('user_id, team_id, registered_at')
+    .eq('tournament_id', t.id)
+    .order('registered_at', { ascending: true });
+  if (error || !data?.length) return [];
+  const rows = data as { user_id: string; team_id: string | null }[];
+
+  if (t.entrantType === 'team') {
+    const teamIds = rows.map((r) => r.team_id).filter((x): x is string => !!x);
+    const { data: teams } = await supabase.from('teams').select('id, name').in('id', teamIds);
+    const names = new Map((teams ?? []).map((x: { id: string; name: string }) => [x.id, x.name]));
+    return rows
+      .filter((r) => r.team_id)
+      .map((r) => ({ id: r.team_id!, name: names.get(r.team_id!) ?? 'Team', userId: r.user_id }));
+  }
+
+  const { data: profiles } = await supabase.from('profiles').select('id, name').in('id', rows.map((r) => r.user_id));
+  const names = new Map((profiles ?? []).map((x: { id: string; name: string }) => [x.id, x.name]));
+  return rows.map((r) => ({ id: r.user_id, name: names.get(r.user_id) ?? 'Player', userId: r.user_id }));
+}
+
+export async function fetchBracket(tournamentId: string): Promise<BracketMatch[]> {
+  if (!UUID_RE.test(tournamentId)) return [];
+  const { data, error } = await supabase
+    .from('tournament_matches')
+    .select('*')
+    .eq('tournament_id', tournamentId)
+    .order('round', { ascending: true })
+    .order('slot', { ascending: true });
+  if (error || !data) return [];
+  return data.map((r: Record<string, unknown>) => ({
+    id: r.id as string,
+    round: r.round as number,
+    slot: r.slot as number,
+    aId: (r.a_id as string) ?? null,
+    aName: (r.a_name as string) ?? null,
+    bId: (r.b_id as string) ?? null,
+    bName: (r.b_name as string) ?? null,
+    winnerId: (r.winner_id as string) ?? null,
+    isDraw: (r.is_draw as boolean) ?? false,
+    score: (r.score as string) ?? '',
+    status: ((r.status as BracketMatch['status']) ?? 'pending'),
+  }));
+}
+
+/** Closes sign-ups and saves a random draw (knockout) or fixture list (league). */
+export async function startTournament(
+  t: Tournament,
+  entrants: Entrant[],
+): Promise<{ ok: boolean; error?: string }> {
+  const drawn = shuffle(entrants);
+  const matches = t.type === 'league' ? generateRoundRobin(drawn) : generateKnockout(drawn);
+  const payload = matches.map((m) => ({
+    round: m.round, slot: m.slot,
+    a_id: m.aId, a_name: m.aName, b_id: m.bId, b_name: m.bName,
+    winner_id: m.winnerId, status: m.status,
+  }));
+  const { error } = await supabase.rpc('start_tournament', { p_tournament_id: t.id, p_matches: payload });
+  if (error) return { ok: false, error: friendlyError(error.message) };
+  return { ok: true };
+}
+
+export async function recordMatchResult(
+  matchId: string,
+  winnerId: string | null,
+  isDraw: boolean,
+  score: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.rpc('record_match_result', {
+    p_match_id: matchId, p_winner_id: winnerId, p_is_draw: isDraw, p_score: score.trim(),
+  });
+  if (error) return { ok: false, error: friendlyError(error.message) };
+  return { ok: true };
 }

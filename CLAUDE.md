@@ -48,6 +48,8 @@ app/
   statistics.tsx           # Aggregated player statistics
   privacy.tsx              # Privacy & Security
   help.tsx                 # Help & Support (FAQ + tickets)
+  tournament.tsx           # Event details: sign-ups, knockout bracket / league table, organiser results
+  challenges.tsx           # Challenge matches (player vs player, team vs team)
 
 components/
   BookMap.native.tsx        # react-native-maps (iOS/Android)
@@ -207,6 +209,19 @@ Full plan in `PLAN.md`. Summary:
 - **Push notifications** — `lib/push.ts` (expo-notifications), tokens in private `push_tokens` table. DB triggers send via Expo push API using `pg_net`: every `notifications` row + every chat message. Needs `npx eas init` (EAS projectId) + a dev/production build; not supported on web or Expo Go Android.
 - **Payment Methods** — intentionally still "coming soon" (Stripe deferred).
 - **EAS** — `eas.json` added (development / preview APK / production). `@supabase/supabase-js` pinned to **2.105.4**: 2.106+ contains a dynamic `import()` that Hermes can't compile, which breaks release builds.
+
+## Brackets & Challenges (2026-09-30) — `lib/db/patch_brackets_challenges.sql` run in Supabase 2026-09-30
+
+- **Tournaments**: `tournaments.entrant_type` ('player'|'team'), `min_participants`, `format`, `champion_name`; `status` = 'active' (sign-ups open) → 'in_progress' → 'completed'. Team events: the captain signs up with `tournament_registrations.team_id`.
+- **Bracket logic** is pure TS in `lib/bracket.ts` (knockout with byes, round robin, standings, round names). Organiser taps Start → app shuffles + generates → `start_tournament(id, matches jsonb)` RPC saves `tournament_matches`. Results via `record_match_result()` (winner auto-advances; knockout can't be edited once the next round is played). No direct write policies on `tournament_matches`.
+- Type 'tournament' = knockout bracket (`components/BracketView.tsx`), 'league' = round robin table + fixtures, 'match' = sign-up list only.
+- The sign-up guard + counter triggers are SECURITY DEFINER — before this patch RLS hid the tournament row from them for non-organisers, so counts/capacity silently didn't work.
+- **Challenges**: `challenges` table, RPCs `create_challenge` / `respond_challenge` / `cancel_challenge` / `record_challenge_result` (all send notifications). Demo players/teams auto-accept. Entry points: player profile modal (Challenge button), team page, My Turf quick action, `/challenges?kind=&opponentId=&opponentName=&sport=`.
+- Player profiles open from The Hood, Looking Now, Followers, team members, tournament sign-ups (`fetchPlayer(id)` in `lib/players.ts`).
+- Demo: players 007/008, football teams `30000000-…-004..007`, tournaments `20000000-…-005` (tennis knockout in progress) and `…-006` (5-a-side cup with byes); demo league `…-001` has fixtures.
+- **Entry rules** (`eventRules()` in `lib/sportRules.ts`, enforced by `trg_tournaments_validate` from `lib/db/patch_event_rules.sql`): knockouts/leagues need ≥4 entrants; Tennis/Badminton singles → players, doubles → pairs (2-player teams), other sports → teams. Entry type is only checked on INSERT so older events keep their sign-ups. Pickup "match" events need the full line-up.
+- **Challenge venues**: "Where" opens `components/VenueList.tsx` — venues from `fetchVenues()` filtered to the challenge's sport, nearest first, or type a custom place.
+- SQL was tested locally against a Postgres+PostGIS container with Supabase stubs (auth.uid, roles, net.http_post) replaying all lib/db migrations.
 
 ## What's NOT Done Yet (Backend / Features)
 

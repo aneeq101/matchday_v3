@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../lib/AuthContext';
 import { fetchMyOrganisedTournaments, fetchMyRegistrations } from '../lib/tournaments';
 import type { Tournament } from '../data/mockData';
+import { entrantNouns } from '../lib/sportRules';
 
 const TYPE_COLORS: Record<string, string> = {
   tournament: '#8b5cf6',
@@ -85,7 +86,7 @@ export default function MyTournamentsScreen() {
                 <Text style={styles.sectionTitle}>Organised by You</Text>
                 <Text style={styles.sectionCount}>{organised.length}</Text>
               </View>
-              {organised.map((item) => <EventCard key={item.id} event={item} badge="Organiser" badgeColor="#f59e0b" />)}
+              {organised.map((item) => <EventCard key={item.id} event={item} badge="Organiser" badgeColor="#f59e0b" onPress={() => router.push({ pathname: '/tournament', params: { id: item.id } })} />)}
             </>
           )}
 
@@ -96,7 +97,7 @@ export default function MyTournamentsScreen() {
                 <Text style={styles.sectionTitle}>Registered / Joined</Text>
                 <Text style={styles.sectionCount}>{registered.length}</Text>
               </View>
-              {registered.map((item) => <EventCard key={item.id} event={item} badge="Registered" badgeColor="#16a34a" />)}
+              {registered.map((item) => <EventCard key={item.id} event={item} badge="Registered" badgeColor="#16a34a" onPress={() => router.push({ pathname: '/tournament', params: { id: item.id } })} />)}
             </>
           )}
         </ScrollView>
@@ -105,14 +106,14 @@ export default function MyTournamentsScreen() {
   );
 }
 
-function EventCard({ event, badge, badgeColor }: { event: Tournament; badge: string; badgeColor: string }) {
+function EventCard({ event, badge, badgeColor, onPress }: { event: Tournament; badge: string; badgeColor: string; onPress: () => void }) {
   const typeColor = TYPE_COLORS[event.type] ?? '#16a34a';
   const typeLabel = TYPE_LABELS[event.type] ?? event.type;
   const progress  = event.maxParticipants > 0 ? event.participants / event.maxParticipants : 0;
   const full      = event.participants >= event.maxParticipants;
 
   return (
-    <View style={[styles.card, { borderLeftColor: typeColor }]}>
+    <TouchableOpacity style={[styles.card, { borderLeftColor: typeColor }]} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.cardTop}>
         <Text style={styles.cardEmoji}>{event.sportEmoji}</Text>
         <View style={{ flex: 1 }}>
@@ -132,7 +133,7 @@ function EventCard({ event, badge, badgeColor }: { event: Tournament; badge: str
           <View style={[styles.barFill, { width: `${Math.round(progress * 100)}%` as any, backgroundColor: typeColor }]} />
         </View>
         <Text style={[styles.barLabel, full && { color: typeColor, fontWeight: '700' }]}>
-          {event.participants}/{event.maxParticipants} players{full ? ' · Full' : ''}
+          {event.participants}/{event.maxParticipants} {entrantNouns(event.entrantType, event.format).nouns}{full ? ' · Full' : ''}
         </Text>
       </View>
 
@@ -148,7 +149,12 @@ function EventCard({ event, badge, badgeColor }: { event: Tournament; badge: str
           </View>
         )}
       </View>
-    </View>
+      <Text style={[styles.viewLink, { color: typeColor }]}>
+        {event.status === 'completed'
+          ? `🏆 Champion: ${event.championName ?? '—'}`
+          : event.type === 'match' ? 'View details ›' : event.type === 'league' ? 'View table & fixtures ›' : 'View bracket ›'}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
@@ -201,4 +207,5 @@ const styles = StyleSheet.create({
   moneyRow: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   feeText: { color: '#374151', fontSize: 12, fontWeight: '600' },
   prizeText: { color: '#16a34a', fontSize: 12, fontWeight: '700' },
+  viewLink: { fontSize: 12, fontWeight: '700', marginTop: 10 },
 });

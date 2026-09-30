@@ -69,7 +69,17 @@ export interface Tournament {
   maxParticipants: number;
   entryFee: number;
   prizePool: number;
+  entrantType?: EntrantType;      // who signs up: individual players or teams
+  minParticipants?: number;       // needed before the organiser can start
+  format?: string;                // e.g. 'Singles', '5v5'
+  status?: TournamentStatus;
+  championName?: string | null;
+  organiserId?: string | null;
 }
+
+export type EntrantType = 'player' | 'team';
+/** 'active' = sign-ups open, 'in_progress' = bracket drawn, 'completed' = has a champion */
+export type TournamentStatus = 'active' | 'in_progress' | 'completed';
 
 export interface Booking {
   id: string;

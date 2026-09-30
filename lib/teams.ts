@@ -58,6 +58,28 @@ export async function fetchMyTeams(userId: string): Promise<Team[]> {
   return data.map((r) => rowToTeam(r as Record<string, unknown>));
 }
 
+/** Teams the user captains, optionally for one sport — used for team sign-ups and challenges. */
+export async function fetchCaptainTeams(userId: string, sport?: string): Promise<Team[]> {
+  let q = supabase.from('teams').select('*').eq('owner_id', userId);
+  if (sport) q = q.eq('sport', sport);
+  const { data, error } = await q.order('name', { ascending: true });
+  if (error || !data) return [];
+  return data.map((r) => rowToTeam(r as Record<string, unknown>));
+}
+
+/** All teams for a sport except the given user's own — challenge opponents. */
+export async function fetchTeamsForSport(sport: string, excludeOwnerId: string): Promise<Team[]> {
+  const { data, error } = await supabase
+    .from('teams')
+    .select('*')
+    .eq('sport', sport)
+    .neq('owner_id', excludeOwnerId)
+    .order('name', { ascending: true })
+    .limit(100);
+  if (error || !data) return [];
+  return data.map((r) => rowToTeam(r as Record<string, unknown>));
+}
+
 /** Open teams the user is not in yet — for the "Discover" list. */
 export async function fetchDiscoverTeams(userId: string, excludeIds: string[]): Promise<Team[]> {
   const { data, error } = await supabase

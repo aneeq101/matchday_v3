@@ -18,6 +18,9 @@ const TYPE_ICONS: Record<string, { icon: string; color: string }> = {
   new_message:         { icon: 'chatbubble-outline',   color: '#16a34a' },
   team_invite:         { icon: 'people-outline',       color: '#8b5cf6' },
   team_join:           { icon: 'people-outline',       color: '#8b5cf6' },
+  tournament_started:  { icon: 'git-network-outline',  color: '#8b5cf6' },
+  challenge:           { icon: 'flash-outline',        color: '#f97316' },
+  challenge_update:    { icon: 'flash-outline',        color: '#f97316' },
 };
 
 export function notifIcon(type: string): { icon: string; color: string } {

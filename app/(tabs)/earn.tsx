@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
 import { TOURNAMENTS, type Tournament, type EventType } from '../../data/mockData';
@@ -28,7 +29,7 @@ import {
   unregisterFromTournament,
   createTournament as dbCreateTournament,
 } from '../../lib/tournaments';
-import { getFormatsForSport } from '../../lib/sportRules';
+import { getFormatsForSport, eventRules, entrantNouns, MIN_ENTRANTS } from '../../lib/sportRules';
 import DatePickerField from '../../components/DatePickerField';
 import LocationPickerModal from '../../components/LocationPickerModal';
 
@@ -56,6 +57,7 @@ const SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton', 'Bas
 const EVENT_TYPES: EventType[] = ['tournament', 'league', 'match'];
 
 export default function EarnScreen() {
+  const router = useRouter();
   const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState('All');
   const [registerEvent, setRegisterEvent] = useState<Tournament | null>(null);
@@ -80,6 +82,11 @@ export default function EarnScreen() {
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [newFee, setNewFee] = useState('');
   const [newPrize, setNewPrize] = useState('');
+  const hasBracket = newType === 'tournament' || newType === 'league';
+  // Who signs up + sensible limits follow from sport, format and event type
+  const rules = eventRules(newSport, newType === 'league' ? 'league' : 'tournament', newFormat);
+  const [newMin, setNewMin] = useState(rules.defMin);
+  const [newMax, setNewMax] = useState(rules.defMax);
 
   const [events, setEvents] = useState<Tournament[]>(TOURNAMENTS);
 
@@ -101,6 +108,12 @@ export default function EarnScreen() {
       setNewMaxParticipants(formats[0].maxPlayers);
     }
   }, [newSport]);
+
+  // Reset limits to sensible defaults when what's being organised changes
+  useEffect(() => {
+    setNewMin(rules.defMin);
+    setNewMax(rules.defMax);
+  }, [rules.defMin, rules.defMax, rules.entrant, rules.noun]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -168,6 +181,8 @@ export default function EarnScreen() {
             : e
         )
       );
+    } else {
+      Alert.alert('Couldn\'t leave', 'Sign-ups for this event may already be closed. Pull down to refresh.');
     }
     setLeaving(false);
     setLeaveEvent(null);
@@ -187,6 +202,15 @@ export default function EarnScreen() {
         return;
       }
     }
+    if (hasBracket) {
+      if (newMin < rules.min || newMax > rules.max || newMin > newMax) {
+        Alert.alert(
+          'Check sign-up limits',
+          `You need at least ${rules.min} ${rules.nouns}, and at most ${rules.max}.`,
+        );
+        return;
+      }
+    }
     setSaving(true);
     try {
       const formattedDate = newDate
@@ -201,7 +225,11 @@ export default function EarnScreen() {
           location: newLocation || '',
           entryFee: Math.max(0, parseInt(newFee) || 0),
           prizePool: Math.max(0, parseInt(newPrize) || 0),
-          maxParticipants: newMaxParticipants,
+          maxParticipants: hasBracket ? newMax : newMaxParticipants,
+          // A single match needs its full line-up (e.g. 5v5 → 10 players)
+          minParticipants: hasBracket ? newMin : newMaxParticipants,
+          entrantType: hasBracket ? rules.entrant : 'player',
+          format: newFormat,
         },
         user?.id ?? null
       );
@@ -214,6 +242,8 @@ export default function EarnScreen() {
 
       setEvents((prev) => [saved, ...prev]);
       setShowCreateModal(false);
+      // Show the new event straight away — including its empty bracket
+      if (hasBracket) router.push({ pathname: '/tournament', params: { id: saved.id } });
       setNewName('');
       setNewType('tournament');
       setNewSport('Football');
@@ -280,7 +310,15 @@ export default function EarnScreen() {
             key={event.id}
             event={event}
             registered={registeredIds.has(event.id)}
-            onRegister={() => { setRegisterError(''); setRegisterEvent(event); }}
+            onOpen={() => router.push({ pathname: '/tournament', params: { id: event.id } })}
+            onRegister={() => {
+              if (event.entrantType === 'team') {
+                router.push({ pathname: '/tournament', params: { id: event.id, join: '1' } });
+              } else {
+                setRegisterError('');
+                setRegisterEvent(event);
+              }
+            }}
             onLeave={() => setLeaveEvent(event)}
           />
         ))}
@@ -442,7 +480,7 @@ export default function EarnScreen() {
               <Text style={styles.fieldLabel}>Event Name</Text>
               <TextInput
                 style={styles.formInput}
-                placeholder="e.g. Lahore Summer Cup"
+                placeholder="e.g. GTA Summer Cup"
                 placeholderTextColor="#9ca3af"
                 value={newName}
                 onChangeText={setNewName}
@@ -473,7 +511,45 @@ export default function EarnScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text style={styles.formatHint}>Max {newMaxParticipants} players total</Text>
+              {hasBracket ? (
+                <>
+                  <Text style={styles.formatHint}>Format of each game</Text>
+
+                  <View style={styles.whoRow}>
+                    <Ionicons name={rules.entrant === 'player' ? 'person' : 'people'} size={16} color="#16a34a" />
+                    <Text style={styles.whoText}>{rules.who}</Text>
+                  </View>
+
+                  <View style={styles.twoCol}>
+                    <Stepper
+                      label={`Minimum ${rules.nouns}`}
+                      value={newMin}
+                      min={rules.min}
+                      max={newMax}
+                      onChange={setNewMin}
+                    />
+                    <Stepper
+                      label={`Maximum ${rules.nouns}`}
+                      value={newMax}
+                      min={Math.max(newMin, MIN_ENTRANTS)}
+                      max={rules.max}
+                      onChange={setNewMax}
+                    />
+                  </View>
+                  <View style={styles.bracketHint}>
+                    <Ionicons name="git-network-outline" size={16} color="#8b5cf6" />
+                    <Text style={styles.bracketHintText}>
+                      {newType === 'league'
+                        ? `Needs at least ${newMin} ${rules.nouns}. Fixtures are created when you start the league — everyone plays everyone once.`
+                        : `Needs at least ${newMin} ${rules.nouns} (a knockout needs semi-finals and a final). The bracket is drawn randomly when you start it; extra places become byes.`}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <Text style={styles.formatHint}>
+                  Needs the full line-up: {newMaxParticipants} players
+                </Text>
+              )}
 
               <Text style={styles.fieldLabel}>Date</Text>
               <DatePickerField
@@ -540,23 +616,47 @@ export default function EarnScreen() {
   );
 }
 
+function Stepper({ label, value, min, max, onChange }: {
+  label: string; value: number; min: number; max: number; onChange: (n: number) => void;
+}) {
+  return (
+    <View style={{ flex: 1, marginBottom: 14 }}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.stepper}>
+        <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(Math.max(min, value - 1))} disabled={value <= min}>
+          <Ionicons name="remove" size={18} color={value <= min ? '#d1d5db' : '#111827'} />
+        </TouchableOpacity>
+        <Text style={styles.stepValue}>{value}</Text>
+        <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(Math.min(max, value + 1))} disabled={value >= max}>
+          <Ionicons name="add" size={18} color={value >= max ? '#d1d5db' : '#111827'} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 function EventCard({
   event,
   registered,
+  onOpen,
   onRegister,
   onLeave,
 }: {
   event: Tournament;
   registered: boolean;
+  onOpen: () => void;
   onRegister: () => void;
   onLeave: () => void;
 }) {
   const progress = event.maxParticipants > 0 ? event.participants / event.maxParticipants : 0;
   const isFull = event.maxParticipants > 0 && event.participants >= event.maxParticipants;
   const typeColor = TYPE_COLORS[event.type];
+  const status = event.status ?? 'active';
+  const who = entrantNouns(event.entrantType, event.format).nouns;
+  const hasDraw = event.type === 'tournament' || event.type === 'league';
 
   return (
-    <View style={styles.eventCard}>
+    <TouchableOpacity style={styles.eventCard} onPress={onOpen} activeOpacity={0.85}>
       <View style={styles.eventTop}>
         <Text style={styles.eventEmoji}>{event.sportEmoji}</Text>
         <View style={{ flex: 1 }}>
@@ -583,9 +683,20 @@ function EventCard({
           <View style={[styles.progressFill, { width: `${progress * 100}%`, backgroundColor: typeColor }]} />
         </View>
         <Text style={styles.participantsText}>
-          {event.participants}/{event.maxParticipants} players
+          {event.participants}/{event.maxParticipants} {who}
         </Text>
       </View>
+      {hasDraw && status === 'active' && (event.minParticipants ?? 0) > 0 && (
+        <Text style={styles.minText}>
+          {event.participants >= (event.minParticipants ?? 2)
+            ? `✓ Enough ${who} to start`
+            : `Needs ${event.minParticipants} ${who} to start`}
+          {'  ·  '}
+          <Text style={{ color: typeColor, fontWeight: '700' }}>
+            {event.type === 'league' ? 'View details ›' : 'View bracket ›'}
+          </Text>
+        </Text>
+      )}
 
       <View style={styles.eventFooter}>
         <View>
@@ -594,7 +705,19 @@ function EventCard({
             <Text style={styles.prizeLabel}>Prize: <Text style={styles.prizeAmount}>CAD {event.prizePool.toLocaleString()}</Text></Text>
           )}
         </View>
-        {registered ? (
+        {status === 'completed' ? (
+          <View style={[styles.statusBadge, { backgroundColor: '#fef3c7' }]}>
+            <Text style={[styles.statusBadgeText, { color: '#b45309' }]} numberOfLines={1}>
+              🏆 {event.championName ?? 'Finished'}
+            </Text>
+          </View>
+        ) : status === 'in_progress' ? (
+          <View style={[styles.statusBadge, { backgroundColor: '#dbeafe' }]}>
+            <Text style={[styles.statusBadgeText, { color: '#1d4ed8' }]}>
+              {event.type === 'league' ? 'Live · See table' : 'Live · See bracket'}
+            </Text>
+          </View>
+        ) : registered ? (
           <View style={styles.registeredRow}>
             <View style={styles.registeredBadge}>
               <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
@@ -613,11 +736,11 @@ function EventCard({
             style={[styles.registerBtn, { backgroundColor: typeColor }]}
             onPress={onRegister}
           >
-            <Text style={styles.registerBtnText}>Register Now</Text>
+            <Text style={styles.registerBtnText}>{event.entrantType === 'team' ? 'Enter Team' : 'Register Now'}</Text>
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -860,4 +983,22 @@ const styles = StyleSheet.create({
   sportChipTextActive: { color: '#fff' },
   formatHint: { color: '#6b7280', fontSize: 12, marginTop: -6, marginBottom: 14 },
   twoCol: { flexDirection: 'row', gap: 10 },
+  stepper: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 4,
+  },
+  stepBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
+  stepValue: { fontSize: 17, fontWeight: '800', color: '#111827' },
+  whoRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4',
+    borderRadius: 10, padding: 10, marginBottom: 14,
+  },
+  whoText: { flex: 1, color: '#166534', fontSize: 13, fontWeight: '600' },
+  bracketHint: {
+    flexDirection: 'row', gap: 8, backgroundColor: '#f5f3ff', borderRadius: 10, padding: 12, marginBottom: 14,
+  },
+  bracketHintText: { flex: 1, color: '#5b21b6', fontSize: 12, lineHeight: 18 },
+  minText: { color: '#6b7280', fontSize: 12, marginTop: -6, marginBottom: 12 },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, maxWidth: 180 },
+  statusBadgeText: { fontWeight: '700', fontSize: 12 },
 });

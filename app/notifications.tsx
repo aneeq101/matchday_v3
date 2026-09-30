@@ -53,6 +53,10 @@ export default function NotificationsScreen() {
     // Jump to what the notification is about
     if (typeof n.data.team_id === 'string') {
       router.push({ pathname: '/team', params: { id: n.data.team_id } });
+    } else if (typeof n.data.tournament_id === 'string') {
+      router.push({ pathname: '/tournament', params: { id: n.data.tournament_id } });
+    } else if (typeof n.data.challenge_id === 'string') {
+      router.push('/challenges');
     } else if (n.type === 'new_message') {
       router.push('/messages');
     }

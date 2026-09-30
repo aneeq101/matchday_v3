@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   KeyboardAvoidingView,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -322,6 +323,8 @@ export default function MyTurfScreen() {
     if (ok) {
       setMyRegistrations((prev) => prev.filter((e) => e.id !== eventId));
       setTournamentCount((c) => Math.max(0, c - 1));
+    } else {
+      Alert.alert('Couldn\'t leave', 'Sign-ups for this event may already be closed.');
     }
   };
 
@@ -432,6 +435,7 @@ export default function MyTurfScreen() {
               <EarnEventCard
                 key={event.id}
                 event={event}
+                onOpen={() => router.push({ pathname: '/tournament', params: { id: event.id } })}
                 onLeave={() => handleLeaveEvent(event.id)}
               />
             ))}
@@ -467,6 +471,8 @@ export default function MyTurfScreen() {
             { icon: 'football-outline' as const,  label: 'Organize Match', color: '#3b82f6', onPress: () => setShowCreateMatch(true) },
             { icon: 'trophy-outline' as const,    label: 'My Tournaments', color: '#f59e0b', onPress: () => router.push('/my-tournaments') },
             { icon: 'people-outline' as const,    label: 'My Teams',       color: '#8b5cf6', onPress: () => router.push('/my-teams') },
+            { icon: 'flash-outline' as const,     label: 'Challenges',     color: '#f97316', onPress: () => router.push('/challenges') },
+            { icon: 'podium-outline' as const,    label: 'Play to Earn',   color: '#0ea5e9', onPress: () => router.push('/(tabs)/earn') },
           ].map((action) => (
             <TouchableOpacity key={action.label} style={styles.quickBtn} onPress={action.onPress}>
               <View style={[styles.quickIcon, { backgroundColor: action.color + '20' }]}>
@@ -958,11 +964,12 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   match:      'Match',
 };
 
-function EarnEventCard({ event, onLeave }: { event: Tournament; onLeave: () => void }) {
+function EarnEventCard({ event, onOpen, onLeave }: { event: Tournament; onOpen: () => void; onLeave: () => void }) {
   const typeColor = EVENT_TYPE_COLORS[event.type] ?? '#16a34a';
   const typeLabel = EVENT_TYPE_LABELS[event.type] ?? event.type;
+  const open = (event.status ?? 'active') === 'active';
   return (
-    <View style={[styles.earnCard, { borderLeftColor: typeColor }]}>
+    <TouchableOpacity style={[styles.earnCard, { borderLeftColor: typeColor }]} onPress={onOpen} activeOpacity={0.85}>
       <View style={styles.earnTop}>
         <Text style={styles.earnEmoji}>{event.sportEmoji}</Text>
         <View style={{ flex: 1 }}>
@@ -987,14 +994,18 @@ function EarnEventCard({ event, onLeave }: { event: Tournament; onLeave: () => v
       </View>
       <View style={styles.earnActions}>
         <View style={styles.registeredBadge}>
-          <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
-          <Text style={styles.registeredBadgeText}>Registered</Text>
+          <Ionicons name={open ? 'checkmark-circle' : 'git-network-outline'} size={14} color="#16a34a" />
+          <Text style={styles.registeredBadgeText}>
+            {open ? 'Registered' : event.status === 'completed' ? 'Finished · See results' : 'Live · See bracket'}
+          </Text>
         </View>
-        <TouchableOpacity style={styles.earnLeaveBtn} onPress={onLeave}>
-          <Text style={styles.earnLeaveBtnText}>Leave</Text>
-        </TouchableOpacity>
+        {open && (
+          <TouchableOpacity style={styles.earnLeaveBtn} onPress={onLeave}>
+            <Text style={styles.earnLeaveBtnText}>Leave</Text>
+          </TouchableOpacity>
+        )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
