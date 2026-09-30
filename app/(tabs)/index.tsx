@@ -14,6 +14,7 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,8 +29,9 @@ import NotifBell from '../../components/NotifBell';
 import RadiusSlider from '../../components/RadiusSlider';
 import { useAuth } from '../../lib/AuthContext';
 import { fetchPosts, createPost, toggleLike, fetchLikedPostIds, uploadPostMedia } from '../../lib/posts';
-import { fetchPlayers } from '../../lib/players';
-import { getOrCreateConversation } from '../../lib/chatService';
+import { fetchPlayers, fetchNearbyPlayers } from '../../lib/players';
+import { saveMyLocation } from '../../lib/settings';
+import { openConversation } from '../../lib/chatService';
 
 // ─── Quick-strip feature flag — set to false to roll back instantly ───────────
 const SHOW_QUICK_STRIP = true;
@@ -98,16 +100,31 @@ export default function HoodScreen() {
 
   const allSports = ['All', ...SPORTS];
 
+  // With GPS: real nearby players from the DB (PostGIS), fetched once for the max
+  // radius — the slider then filters client-side by distance.
+  // Falls back to the demo players if the query fails or nobody is nearby yet.
+  const loadPlayers = useCallback(async (): Promise<Player[]> => {
+    if (!location) return fetchPlayers();
+    const nearby = await fetchNearbyPlayers(location.latitude, location.longitude, PLAYER_RADIUS_MAX);
+    if (nearby && nearby.length > 0) return nearby;
+    return nearby === null ? fetchPlayers() : PLAYERS;
+  }, [location]);
+
+  // Share my location so other players can find me (respects "Show me in Nearby Players")
+  useEffect(() => {
+    if (user && location) saveMyLocation(user.id, location.latitude, location.longitude).catch(() => {});
+  }, [user, location]);
+
   const loadData = useCallback(async () => {
     const [dbPosts, dbPlayers, liked] = await Promise.all([
       fetchPosts(),
-      fetchPlayers(),
+      loadPlayers(),
       user ? fetchLikedPostIds(user.id) : Promise.resolve(new Set<string>()),
     ]);
     setPosts(dbPosts);
-    setPlayers(dbPlayers);
+    setPlayers(user ? dbPlayers.filter((p) => p.id !== user.id) : dbPlayers);
     setLikedPosts(liked);
-  }, [user]);
+  }, [user, loadPlayers]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -157,8 +174,13 @@ export default function HoodScreen() {
     if (!user) { router.push('/messages'); return; }
     if (target.id === user.id) return;
 
-    const convId = await getOrCreateConversation(user.id, target.id);
-    if (convId) {
+    const res = await openConversation(target.id);
+    if (res.error !== undefined) {
+      Alert.alert('Can\'t message', res.error);
+      return;
+    }
+    const convId = res.id;
+    {
       router.push({
         pathname: '/chat',
         params: { id: convId, name: target.name, initials: target.initials, color: target.avatarColor },

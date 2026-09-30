@@ -143,8 +143,8 @@ function EventCard({ event, badge, badgeColor }: { event: Tournament; badge: str
         </View>
         {(event.entryFee > 0 || event.prizePool > 0) && (
           <View style={styles.moneyRow}>
-            {event.entryFee  > 0 && <Text style={styles.feeText}>Entry: PKR {event.entryFee.toLocaleString()}</Text>}
-            {event.prizePool > 0 && <Text style={styles.prizeText}>🏆 PKR {event.prizePool.toLocaleString()}</Text>}
+            {event.entryFee  > 0 && <Text style={styles.feeText}>Entry: CAD {event.entryFee.toLocaleString()}</Text>}
+            {event.prizePool > 0 && <Text style={styles.prizeText}>🏆 CAD {event.prizePool.toLocaleString()}</Text>}
           </View>
         )}
       </View>

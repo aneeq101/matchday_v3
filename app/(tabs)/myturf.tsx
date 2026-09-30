@@ -466,7 +466,7 @@ export default function MyTurfScreen() {
             { icon: 'calendar-outline' as const,  label: 'New Booking',    color: '#16a34a', onPress: () => router.push('/(tabs)/book') },
             { icon: 'football-outline' as const,  label: 'Organize Match', color: '#3b82f6', onPress: () => setShowCreateMatch(true) },
             { icon: 'trophy-outline' as const,    label: 'My Tournaments', color: '#f59e0b', onPress: () => router.push('/my-tournaments') },
-            { icon: 'people-outline' as const,    label: 'My Teams',       color: '#8b5cf6', onPress: () => {} },
+            { icon: 'people-outline' as const,    label: 'My Teams',       color: '#8b5cf6', onPress: () => router.push('/my-teams') },
           ].map((action) => (
             <TouchableOpacity key={action.label} style={styles.quickBtn} onPress={action.onPress}>
               <View style={[styles.quickIcon, { backgroundColor: action.color + '20' }]}>
@@ -506,7 +506,7 @@ export default function MyTurfScreen() {
                     ...(selectedBooking.duration ? [{ icon: 'hourglass-outline' as const, label: 'Duration', value: `${selectedBooking.duration}h` }] : []),
                     ...(selectedBooking.players  ? [{ icon: 'people-outline' as const,   label: 'Players',  value: String(selectedBooking.players) }] : []),
                     ...(selectedBooking.address  ? [{ icon: 'location-outline' as const, label: 'Address',  value: selectedBooking.address }] : []),
-                    { icon: 'cash-outline' as const, label: 'Total', value: `PKR ${selectedBooking.price.toLocaleString()}` },
+                    { icon: 'cash-outline' as const, label: 'Total', value: `CAD ${selectedBooking.price.toLocaleString()}` },
                   ].map((row) => (
                     <View key={row.label} style={styles.detailRow}>
                       <View style={styles.detailIcon}>
@@ -823,7 +823,7 @@ function BookingCard({ booking, onPress }: { booking: Booking; onPress: () => vo
         <View style={{ flex: 1 }}>
           <Text style={styles.bookingVenue} numberOfLines={1}>{booking.venueName}</Text>
           <Text style={styles.bookingMeta}>{booking.date} · {booking.time}</Text>
-          <Text style={styles.bookingPrice}>PKR {booking.price.toLocaleString()}</Text>
+          <Text style={styles.bookingPrice}>CAD {booking.price.toLocaleString()}</Text>
         </View>
       </View>
       <StatusBadge status={booking.status} />
@@ -977,10 +977,10 @@ function EarnEventCard({ event, onLeave }: { event: Tournament; onLeave: () => v
           </Text>
           <View style={styles.earnFooter}>
             {event.entryFee > 0 && (
-              <Text style={styles.earnFee}>Entry: PKR {event.entryFee.toLocaleString()}</Text>
+              <Text style={styles.earnFee}>Entry: CAD {event.entryFee.toLocaleString()}</Text>
             )}
             {event.prizePool > 0 && (
-              <Text style={styles.earnPrize}>🏆 PKR {event.prizePool.toLocaleString()}</Text>
+              <Text style={styles.earnPrize}>🏆 CAD {event.prizePool.toLocaleString()}</Text>
             )}
           </View>
         </View>

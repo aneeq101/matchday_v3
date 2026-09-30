@@ -95,6 +95,26 @@ export async function getOrCreateConversation(
   return data as string;
 }
 
+/**
+ * Like getOrCreateConversation, but explains failures so the UI can tell the user
+ * (e.g. the other player has turned off messages in their privacy settings).
+ */
+export async function openConversation(
+  otherUserId: string
+): Promise<{ id: string; error?: undefined } | { id?: undefined; error: string }> {
+  const { data, error } = await supabase.rpc('get_or_create_conversation', {
+    other_user_id: otherUserId,
+  });
+  if (error) {
+    if (error.message.includes('MESSAGES_DISABLED')) {
+      return { error: "This player isn't accepting messages right now." };
+    }
+    return { error: 'Could not open the chat. Please try again.' };
+  }
+  if (!data) return { error: 'Could not open the chat. Please try again.' };
+  return { id: data as string };
+}
+
 export async function markConversationRead(conversationId: string): Promise<void> {
   await supabase.rpc('mark_conversation_read', { p_conversation_id: conversationId });
 }

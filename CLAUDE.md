@@ -44,6 +44,10 @@ app/
     profile.tsx            # Profile + settings
   messages.tsx             # Conversation list
   chat.tsx                 # 1-on-1 chat
+  my-teams.tsx / team.tsx  # Teams list + team detail
+  statistics.tsx           # Aggregated player statistics
+  privacy.tsx              # Privacy & Security
+  help.tsx                 # Help & Support (FAQ + tickets)
 
 components/
   BookMap.native.tsx        # react-native-maps (iOS/Android)
@@ -193,14 +197,19 @@ Full plan in `PLAN.md`. Summary:
 
 **6 phases** across ~8 weeks. Start with `npm install @supabase/supabase-js`, create a Supabase project, run schema migrations, wire auth into `app/_layout.tsx`.
 
+## Phase 3/4 completion (2026-09-30) — `lib/db/patch_phase4_complete.sql` run in Supabase 2026-09-30
+
+- **My Teams** — `app/my-teams.tsx` (list + Discover + create), `app/team.tsx` (detail, add players, edit, leave/delete), `lib/teams.ts`, `components/TeamFormModal.tsx`. Tables `teams`, `team_members`; owner auto-joins as captain via trigger; `TEAM_FULL` capacity trigger; demo teams `30000000-…-00{1-3}`.
+- **Statistics** — `app/statistics.tsx` + `lib/statistics.ts` (player_stats + bookings/matches/tournaments/teams/follows). Stat field defs moved to `lib/sportStats.ts`.
+- **Privacy & Security** — `app/privacy.tsx` (show-in-nearby, push toggle, change password, sign out everywhere, delete account via `delete_my_account()` RPC). Profile tab Privacy & Messaging card now persists to `profiles` (`privacy`, `allow_messages`, `messages_from`) via `lib/settings.ts`; enforced server-side in `get_or_create_conversation` (raises `MESSAGES_DISABLED`) — use `openConversation()` from `lib/chatService.ts` to get a user-facing error. "Friends Only" = `privacy='private'` → visible only to people the user follows (profiles_select policy).
+- **Help & Support** — `app/help.tsx` (FAQ + contact form → `support_tickets`), `lib/support.ts`.
+- **Nearby players (PostGIS)** — `profiles.latitude/longitude/location` (+ sync trigger), `nearby_players(lat,lng,radius_km)` RPC; Hood saves user location and calls `fetchNearbyPlayers()`; falls back to demo players if RPC fails / nobody nearby.
+- **Push notifications** — `lib/push.ts` (expo-notifications), tokens in private `push_tokens` table. DB triggers send via Expo push API using `pg_net`: every `notifications` row + every chat message. Needs `npx eas init` (EAS projectId) + a dev/production build; not supported on web or Expo Go Android.
+- **Payment Methods** — intentionally still "coming soon" (Stripe deferred).
+- **EAS** — `eas.json` added (development / preview APK / production). `@supabase/supabase-js` pinned to **2.105.4**: 2.106+ contains a dynamic `import()` that Hermes can't compile, which breaks release builds.
+
 ## What's NOT Done Yet (Backend / Features)
 
-- No backend — all data is mock
-- No auth (sign up / log in)
-- No real-time messaging (WebSocket)
-- No push notifications
-- No payment integration
-- Edit Profile, Notifications, My Tournaments, Statistics, My Teams screens are stubs
-- Post comments/shares are counters only (no interaction)
-- No player follow/friend system
-- No EAS Build / App Store setup
+- Payments / Stripe (Phase 5)
+- `npx eas init` + first EAS build, App Store / Play Store submission, Sentry/analytics (Phase 6)
+- The Hood demo players/posts are still Lahore-themed (kept intentionally as dummy data)

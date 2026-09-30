@@ -48,7 +48,13 @@ export default function NotificationsScreen() {
   const handleTap = async (n: AppNotification) => {
     if (!n.read) {
       setNotifs((prev) => prev.map((x) => x.id === n.id ? { ...x, read: true } : x));
-      await markRead(n.id);
+      markRead(n.id);
+    }
+    // Jump to what the notification is about
+    if (typeof n.data.team_id === 'string') {
+      router.push({ pathname: '/team', params: { id: n.data.team_id } });
+    } else if (n.type === 'new_message') {
+      router.push('/messages');
     }
   };
 

@@ -215,7 +215,7 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
                     ))}
                   </div>
                   <div style={{ color: '#16a34a', fontWeight: 700, fontSize: 15, marginBottom: 10 }}>
-                    PKR {venue.pricePerHour.toLocaleString()}/hr
+                    CAD {venue.pricePerHour.toLocaleString()}/hr
                   </div>
                   <button
                     onClick={() => onBookVenue(venue)}

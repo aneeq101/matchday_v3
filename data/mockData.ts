@@ -23,6 +23,8 @@ export interface Player {
   stats: { matches: number; wins: number; rank: string };
   avatarColor: string;
   offsetKm: { dx: number; dy: number };
+  /** Real distance from the current user, computed server-side (nearby_players RPC). */
+  distanceKm?: number;
 }
 
 export interface Post {
@@ -1555,5 +1557,6 @@ export function venueDistanceKm(base: Coord, venue: Venue): number {
 }
 
 export function playerDistanceKm(base: Coord, player: Player) {
+  if (player.distanceKm !== undefined) return player.distanceKm;
   return distanceKm(base, getPlayerCoord(base, player));
 }

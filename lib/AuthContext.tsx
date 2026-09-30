@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { unregisterPush } from './push';
 
 type AuthContextType = {
   session: Session | null;
@@ -41,7 +42,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         user:    session?.user ?? null,
         loading,
-        signOut: () => supabase.auth.signOut().then(() => {}),
+        signOut: async () => {
+          // Stop pushes to this device for the signed-out account
+          if (session?.user) await unregisterPush(session.user.id).catch(() => {});
+          await supabase.auth.signOut();
+        },
       }}
     >
       {children}

@@ -21,7 +21,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../lib/AuthContext';
 import { fetchMySports, addSport, removeSport, fetchPlayerStats, upsertSportStats, type ProfileSport, type PlayerStat } from '../../lib/profile';
 import { fetchFollowCounts } from '../../lib/follows';
+import { fetchSettings, saveSettings } from '../../lib/settings';
 import NotifBell from '../../components/NotifBell';
+import { SPORT_STAT_FIELDS } from '../../lib/sportStats';
 
 const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
 import { useRouter } from 'expo-router';
@@ -46,60 +48,6 @@ const SPORT_DETAILS_FIELDS: Record<string, { label: string; options: string[] }[
   Baseball:   [{ label: 'Position', options: ['Pitcher','Catcher','First Base','Second Base','Shortstop','Third Base','Outfield'] }],
   Hockey:     [{ label: 'Position', options: ['Forward','Midfielder','Defender','Goalkeeper'] }],
 };
-
-// Used for both the Record Stats form and the stats display card
-const SPORT_STAT_FIELDS: Record<string, { key: string; label: string; numeric: boolean }[]> = {
-  Football: [
-    { key: 'goals',        label: 'Goals',        numeric: true  },
-    { key: 'assists',      label: 'Assists',       numeric: true  },
-    { key: 'clean_sheets', label: 'Clean Sheets',  numeric: true  },
-    { key: 'yellow_cards', label: 'Yellow Cards',  numeric: true  },
-    { key: 'red_cards',    label: 'Red Cards',     numeric: true  },
-  ],
-  Cricket: [
-    { key: 'runs',         label: 'Total Runs',    numeric: true  },
-    { key: 'wickets',      label: 'Wickets',       numeric: true  },
-    { key: 'batting_avg',  label: 'Batting Avg',   numeric: false },
-    { key: 'bowling_avg',  label: 'Bowling Avg',   numeric: false },
-    { key: 'centuries',    label: 'Centuries',     numeric: true  },
-    { key: 'fifties',      label: 'Fifties',       numeric: true  },
-  ],
-  Tennis: [
-    { key: 'aces',            label: 'Aces',           numeric: true  },
-    { key: 'double_faults',   label: 'Double Faults',  numeric: true  },
-    { key: 'sets_won',        label: 'Sets Won',        numeric: true  },
-    { key: 'games_won',       label: 'Games Won',       numeric: true  },
-    { key: 'first_serve_pct', label: 'First Serve %',   numeric: false },
-  ],
-  Basketball: [
-    { key: 'points',         label: 'Points',      numeric: true },
-    { key: 'rebounds',       label: 'Rebounds',    numeric: true },
-    { key: 'assists',        label: 'Assists',      numeric: true },
-    { key: 'blocks',         label: 'Blocks',       numeric: true },
-    { key: 'steals',         label: 'Steals',       numeric: true },
-    { key: 'three_pointers', label: '3-Pointers',   numeric: true },
-  ],
-  Badminton: [
-    { key: 'sets_won',      label: 'Sets Won',       numeric: true },
-    { key: 'points_scored', label: 'Points Scored',  numeric: true },
-    { key: 'smashes',       label: 'Smashes',        numeric: true },
-    { key: 'drop_shots',    label: 'Drop Shots',     numeric: true },
-  ],
-  Baseball: [
-    { key: 'home_runs',    label: 'Home Runs',    numeric: true  },
-    { key: 'hits',         label: 'Hits',          numeric: true  },
-    { key: 'rbis',         label: 'RBIs',          numeric: true  },
-    { key: 'batting_avg',  label: 'Batting Avg',   numeric: false },
-    { key: 'stolen_bases', label: 'Stolen Bases',  numeric: true  },
-  ],
-  Hockey: [
-    { key: 'goals',           label: 'Goals',           numeric: true },
-    { key: 'assists',         label: 'Assists',          numeric: true },
-    { key: 'saves',           label: 'Saves',            numeric: true },
-    { key: 'penalty_minutes', label: 'Penalty Minutes',  numeric: true },
-  ],
-};
-
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -157,14 +105,19 @@ export default function ProfileScreen() {
     if (!user) return;
     const key = ++loadKey.current;
 
-    const [sports, stats, counts] = await Promise.all([
+    const [sports, stats, counts, settings] = await Promise.all([
       fetchMySports(user.id),
       fetchPlayerStats(user.id),
       fetchFollowCounts(user.id),
+      fetchSettings(user.id),
     ]);
 
     // Discard result if a newer loadProfile call has already started
     if (key !== loadKey.current) return;
+
+    setProfileVisibility(settings.privacy === 'private' ? 'Friends Only' : 'Public');
+    setAllowMessages(settings.allowMessages);
+    setMessagesFrom(settings.messagesFrom);
 
     setFollowCounts(counts);
     setMySports(sports);
@@ -267,6 +220,30 @@ export default function ProfileScreen() {
 
   const toggleGender = (key: keyof typeof messagesFrom) => {
     setMessagesFrom((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Privacy settings are saved to the profile; the server enforces them
+  // (who can see the profile, who can start a chat).
+  const persist = async (patch: Parameters<typeof saveSettings>[1]) => {
+    if (!user) return;
+    const ok = await saveSettings(user.id, patch);
+    if (!ok) Alert.alert('Not saved', 'Could not save your setting. Please check your connection and try again.');
+  };
+
+  const changeVisibility = (opt: 'Public' | 'Friends Only') => {
+    setProfileVisibility(opt);
+    setShowVisibilityModal(false);
+    persist({ privacy: opt === 'Friends Only' ? 'private' : 'public' });
+  };
+
+  const changeAllowMessages = (v: boolean) => {
+    setAllowMessages(v);
+    persist({ allowMessages: v });
+  };
+
+  const saveMessagesFrom = () => {
+    setShowMessagesFromModal(false);
+    persist({ messagesFrom });
   };
 
   const messagesFromLabel = () => {
@@ -513,7 +490,7 @@ export default function ProfileScreen() {
               </View>
               <Switch
                 value={allowMessages}
-                onValueChange={setAllowMessages}
+                onValueChange={changeAllowMessages}
                 trackColor={{ false: '#d1d5db', true: '#86efac' }}
                 thumbColor={allowMessages ? '#16a34a' : '#9ca3af'}
               />
@@ -544,9 +521,11 @@ export default function ProfileScreen() {
             {[
               { icon: 'person-outline' as const,      label: 'Edit Profile',      onPress: () => router.push('/edit-profile') },
               { icon: 'notifications-outline' as const, label: 'Notifications',   onPress: () => router.push('/notifications') },
-              { icon: 'card-outline' as const,        label: 'Payment Methods',   onPress: () => {} },
-              { icon: 'shield-outline' as const,      label: 'Privacy & Security', onPress: () => {} },
-              { icon: 'help-circle-outline' as const, label: 'Help & Support',    onPress: () => {} },
+              { icon: 'stats-chart-outline' as const, label: 'My Statistics',   onPress: () => router.push('/statistics') },
+              { icon: 'people-outline' as const,      label: 'My Teams',          onPress: () => router.push('/my-teams') },
+              { icon: 'card-outline' as const,        label: 'Payment Methods',   onPress: () => Alert.alert('Payment Methods', 'Online payments are coming soon. For now, pay at the venue on the day of your booking or event.') },
+              { icon: 'shield-outline' as const,      label: 'Privacy & Security', onPress: () => router.push('/privacy') },
+              { icon: 'help-circle-outline' as const, label: 'Help & Support',    onPress: () => router.push('/help') },
             ].map((item, i, arr) => (
               <React.Fragment key={item.label}>
                 <TouchableOpacity style={styles.menuRow} onPress={item.onPress}>
@@ -578,15 +557,12 @@ export default function ProfileScreen() {
         <View style={styles.centeredOverlay}>
           <View style={styles.alertBox}>
             <Text style={styles.alertTitle}>Profile Visibility</Text>
-            <Text style={styles.alertSub}>Choose who can see your profile</Text>
+            <Text style={styles.alertSub}>Friends Only: only people you follow can see your profile</Text>
             {(['Public', 'Friends Only'] as const).map((opt) => (
               <TouchableOpacity
                 key={opt}
                 style={[styles.optionRow, profileVisibility === opt && styles.optionRowActive]}
-                onPress={() => {
-                  setProfileVisibility(opt);
-                  setShowVisibilityModal(false);
-                }}
+                onPress={() => changeVisibility(opt)}
               >
                 <Text style={[styles.optionText, profileVisibility === opt && styles.optionTextActive]}>
                   {opt}
@@ -621,7 +597,7 @@ export default function ProfileScreen() {
                 {messagesFrom[key] && <Ionicons name="checkmark-circle" size={18} color="#16a34a" />}
               </TouchableOpacity>
             ))}
-            <TouchableOpacity style={styles.confirmBtn} onPress={() => setShowMessagesFromModal(false)}>
+            <TouchableOpacity style={styles.confirmBtn} onPress={saveMessagesFrom}>
               <Text style={styles.confirmBtnText}>Save</Text>
             </TouchableOpacity>
           </View>

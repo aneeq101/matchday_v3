@@ -9,13 +9,14 @@ import {
   ActivityIndicator,
   RefreshControl,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { POSTS, type Post, type Player } from '../data/mockData';
 import { fetchPosts } from '../lib/posts';
-import { getOrCreateConversation } from '../lib/chatService';
+import { openConversation } from '../lib/chatService';
 import { useAuth } from '../lib/AuthContext';
 import PlayerProfileModal from '../components/PlayerProfileModal';
 
@@ -97,10 +98,15 @@ export default function LookingNowScreen() {
     if (post.playerId === user.id) return;
 
     setMessagingId(post.playerId);
-    const convId = await getOrCreateConversation(user.id, post.playerId);
+    const res = await openConversation(post.playerId);
     setMessagingId(null);
 
-    if (convId) {
+    if (res.error !== undefined) {
+      Alert.alert('Can\'t message', res.error);
+      return;
+    }
+    const convId = res.id;
+    {
       router.push({
         pathname: '/chat',
         params: {
@@ -168,8 +174,9 @@ export default function LookingNowScreen() {
         onMessage={(p) => {
           setSelectedPlayer(null);
           if (user && p.id !== user.id) {
-            getOrCreateConversation(user.id, p.id).then((convId) => {
-              if (convId) router.push({ pathname: '/chat', params: { id: convId, name: p.name, initials: p.initials, color: p.avatarColor } });
+            openConversation(p.id).then((res) => {
+              if (res.error !== undefined) { Alert.alert('Can\'t message', res.error); return; }
+              router.push({ pathname: '/chat', params: { id: res.id, name: p.name, initials: p.initials, color: p.avatarColor } });
             });
           }
         }}
