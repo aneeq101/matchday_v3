@@ -34,32 +34,56 @@ Auto-loaded by Claude Code at session start. Keep this current as the project ev
 
 ```
 app/
-  _layout.tsx              # Root Stack + SafeAreaProvider
+  _layout.tsx              # Root Stack, auth gate, push registration + notification tap routing
+  (auth)/sign-in.tsx, sign-up.tsx   # Email/password + Google sign-in (grass background)
+  auth/callback.tsx        # OAuth redirect handler
   (tabs)/
     _layout.tsx            # Bottom tab bar (5 tabs)
-    index.tsx              # The Hood — social feed + player discovery
-    myturf.tsx             # My Turf — bookings, matches, dashboard
-    earn.tsx               # Play to Earn — tournaments
-    book.tsx               # Book Venue — search, map, booking modal  ← main work area
-    profile.tsx            # Profile + settings
-  messages.tsx             # Conversation list
-  chat.tsx                 # 1-on-1 chat
-  my-teams.tsx / team.tsx  # Teams list + team detail
-  statistics.tsx           # Aggregated player statistics
-  privacy.tsx              # Privacy & Security
-  help.tsx                 # Help & Support (FAQ + tickets)
-  tournament.tsx           # Event details: sign-ups, knockout bracket / league table, organiser results
+    index.tsx              # The Hood — social feed + nearby players (PostGIS)
+    myturf.tsx             # My Turf — bookings, organized/joined/open matches, my events, quick actions
+    earn.tsx               # Play to Earn — tournaments / leagues / pickup matches, create event
+    book.tsx               # Book Venue — search, map, booking modal
+    profile.tsx            # Profile, sports + stats, privacy & messaging, menu
+  messages.tsx / chat.tsx  # Conversation list / 1-on-1 chat (Realtime)
+  comments.tsx             # Post comments
+  notifications.tsx        # In-app notifications (tap routes to team / tournament / challenges / messages)
+  followers.tsx            # Followers / following (tap a row → player profile)
+  looking-now.tsx          # Players currently looking for games
+  edit-profile.tsx         # Edit name, bio, area, avatar
+  my-teams.tsx / team.tsx  # Teams list + team detail (captain tools, Challenge this Team)
+  my-tournaments.tsx       # Events I organise / joined
+  tournament.tsx           # Event details: sign-ups, knockout bracket / league table + fixtures, organiser results
   challenges.tsx           # Challenge matches (player vs player, team vs team)
+  statistics.tsx           # Aggregated player statistics
+  privacy.tsx              # Privacy & Security (nearby, push, password, sign out all, delete account)
+  help.tsx                 # Help & Support (FAQ + tickets)
 
 components/
-  BookMap.native.tsx        # react-native-maps (iOS/Android)
-  BookMap.web.tsx           # react-leaflet (web)
-  RadiusSlider.native.tsx   # wraps @react-native-community/slider
-  RadiusSlider.web.tsx      # <input type="range"> — React 19 safe
-  PlayerProfileModal.tsx    # Reusable bottom sheet
+  BookMap.native.tsx / .web.tsx         # react-native-maps (iOS/Android) / react-leaflet (web)
+  RadiusSlider.native.tsx / .web.tsx    # slider / <input type="range">
+  DatePickerField.native.tsx / .web.tsx # calendar date picker
+  *.d.ts                                # type declarations for the platform-split components
+  LocationPickerModal.tsx  # Full-screen venue picker (map + list) — Create Event / bookings
+  VenueList.tsx            # Inline venue list filtered by sport — challenge "Where"
+  PlayerProfileModal.tsx   # Player profile sheet (Follow / Message / Challenge)
+  TeamFormModal.tsx        # Create / edit team form
+  BracketView.tsx          # Knockout bracket drawing with connector lines
+  ChallengeModal.tsx       # New challenge sheet
+  NotifBell.tsx            # Bell icon with unread count
+
+lib/                       # Service layer — screens never call Supabase directly
+  supabase.ts, AuthContext.tsx          # client + session
+  players.ts, profile.ts, follows.ts, settings.ts, statistics.ts, sportStats.ts
+  posts.ts, comments.ts, chatService.ts, notifications.ts, push.ts, support.ts
+  venues.ts, matches.ts, teams.ts
+  tournaments.ts           # events, sign-ups, bracket fetch, start/record-result RPCs
+  bracket.ts               # pure bracket/fixture/standings logic (no Supabase)
+  challenges.ts            # challenge RPC wrappers
+  sportRules.ts            # sport formats, booking limits, event entry rules (min 4, singles/doubles/teams)
+  db/                      # SQL migrations / patches (all run in Supabase as of 2026-09-30)
 
 data/
-  mockData.ts              # All types + data + venue helpers
+  mockData.ts              # All types + mock/demo data + venue helpers
 
 hooks/
   useUserLocation.ts        # GPS: expo-location (native) / navigator.geolocation (web)
@@ -70,9 +94,9 @@ utils/
 
 ---
 
-## Book Screen — Current State (main feature area)
+## Book Screen — Current State
 
-`app/(tabs)/book.tsx` is where most development happens.
+`app/(tabs)/book.tsx` — venue search, map and booking.
 
 **Features live:**
 - Search bar (name / address / sport)
@@ -197,7 +221,7 @@ Full plan in `PLAN.md`. Summary:
 - **Payments**: Stripe via Supabase Edge Functions
 - **Push**: Expo Notifications + FCM/APNs
 
-**6 phases** across ~8 weeks. Start with `npm install @supabase/supabase-js`, create a Supabase project, run schema migrations, wire auth into `app/_layout.tsx`.
+**Phase status (2026-09-30):** Phase 1 auth ✅ · Phase 2 bookings, social, messaging, matches, Play to Earn ✅ · Phase 3 social graph, nearby players, push plumbing ✅ · Phase 4 teams, statistics, brackets, challenges ✅ · Phase 5 Stripe ❌ not started · Phase 6 production: EAS project linked, FCM + first build + store submission + Sentry ❌. Apple sign-in is in the plan but not built.
 
 ## Phase 3/4 completion (2026-09-30) — `lib/db/patch_phase4_complete.sql` run in Supabase 2026-09-30
 
