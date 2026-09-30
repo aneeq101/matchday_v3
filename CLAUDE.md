@@ -25,6 +25,9 @@ Auto-loaded by Claude Code at session start. Keep this current as the project ev
 | Maps (web) | `react-leaflet` 4.x + `leaflet` 1.9.4 |
 | GPS | `expo-location` |
 | Slider | `@react-native-community/slider` (native), custom `<input type="range">` (web) |
+| Backend | Supabase (`@supabase/supabase-js` pinned **2.105.4**) — Postgres + PostGIS, RLS, RPCs, Realtime, Storage |
+| Push | `expo-notifications` + `expo-device`; sent from the DB via `pg_net` → Expo push API |
+| Builds | EAS (`eas.json`; project `@aneeq101/matchday-v3`) |
 | Styling | `StyleSheet.create` — no external UI lib |
 | Primary colour | `#16a34a` (green) |
 
@@ -103,7 +106,8 @@ utils/
 - Sport filter pills: All / Football / Cricket / Tennis / Basketball / Badminton / Baseball
 - Radius slider 1–20 km, syncs bidirectionally with map zoom
 - List ↔ Map toggle
-- Live venue search via Overpass API (OpenStreetMap) — triggers when sport filter + GPS active
+- Venues load from the Supabase `venues` table (`fetchVenues()`), mock `VENUES` shown first / used as fallback
+- Live venue search via Overpass API (OpenStreetMap) — **currently switched off** (`LIVE_SEARCH_ENABLED = false`); when on, triggers with sport filter + GPS
 - Booking modal: date, time slot, duration, sport, players, special requests
 - Booking confirmed success screen
 
@@ -114,16 +118,18 @@ utils/
 
 **BOOKING_SPORTS:** `['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton', 'Baseball']`
 
-**Currency note:** UI shows "CAD" hardcoded (fixed 2026-08-03 — was "PKR", a mislabel left over from when venues/tournaments were Lahore-based). Matches Book and Play to Earn screens, both GTA-based now.
+**Currency note:** UI shows "CAD" hardcoded everywhere (Book, Play to Earn, My Turf, My Tournaments, web map — last PKR labels removed 2026-09-30). Venues/tournaments are GTA-based.
 
 **Map vs List venue sets (important):**
 - `mapVenues` = search + sport filter only, **no radius filter** — markers never disappear when user zooms or changes radius
 - `listVenues` = search + sport + radius filter — keeps the list manageable
-- Both are computed in `book.tsx` from `searchSportMockVenues` (mock) + `filteredLiveVenues` (Overpass)
+- Both are computed in `book.tsx` from `searchSportMockVenues` (despite the name, these are the DB venues in `dbVenues`) + `filteredLiveVenues` (Overpass, empty while live search is off)
 
 ---
 
-## Venue Data (`data/mockData.ts`)
+## Venue Data (`data/mockData.ts` + Supabase `venues` table)
+
+The app reads venues from Supabase; `mockData.ts` is the fallback. The 89 GTA venues below were seeded into the `venues` table by `lib/db/patch_venues.sql` (the mock ID is kept in `venues.external_id`). **A venue added only to mockData.ts will not appear while the DB is reachable — add it to the `venues` table too.**
 
 **Venue type fields:**
 - `coord?: { latitude, longitude }` — absolute GPS → shown on map + list
@@ -151,7 +157,7 @@ utils/
 - `gta_bd01`–`gta_bd05` — Badminton clubs
 - `gta_bb01`–`gta_bb04` — Baseball complexes
 
-When adding new venues: use `coord` (not `offsetKm`), prefix ID with `gta_`, set `pricePerHour: 0` for free/public courts.
+When adding new venues: insert into the Supabase `venues` table (name, address, latitude, longitude, sports[], price_per_hour, external_id) and mirror in mockData.ts with `coord` (not `offsetKm`), ID prefixed `gta_`, `pricePerHour: 0` for free/public courts.
 
 ---
 
