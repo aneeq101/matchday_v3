@@ -79,6 +79,7 @@ export default function EarnScreen() {
   const [newMaxParticipants, setNewMaxParticipants] = useState(6);
   const [newDate, setNewDate] = useState<Date | null>(null);
   const [newLocation, setNewLocation] = useState('');
+  const [newCoord, setNewCoord] = useState<{ latitude: number; longitude: number } | null>(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [newFee, setNewFee] = useState('');
   const [newPrize, setNewPrize] = useState('');
@@ -223,6 +224,8 @@ export default function EarnScreen() {
           sport: newSport,
           date: formattedDate,
           location: newLocation || '',
+          latitude: newCoord?.latitude ?? null,
+          longitude: newCoord?.longitude ?? null,
           entryFee: Math.max(0, parseInt(newFee) || 0),
           prizePool: Math.max(0, parseInt(newPrize) || 0),
           maxParticipants: hasBracket ? newMax : newMaxParticipants,
@@ -251,6 +254,7 @@ export default function EarnScreen() {
       setNewMaxParticipants(6);
       setNewDate(null);
       setNewLocation('');
+      setNewCoord(null);
       setNewFee('');
       setNewPrize('');
     } catch (e) {
@@ -609,7 +613,7 @@ export default function EarnScreen() {
       <LocationPickerModal
         visible={showLocationPicker}
         sport={newSport}
-        onSelect={(loc) => { setNewLocation(loc); setShowLocationPicker(false); }}
+        onSelect={(loc, coord) => { setNewLocation(loc); setNewCoord(coord ?? null); setShowLocationPicker(false); }}
         onClose={() => setShowLocationPicker(false)}
       />
     </ImageBackground>

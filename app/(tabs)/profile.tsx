@@ -523,6 +523,7 @@ export default function ProfileScreen() {
               { icon: 'notifications-outline' as const, label: 'Notifications',   onPress: () => router.push('/notifications') },
               { icon: 'stats-chart-outline' as const, label: 'My Statistics',   onPress: () => router.push('/statistics') },
               { icon: 'people-outline' as const,      label: 'My Teams',          onPress: () => router.push('/my-teams') },
+              { icon: 'medal-outline' as const,       label: 'Ratings & Badges',  onPress: () => user && router.push({ pathname: '/ratings', params: { kind: 'player', id: user.id, name: displayName } }) },
               { icon: 'card-outline' as const,        label: 'Payment Methods',   onPress: () => Alert.alert('Payment Methods', 'Online payments are coming soon. For now, pay at the venue on the day of your booking or event.') },
               { icon: 'shield-outline' as const,      label: 'Privacy & Security', onPress: () => router.push('/privacy') },
               { icon: 'help-circle-outline' as const, label: 'Help & Support',    onPress: () => router.push('/help') },

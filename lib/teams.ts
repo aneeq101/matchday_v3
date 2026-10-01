@@ -10,6 +10,7 @@ export interface Team {
   isOpen: boolean;
   maxMembers: number;
   memberCount: number;
+  format: string;
 }
 
 export interface TeamMember {
@@ -32,12 +33,19 @@ function rowToTeam(row: Record<string, unknown>): Team {
     isOpen: (row.is_open as boolean) ?? true,
     maxMembers: (row.max_members as number) ?? 15,
     memberCount: (row.member_count as number) ?? 0,
+    format: (row.format as string) ?? '',
   };
 }
 
 function friendlyError(message?: string): string {
   if (!message) return 'Something went wrong. Please try again.';
   if (message.includes('TEAM_FULL')) return 'This team is full.';
+  if (message.includes('TEAM_SIZE_INVALID')) {
+    const m = message.match(/TEAM_SIZE_INVALID: ([^\n]+)/);
+    return m ? `Squad size doesn't fit: ${m[1]}.` : 'That squad size doesn’t fit this format.';
+  }
+  if (message.includes('TEAM_TOO_SMALL')) return 'The team already has more members than that.';
+  if (message.includes('TEAM_FORMAT_INVALID')) return 'Please pick a format for this sport.';
   if (message.includes('duplicate') || message.includes('23505')) return 'Already a member of this team.';
   return 'Something went wrong. Please try again.';
 }
@@ -141,6 +149,7 @@ export async function createTeam(params: {
   area: string;
   isOpen: boolean;
   maxMembers: number;
+  format: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const { error } = await supabase.from('teams').insert({
     owner_id: params.ownerId,
@@ -150,6 +159,7 @@ export async function createTeam(params: {
     area: params.area.trim(),
     is_open: params.isOpen,
     max_members: params.maxMembers,
+    format: params.format,
   });
   if (error) return { ok: false, error: friendlyError(error.message) };
   return { ok: true };
@@ -157,8 +167,8 @@ export async function createTeam(params: {
 
 export async function updateTeam(
   teamId: string,
-  params: { name: string; description: string; area: string; isOpen: boolean; maxMembers: number },
-): Promise<boolean> {
+  params: { name: string; description: string; area: string; isOpen: boolean; maxMembers: number; format: string },
+): Promise<{ ok: boolean; error?: string }> {
   const { error } = await supabase
     .from('teams')
     .update({
@@ -167,9 +177,10 @@ export async function updateTeam(
       area: params.area.trim(),
       is_open: params.isOpen,
       max_members: params.maxMembers,
+      format: params.format,
     })
     .eq('id', teamId);
-  return !error;
+  return error ? { ok: false, error: friendlyError(error.message) } : { ok: true };
 }
 
 export async function deleteTeam(teamId: string): Promise<boolean> {

@@ -32,6 +32,7 @@ function RootNavigator() {
       else if (typeof data.team_id === 'string') router.push({ pathname: '/team', params: { id: data.team_id } });
       else if (typeof data.tournament_id === 'string') router.push({ pathname: '/tournament', params: { id: data.tournament_id } });
       else if (typeof data.challenge_id === 'string') router.push('/challenges');
+      else if (typeof data.rating_player_id === 'string') router.push({ pathname: '/ratings', params: { kind: 'player', id: data.rating_player_id } });
       else router.push('/notifications');
     }).then((c) => { cleanup = c; });
     return () => cleanup();
@@ -60,6 +61,7 @@ function RootNavigator() {
       <Stack.Screen name="help" options={{ headerShown: false }} />
       <Stack.Screen name="tournament" options={{ headerShown: false }} />
       <Stack.Screen name="challenges" options={{ headerShown: false }} />
+      <Stack.Screen name="ratings" options={{ headerShown: false }} />
       <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
     </Stack>
   );

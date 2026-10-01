@@ -10,7 +10,7 @@ import { useAuth } from '../lib/AuthContext';
 import { supabase } from '../lib/supabase';
 import { unregisterPush } from '../lib/push';
 import {
-  fetchSettings, saveSettings, changePassword, deleteMyAccount,
+  fetchSettings, saveSettings, changePassword, deleteMyAccount, EVENT_ALERT_RADII,
   DEFAULT_SETTINGS, type UserSettings,
 } from '../lib/settings';
 
@@ -38,12 +38,23 @@ export default function PrivacyScreen() {
     fetchSettings(user.id).then((s) => { setSettings(s); setLoading(false); });
   }, [user]);
 
-  const toggle = async (key: 'showInNearby' | 'pushEnabled', value: boolean) => {
+  const toggle = async (key: 'showInNearby' | 'pushEnabled' | 'eventAlerts', value: boolean) => {
     if (!user) return;
     setSettings((prev) => ({ ...prev, [key]: value }));
     const ok = await saveSettings(user.id, { [key]: value });
     if (!ok) {
       setSettings((prev) => ({ ...prev, [key]: !value }));
+      Alert.alert('Not saved', 'Could not save your setting. Please try again.');
+    }
+  };
+
+  const setRadius = async (km: number) => {
+    if (!user) return;
+    const prevKm = settings.eventAlertRadiusKm;
+    setSettings((prev) => ({ ...prev, eventAlertRadiusKm: km }));
+    const ok = await saveSettings(user.id, { eventAlertRadiusKm: km });
+    if (!ok) {
+      setSettings((prev) => ({ ...prev, eventAlertRadiusKm: prevKm }));
       Alert.alert('Not saved', 'Could not save your setting. Please try again.');
     }
   };
@@ -118,9 +129,39 @@ export default function PrivacyScreen() {
                 />
               }
             />
+            <View style={styles.divider} />
+            <Row
+              icon="trophy-outline"
+              title="Nearby Event Alerts"
+              sub={settings.eventAlerts
+                ? `New tournaments, leagues and paid matches within ${settings.eventAlertRadiusKm} km, for the sports on your profile`
+                : 'Off — you won’t be told about new events near you'}
+              right={
+                <Switch
+                  value={settings.eventAlerts}
+                  onValueChange={(v) => toggle('eventAlerts', v)}
+                  trackColor={{ false: '#d1d5db', true: '#86efac' }}
+                  thumbColor={settings.eventAlerts ? '#16a34a' : '#9ca3af'}
+                />
+              }
+            />
+            {settings.eventAlerts && (
+              <View style={styles.radiusRow}>
+                <Text style={styles.radiusLabel}>Alert radius</Text>
+                {EVENT_ALERT_RADII.map((km) => (
+                  <TouchableOpacity
+                    key={km}
+                    style={[styles.radiusChip, settings.eventAlertRadiusKm === km && styles.radiusChipOn]}
+                    onPress={() => setRadius(km)}
+                  >
+                    <Text style={[styles.radiusText, settings.eventAlertRadiusKm === km && styles.radiusTextOn]}>{km} km</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
           <Text style={styles.hint}>
-            Profile visibility and who can message you are under Privacy & Messaging on your Profile tab.
+            Event alerts use the location saved when you open The Hood, at most 3 a day. Profile visibility and who can message you are under Privacy & Messaging on your Profile tab.
           </Text>
 
           <Text style={styles.sectionTitle}>Security</Text>
@@ -288,6 +329,12 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: 15, fontWeight: '600', color: '#111827' },
   rowSub: { fontSize: 12, color: '#6b7280', marginTop: 2 },
   divider: { height: 1, backgroundColor: '#f3f4f6', marginLeft: 14 },
+  radiusRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, paddingHorizontal: 14, paddingBottom: 14 },
+  radiusLabel: { fontSize: 12, color: '#6b7280', fontWeight: '600', marginRight: 4 },
+  radiusChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb' },
+  radiusChipOn: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
+  radiusText: { fontSize: 12, fontWeight: '600', color: '#374151' },
+  radiusTextOn: { color: '#fff' },
   hint: { fontSize: 12, color: '#9ca3af', marginTop: 8, marginBottom: 12, lineHeight: 17 },
   deleteBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

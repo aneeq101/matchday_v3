@@ -171,6 +171,11 @@ const MOCK_ID_TO_UUID: Record<string, string> = {
   '6': '00000000-0000-0000-0000-000000000006',
 };
 
+/** Real profile id for a player — maps the mock fallback ids to the demo accounts. */
+export function resolvePlayerId(id: string): string {
+  return MOCK_ID_TO_UUID[id] ?? id;
+}
+
 export interface FullProfile {
   bio: string;
   area: string;

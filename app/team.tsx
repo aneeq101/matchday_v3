@@ -17,6 +17,9 @@ import { openConversation } from '../lib/chatService';
 import { createNotification } from '../lib/notifications';
 import TeamFormModal, { TEAM_SPORT_EMOJI } from '../components/TeamFormModal';
 import type { Player } from '../data/mockData';
+import RatingsSection from '../components/RatingsSection';
+import BadgeChip from '../components/BadgeChip';
+import type { RatingSummary } from '../lib/ratings';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -38,6 +41,7 @@ export default function TeamScreen() {
   const [search, setSearch]         = useState('');
   const [addingId, setAddingId]     = useState<string | null>(null);
   const [profile, setProfile]       = useState<Player | null>(null);
+  const [ratingSummary, setRatingSummary] = useState<RatingSummary[]>([]);
 
   const openProfile = async (userId: string) => {
     if (userId === user?.id) return;
@@ -208,7 +212,9 @@ export default function TeamScreen() {
         <View style={styles.infoCard}>
           <Text style={{ fontSize: 44 }}>{TEAM_SPORT_EMOJI[team.sport] ?? '🏆'}</Text>
           <Text style={styles.teamName}>{team.name}</Text>
-          <Text style={styles.teamMeta}>{team.sport}{team.area ? ` · ${team.area}` : ''}</Text>
+          <Text style={styles.teamMeta}>
+            {team.sport}{team.format ? ` · ${team.format === 'Doubles' ? 'Doubles pair' : team.format}` : ''}{team.area ? ` · ${team.area}` : ''}
+          </Text>
           <View style={styles.pillRow}>
             <View style={styles.pill}>
               <Ionicons name="people" size={13} color="#8b5cf6" />
@@ -219,6 +225,11 @@ export default function TeamScreen() {
               <Text style={styles.pillText}>{team.isOpen ? 'Open' : 'Invite only'}</Text>
             </View>
           </View>
+          {ratingSummary[0]?.badge && (
+            <View style={{ marginTop: 10 }}>
+              <BadgeChip tier={ratingSummary[0].badge} sport={team.sport} size="md" />
+            </View>
+          )}
           {!!team.description && <Text style={styles.teamDesc}>{team.description}</Text>}
         </View>
 
@@ -262,6 +273,18 @@ export default function TeamScreen() {
             <Text style={styles.challengeText}>Challenge this Team</Text>
           </TouchableOpacity>
         )}
+
+        {/* Ratings & reviews (members can't rate their own team) */}
+        <View style={{ marginBottom: 20 }}>
+          <RatingsSection
+            kind="team"
+            id={team.id}
+            name={team.name}
+            sports={[team.sport]}
+            canRate={!!user && !isMember}
+            onSummary={setRatingSummary}
+          />
+        </View>
 
         {/* Members */}
         <Text style={styles.sectionTitle}>Members</Text>
@@ -322,12 +345,12 @@ export default function TeamScreen() {
         minMembers={members.length}
         initial={{
           name: team.name, sport: team.sport, area: team.area,
-          description: team.description, isOpen: team.isOpen, maxMembers: team.maxMembers,
+          description: team.description, isOpen: team.isOpen, maxMembers: team.maxMembers, format: team.format,
         }}
         onClose={() => setShowEdit(false)}
         onSubmit={async (v) => {
-          const ok = await updateTeam(team.id, v);
-          if (!ok) return 'Could not save changes. Please try again.';
+          const res = await updateTeam(team.id, v);
+          if (!res.ok) return res.error ?? 'Could not save changes. Please try again.';
           setShowEdit(false);
           await load();
           return null;

@@ -15,6 +15,7 @@ import {
   fetchPlayerStats,
   fetchMySports,
   fetchFullProfile,
+  resolvePlayerId,
   type PlayerStat,
   type ProfileSport,
   type FullProfile,
@@ -23,6 +24,9 @@ import { useAuth } from '../lib/AuthContext';
 import { isFollowing, followUser, unfollowUser } from '../lib/follows';
 import { createNotification } from '../lib/notifications';
 import { useRouter } from 'expo-router';
+import RatingsSection from './RatingsSection';
+import BadgeChip from './BadgeChip';
+import type { RatingSummary } from '../lib/ratings';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -98,6 +102,7 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
   const [loading, setLoading]             = useState(false);
   const [following, setFollowing]         = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+  const [ratingSummary, setRatingSummary] = useState<RatingSummary[]>([]);
 
   useEffect(() => {
     if (!player) return;
@@ -106,6 +111,7 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
     setSelectedStatSport('');
     setFullProfile(null);
     setFollowing(false);
+    setRatingSummary([]);
     setLoading(true);
 
     const profilePromise = Promise.all([
@@ -173,6 +179,11 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
   const displayJoin   = fullProfile?.joinDate || player.joinDate || '';
   const displayStats  = fullProfile?.stats    || player.stats;
 
+  // Ratings need a real account (mock fallback players map to the demo accounts)
+  const ratingId = resolvePlayerId(player.id);
+  const hasRatings = UUID_RE.test(ratingId);
+  const badges = ratingSummary.filter((s) => s.badge);
+
   return (
     <Modal visible={!!player} animationType="slide" transparent>
       <View style={styles.overlay}>
@@ -202,6 +213,11 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
                   <Text style={styles.joinText}>Member since {displayJoin}</Text>
                 </View>
               ) : null}
+              {badges.length > 0 && (
+                <View style={styles.badgeRow}>
+                  {badges.map((b) => <BadgeChip key={b.sport} tier={b.badge} sport={b.sport} />)}
+                </View>
+              )}
 
               {/* Follow + Message actions — visible immediately without scrolling */}
               {user && user.id !== player.id && (
@@ -419,6 +435,19 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
                 )}
               </View>
 
+              {hasRatings && (
+                <View style={styles.section}>
+                  <RatingsSection
+                    kind="player"
+                    id={ratingId}
+                    name={player.name}
+                    sports={sports.map((s) => s.name)}
+                    canRate={!!user && user.id !== ratingId}
+                    onSummary={setRatingSummary}
+                  />
+                </View>
+              )}
+
               {player.privacy === 'private' && (
                 <View style={styles.privateNote}>
                   <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
@@ -481,6 +510,7 @@ const styles = StyleSheet.create({
   profileLocation: { color: 'rgba(255,255,255,0.85)', fontSize: 13 },
   joinRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   joinText: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 8 },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 16 },
   statsRow: {

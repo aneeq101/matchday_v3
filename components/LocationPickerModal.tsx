@@ -13,7 +13,8 @@ import BookMap from './BookMap';
 interface Props {
   visible: boolean;
   sport?: string;
-  onSelect: (locationName: string) => void;
+  /** coord is set when a venue was picked (not for custom text) — used for nearby event alerts */
+  onSelect: (locationName: string, coord?: { latitude: number; longitude: number }) => void;
   onClose: () => void;
 }
 
@@ -51,7 +52,7 @@ export default function LocationPickerModal({ visible, sport, onSelect, onClose 
   }, [search, sport, location]);
 
   const confirm = (venue: Venue) => {
-    onSelect(venue.name + (venue.address ? `, ${venue.address}` : ''));
+    onSelect(venue.name + (venue.address ? `, ${venue.address}` : ''), venue.coord);
     reset();
     onClose();
   };

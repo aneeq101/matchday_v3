@@ -140,6 +140,9 @@ export async function createTournament(
     minParticipants: number;
     entrantType: EntrantType;
     format: string;
+    /** Venue coordinates — lets the database alert nearby players */
+    latitude?: number | null;
+    longitude?: number | null;
   },
   userId: string | null
 ): Promise<Tournament | null> {
@@ -159,6 +162,8 @@ export async function createTournament(
       min_participants: params.minParticipants,
       entrant_type: params.entrantType,
       format: params.format,
+      latitude: params.latitude ?? null,
+      longitude: params.longitude ?? null,
       participants_count: 0,
     })
     .select()

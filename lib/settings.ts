@@ -12,7 +12,11 @@ export interface UserSettings {
   messagesFrom: MessagesFrom;
   showInNearby: boolean;
   pushEnabled: boolean;
+  eventAlerts: boolean;          // nearby tournaments / leagues / paid matches in my sports
+  eventAlertRadiusKm: number;
 }
+
+export const EVENT_ALERT_RADII = [5, 10, 25, 50];
 
 export const DEFAULT_SETTINGS: UserSettings = {
   privacy: 'public',
@@ -20,12 +24,14 @@ export const DEFAULT_SETTINGS: UserSettings = {
   messagesFrom: { male: true, female: true, undisclosed: true },
   showInNearby: true,
   pushEnabled: true,
+  eventAlerts: true,
+  eventAlertRadiusKm: 25,
 };
 
 export async function fetchSettings(userId: string): Promise<UserSettings> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('privacy, allow_messages, messages_from, show_in_nearby, push_enabled')
+    .select('privacy, allow_messages, messages_from, show_in_nearby, push_enabled, event_alerts, event_alert_radius_km')
     .eq('id', userId)
     .single();
   if (error || !data) return DEFAULT_SETTINGS;
@@ -41,6 +47,8 @@ export async function fetchSettings(userId: string): Promise<UserSettings> {
     },
     showInNearby: (row.show_in_nearby as boolean) ?? true,
     pushEnabled: (row.push_enabled as boolean) ?? true,
+    eventAlerts: (row.event_alerts as boolean) ?? true,
+    eventAlertRadiusKm: (row.event_alert_radius_km as number) ?? 25,
   };
 }
 
@@ -51,6 +59,8 @@ export async function saveSettings(userId: string, patch: Partial<UserSettings>)
   if (patch.messagesFrom !== undefined)  row.messages_from = patch.messagesFrom;
   if (patch.showInNearby !== undefined)  row.show_in_nearby = patch.showInNearby;
   if (patch.pushEnabled !== undefined)   row.push_enabled = patch.pushEnabled;
+  if (patch.eventAlerts !== undefined)   row.event_alerts = patch.eventAlerts;
+  if (patch.eventAlertRadiusKm !== undefined) row.event_alert_radius_km = patch.eventAlertRadiusKm;
   if (!Object.keys(row).length) return true;
   const { error } = await supabase.from('profiles').update(row).eq('id', userId);
   return !error;

@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { teamFormatsFor, teamFormat, squadNote } from '../lib/sportRules';
 
 export const TEAM_SPORTS = ['Football', 'Cricket', 'Basketball', 'Tennis', 'Badminton', 'Baseball', 'Hockey'];
 
@@ -20,11 +21,14 @@ export interface TeamFormValues {
   description: string;
   isOpen: boolean;
   maxMembers: number;
+  format: string;
 }
 
 const EMPTY: TeamFormValues = {
-  name: '', sport: 'Football', area: '', description: '', isOpen: true, maxMembers: 12,
+  name: '', sport: 'Football', area: '', description: '', isOpen: true, maxMembers: 18, format: '11-a-side',
 };
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 interface Props {
   visible: boolean;
@@ -40,7 +44,7 @@ interface Props {
 }
 
 export default function TeamFormModal({
-  visible, title, submitLabel, initial, lockSport, minMembers = 2, onClose, onSubmit,
+  visible, title, submitLabel, initial, lockSport, minMembers = 1, onClose, onSubmit,
 }: Props) {
   const [values, setValues] = useState<TeamFormValues>(initial ?? EMPTY);
   const [saving, setSaving] = useState(false);
@@ -48,7 +52,10 @@ export default function TeamFormModal({
 
   useEffect(() => {
     if (visible) {
-      setValues(initial ?? EMPTY);
+      const v = initial ?? EMPTY;
+      // Older teams may have no format saved — use the one that fits them
+      const f = teamFormat(v.sport, v.format);
+      setValues(f ? { ...v, format: f.format } : v);
       setError('');
     }
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -56,16 +63,42 @@ export default function TeamFormModal({
   const set = <K extends keyof TeamFormValues>(key: K, v: TeamFormValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: v }));
 
+  const fmt = teamFormat(values.sport, values.format);
+  const formats = teamFormatsFor(values.sport);
+  const lo = fmt ? Math.max(fmt.min, minMembers) : Math.max(2, minMembers);
+  const hi = fmt ? fmt.max : 50;
+
+  const chooseSport = (sport: string) => {
+    const f = teamFormat(sport);
+    setValues((prev) => ({
+      ...prev, sport,
+      format: f?.format ?? '',
+      maxMembers: f ? clamp(f.def, Math.max(f.min, minMembers), f.max) : prev.maxMembers,
+    }));
+  };
+
+  const chooseFormat = (format: string) => {
+    const f = teamFormat(values.sport, format);
+    if (!f) return;
+    setValues((prev) => ({ ...prev, format, maxMembers: clamp(f.def, Math.max(f.min, minMembers), f.max) }));
+  };
+
   const submit = async () => {
     if (!values.name.trim()) { setError('Please enter a team name.'); return; }
+    if (fmt && (values.maxMembers < fmt.min || values.maxMembers > fmt.max)) {
+      setError(`${values.sport} ${fmt.label} teams have ${fmt.min}–${fmt.max} players.`);
+      return;
+    }
+    if (values.maxMembers < minMembers) {
+      setError(`The team already has ${minMembers} members.`);
+      return;
+    }
     setError('');
     setSaving(true);
     const err = await onSubmit(values);
     setSaving(false);
     if (err) setError(err);
   };
-
-  const minMax = Math.max(2, minMembers);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -101,7 +134,7 @@ export default function TeamFormModal({
                         <TouchableOpacity
                           key={s}
                           style={[styles.chip, values.sport === s && styles.chipActive]}
-                          onPress={() => set('sport', s)}
+                          onPress={() => chooseSport(s)}
                         >
                           <Text style={{ fontSize: 15 }}>{TEAM_SPORT_EMOJI[s]}</Text>
                           <Text style={[styles.chipText, values.sport === s && { color: '#fff' }]}>{s}</Text>
@@ -132,22 +165,56 @@ export default function TeamFormModal({
                   maxLength={200}
                 />
 
-                <Text style={styles.label}>Max Members</Text>
-                <View style={styles.stepper}>
-                  <TouchableOpacity
-                    style={styles.stepBtn}
-                    onPress={() => set('maxMembers', Math.max(minMax, values.maxMembers - 1))}
-                  >
-                    <Ionicons name="remove" size={20} color="#16a34a" />
-                  </TouchableOpacity>
-                  <Text style={styles.stepValue}>{values.maxMembers}</Text>
-                  <TouchableOpacity
-                    style={styles.stepBtn}
-                    onPress={() => set('maxMembers', Math.min(50, values.maxMembers + 1))}
-                  >
-                    <Ionicons name="add" size={20} color="#16a34a" />
-                  </TouchableOpacity>
-                </View>
+                {formats.length > 1 && (
+                  <>
+                    <Text style={styles.label}>Format</Text>
+                    <View style={styles.formatRow}>
+                      {formats.map((f) => {
+                        const tooSmall = minMembers > f.max;
+                        const on = values.format === f.format;
+                        return (
+                          <TouchableOpacity
+                            key={f.format}
+                            style={[styles.chip, on && styles.chipActive, tooSmall && styles.chipDisabled]}
+                            onPress={() => chooseFormat(f.format)}
+                            disabled={tooSmall}
+                          >
+                            <Text style={[styles.chipText, on && { color: '#fff' }]}>{f.label}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                )}
+
+                <Text style={styles.label}>Squad Size</Text>
+                {fmt && fmt.min === fmt.max ? (
+                  <View style={styles.fixedSize}>
+                    <Ionicons name="people" size={18} color="#16a34a" />
+                    <Text style={styles.fixedSizeText}>{fmt.max} players · {fmt.label}</Text>
+                  </View>
+                ) : (
+                  <View style={styles.stepper}>
+                    <TouchableOpacity
+                      style={[styles.stepBtn, values.maxMembers <= lo && styles.stepBtnOff]}
+                      onPress={() => set('maxMembers', clamp(values.maxMembers - 1, lo, hi))}
+                      disabled={values.maxMembers <= lo}
+                      accessibilityLabel="Fewer players"
+                    >
+                      <Ionicons name="remove" size={20} color="#16a34a" />
+                    </TouchableOpacity>
+                    <Text style={styles.stepValue}>{values.maxMembers}</Text>
+                    <TouchableOpacity
+                      style={[styles.stepBtn, values.maxMembers >= hi && styles.stepBtnOff]}
+                      onPress={() => set('maxMembers', clamp(values.maxMembers + 1, lo, hi))}
+                      disabled={values.maxMembers >= hi}
+                      accessibilityLabel="More players"
+                    >
+                      <Ionicons name="add" size={20} color="#16a34a" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {fmt && <Text style={styles.sizeNote}>{squadNote(fmt, values.maxMembers)}</Text>}
 
                 <View style={styles.switchRow}>
                   <View style={{ flex: 1 }}>
@@ -212,7 +279,16 @@ const styles = StyleSheet.create({
   },
   chipActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
   chipText: { color: '#374151', fontWeight: '500', fontSize: 13 },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 16 },
+  chipDisabled: { opacity: 0.4 },
+  formatRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  fixedSize: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14,
+    backgroundColor: '#f0fdf4', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#bbf7d0',
+  },
+  fixedSizeText: { fontSize: 15, fontWeight: '700', color: '#166534' },
+  sizeNote: { fontSize: 12, color: '#6b7280', marginTop: -8, marginBottom: 16 },
+  stepBtnOff: { opacity: 0.4 },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 14 },
   stepBtn: {
     width: 40, height: 40, borderRadius: 20, backgroundColor: '#f0fdf4',
     alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#bbf7d0',
