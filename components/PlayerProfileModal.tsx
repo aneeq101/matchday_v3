@@ -27,6 +27,7 @@ import { useRouter } from 'expo-router';
 import RatingsSection from './RatingsSection';
 import BadgeChip from './BadgeChip';
 import { summarizeDetails } from '../lib/sportProfile';
+import { fetchVerifiedRecord, type VerifiedRecord } from '../lib/history';
 import type { RatingSummary } from '../lib/ratings';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -104,6 +105,7 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
   const [following, setFollowing]         = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
   const [ratingSummary, setRatingSummary] = useState<RatingSummary[]>([]);
+  const [verified, setVerified]           = useState<VerifiedRecord[]>([]);
 
   useEffect(() => {
     if (!player) return;
@@ -113,21 +115,33 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
     setFullProfile(null);
     setFollowing(false);
     setRatingSummary([]);
+    setVerified([]);
     setLoading(true);
 
+    const realId = resolvePlayerId(player.id);
     const profilePromise = Promise.all([
       fetchMySports(player.id),
       fetchPlayerStats(player.id),
       fetchFullProfile(player.id),
-    ]).then(([sp, st, pr]) => {
+      UUID_RE.test(realId) ? fetchVerifiedRecord(realId) : Promise.resolve([]),
+    ]).then(([sp, st, pr, ver]) => {
       setSports(
         sp.length > 0
           ? sp
           : player.sports.map((s, i) => ({ ...s, id: String(i), details: {} }))
       );
-      setPlayerStats(st);
+      // Manual stats + verified results from recorded games, per sport
+      const merged: PlayerStat[] = st.map((m) => {
+        const v = ver.find((x) => x.sport === m.sport);
+        return v ? { ...m, matches: m.matches + v.played, wins: m.wins + v.wins, losses: m.losses + v.losses, draws: m.draws + v.draws } : m;
+      });
+      ver.filter((v) => !st.some((m) => m.sport === v.sport)).forEach((v) => merged.push({
+        sport: v.sport, matches: v.played, wins: v.wins, losses: v.losses, draws: v.draws, sportStats: {},
+      }));
+      setPlayerStats(merged);
+      setVerified(ver);
       setFullProfile(pr);
-      if (st.length > 0) setSelectedStatSport(st[0].sport);
+      if (merged.length > 0) setSelectedStatSport(merged[0].sport);
       setLoading(false);
     }).catch((err) => {
       console.warn('[PlayerProfileModal] fetch error:', err);
@@ -404,6 +418,30 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
                           </View>
                         </View>
 
+                        {/* Verified + link to match history */}
+                        <View style={styles.sourceRow}>
+                          {(() => {
+                            const v = verified.find((x) => x.sport === currentStat.sport);
+                            return v ? (
+                              <View style={styles.verifiedPill}>
+                                <Ionicons name="shield-checkmark" size={13} color="#16a34a" />
+                                <Text style={styles.verifiedText}>{v.played} verified from recorded games</Text>
+                              </View>
+                            ) : null;
+                          })()}
+                          {hasRatings && (
+                            <TouchableOpacity
+                              style={{ marginLeft: 'auto' }}
+                              onPress={() => {
+                                onClose();
+                                router.push({ pathname: '/match-history', params: { userId: ratingId, name: player.name, sport: currentStat.sport } });
+                              }}
+                            >
+                              <Text style={styles.historyLink}>Match history ›</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+
                         {/* Win rate bar */}
                         <View style={styles.winRateSection}>
                           <View style={styles.winRateHeader}>
@@ -616,4 +654,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6', borderRadius: 10,
   },
   privateNoteText: { color: '#6b7280', fontSize: 13 },
+  sourceRow: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8,
+    paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+  },
+  verifiedPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f0fdf4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  verifiedText: { fontSize: 11, fontWeight: '700', color: '#166534' },
+  historyLink: { fontSize: 13, fontWeight: '700', color: '#16a34a' },
 });

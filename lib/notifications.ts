@@ -25,6 +25,8 @@ const TYPE_ICONS: Record<string, { icon: string; color: string }> = {
   new_badge:           { icon: 'medal-outline',        color: '#a16207' },
   rating_request:      { icon: 'star-half-outline',    color: '#16a34a' },
   nearby_event:        { icon: 'location-outline',     color: '#16a34a' },
+  event_ready:         { icon: 'megaphone-outline',    color: '#7c3aed' },
+  match_result:        { icon: 'create-outline',       color: '#f59e0b' },
 };
 
 export function notifIcon(type: string): { icon: string; color: string } {
@@ -110,8 +112,13 @@ export async function createNotification(params: {
 //   rating_request    someone asked you to rate them
 //   new_rating        someone rated you (data.rating_id)
 //   new_badge         you earned a badge
+//   nearby_event      new tournament / league / paid match near you in your sport
+//   event_ready       an event / match you're in has enough players — "Ready for match day?"
+//   match_result      someone recorded a result in an event / match you're in
 
-export const POPUP_TYPES = ['challenge_update', 'rating_request', 'new_rating', 'new_badge'] as const;
+export const POPUP_TYPES = [
+  'challenge_update', 'rating_request', 'new_rating', 'new_badge', 'nearby_event', 'event_ready', 'match_result',
+] as const;
 export type PopupType = typeof POPUP_TYPES[number];
 
 export interface PopupNotif {

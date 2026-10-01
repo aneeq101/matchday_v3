@@ -23,7 +23,7 @@ import { useAuth } from '../../lib/AuthContext';
 import {
   fetchMyMatches, createMatch, cancelMatch,
   fetchMyTournamentCount, joinMatch, leaveMatch,
-  fetchOpenMatches, fetchJoinedMatches,
+  fetchOpenMatches, fetchJoinedMatches, fetchMatch,
 } from '../../lib/matches';
 import {
   fetchMyRegistrations,
@@ -34,6 +34,8 @@ import { type Booking, type MatchItem, type Tournament } from '../../data/mockDa
 import DatePickerField from '../../components/DatePickerField';
 import LocationPickerModal from '../../components/LocationPickerModal';
 import NotifBell from '../../components/NotifBell';
+import { toISODate, canRecordFinal } from '../../lib/matchday';
+import MatchDayPanel from '../../components/MatchDayPanel';
 import { createNotification } from '../../lib/notifications';
 
 const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
@@ -226,6 +228,7 @@ export default function MyTurfScreen() {
       maxPlayers:    matchMaxPlayers,
       matchDate:     `${formattedDate} at ${matchTime}`,
       location:      matchLocation.trim(),
+      startsOn:      toISODate(matchDate!),
     });
 
     if (newMatch) setMatches((prev) => [newMatch, ...prev]);
@@ -588,6 +591,28 @@ export default function MyTurfScreen() {
                   </View>
                 )}
 
+                <MatchDayPanel
+                  kind="match"
+                  id={selectedMatch.id}
+                  isParticipant={isOwnMatch || isJoinedMatch}
+                  startsOn={selectedMatch.startsOn}
+                  readyAt={selectedMatch.readyAt}
+                  lineup={`${selectedMatch.currentPlayers ?? 0} players`}
+                  finalScore={{
+                    allowed: true,
+                    score: selectedMatch.resultScore,
+                    note: selectedMatch.resultNote,
+                    summary: selectedMatch.resultSummary,
+                    completed: selectedMatch.status === 'completed',
+                    oneVsOne: selectedMatch.maxPlayers === 2,
+                  }}
+                  onChanged={async () => {
+                    const fresh = await fetchMatch(selectedMatch.id);
+                    if (fresh) setSelectedMatch(fresh);
+                    loadData();
+                  }}
+                />
+
                 <View style={styles.detailGrid}>
                   {[
                     { icon: 'football-outline' as const,  label: 'Sport',       value: selectedMatch.sport },
@@ -607,8 +632,8 @@ export default function MyTurfScreen() {
                   ))}
                 </View>
 
-                {/* Action button based on relationship to match */}
-                {isOwnMatch ? (
+                {/* Action button based on relationship to match (none once it's been played) */}
+                {selectedMatch.status === 'completed' ? null : isOwnMatch ? (
                   <TouchableOpacity style={styles.cancelBookingBtn} onPress={handleCancelSelectedMatch}>
                     <Text style={styles.cancelBookingText}>Cancel Match</Text>
                   </TouchableOpacity>
@@ -837,6 +862,24 @@ function BookingCard({ booking, onPress }: { booking: Booking; onPress: () => vo
   );
 }
 
+/** "Final: 5–3" once played, "Record the score" when it's time, "Ready for match day" when full. */
+function MatchStatusLine({ match }: { match: MatchItem }) {
+  if (match.status === 'completed' && match.resultScore) {
+    return (
+      <Text style={styles.matchFinalText}>
+        🏆 Final: {match.resultScore}{match.resultSummary ? ` · ${match.resultSummary}` : ''}
+      </Text>
+    );
+  }
+  if (canRecordFinal(match.startsOn, match.readyAt)) {
+    return <Text style={styles.matchActionText}>✏️ Played? Record the score</Text>;
+  }
+  if (match.readyAt) {
+    return <Text style={styles.matchActionText}>📣 Ready for match day</Text>;
+  }
+  return null;
+}
+
 function MatchCard({ match, onPress }: { match: MatchItem; onPress: () => void }) {
   return (
     <TouchableOpacity style={styles.matchCard} onPress={onPress}>
@@ -851,6 +894,7 @@ function MatchCard({ match, onPress }: { match: MatchItem; onPress: () => void }
               {match.currentPlayers ?? 0}/{match.maxPlayers} players
             </Text>
           )}
+          <MatchStatusLine match={match} />
         </View>
       </View>
       <View style={styles.viewDetailsBtn}>
@@ -879,6 +923,7 @@ function JoinedMatchCard({ match, joining, onPress, onLeave }: {
               {match.currentPlayers ?? 0}/{match.maxPlayers} players
             </Text>
           )}
+          <MatchStatusLine match={match} />
         </View>
       </View>
       <TouchableOpacity
@@ -1110,6 +1155,8 @@ const styles = StyleSheet.create({
   matchTitle: { fontWeight: '700', color: '#111827', fontSize: 14, marginBottom: 4 },
   matchMeta:  { color: '#6b7280', fontSize: 12, marginTop: 1 },
   matchSlotText: { color: '#16a34a', fontSize: 11, fontWeight: '600', marginTop: 4 },
+  matchFinalText: { color: '#92400e', fontSize: 12, fontWeight: '800', marginTop: 4 },
+  matchActionText: { color: '#7c3aed', fontSize: 12, fontWeight: '700', marginTop: 4 },
   subSectionTitle: { fontSize: 14, fontWeight: '700', color: '#6b7280', marginBottom: 8, marginTop: 6 },
   joinedMatchBorder: { borderLeftWidth: 3, borderLeftColor: '#16a34a' },
   leaveBtn: {

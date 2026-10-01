@@ -75,6 +75,11 @@ export interface Tournament {
   status?: TournamentStatus;
   championName?: string | null;
   organiserId?: string | null;
+  startsOn?: string | null;       // YYYY-MM-DD (null = date TBD)
+  readyAt?: string | null;        // when it reached enough entrants / a full line-up
+  resultScore?: string | null;    // pickup "match" events: final score
+  resultNote?: string | null;
+  resultSummary?: string | null;  // "Aneeq won", "Draw", "Aneeq’s side won"
 }
 
 export type EntrantType = 'player' | 'team';
@@ -107,6 +112,12 @@ export interface MatchItem {
   maxPlayers?: number;
   currentPlayers?: number;
   creatorId?: string;
+  status?: 'upcoming' | 'completed' | 'cancelled';
+  startsOn?: string | null;       // YYYY-MM-DD
+  readyAt?: string | null;        // line-up became full
+  resultScore?: string | null;
+  resultNote?: string | null;
+  resultSummary?: string | null;
 }
 
 export interface Conversation {

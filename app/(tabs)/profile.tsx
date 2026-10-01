@@ -29,6 +29,7 @@ const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20
 import { useRouter, useFocusEffect } from 'expo-router';
 import SportDetailsEditor from '../../components/SportDetailsEditor';
 import AskRatingsModal from '../../components/AskRatingsModal';
+import { fetchVerifiedRecord, type VerifiedRecord } from '../../lib/history';
 import { summarizeDetails } from '../../lib/sportProfile';
 
 const SKILL_COLORS: Record<string, string> = {
@@ -75,6 +76,8 @@ export default function ProfileScreen() {
   // Sports & stats
   const [mySports, setMySports] = useState<ProfileSport[]>([]);
   const [playerStats, setPlayerStats] = useState<PlayerStat[]>([]);
+  // Wins / losses from results recorded in the app (challenges, events, pickup games)
+  const [verified, setVerified] = useState<VerifiedRecord[]>([]);
   const [selectedStatSport, setSelectedStatSport] = useState('');
   const [showAddSport, setShowAddSport] = useState(false);
   const [addingSport, setAddingSport] = useState(false);
@@ -132,11 +135,13 @@ export default function ProfileScreen() {
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
 
-  // Sports can be added from the welcome flow — refresh just the sports list on focus
+  // Sports can be added from the welcome flow, and results get recorded elsewhere —
+  // refresh the sports list and the verified record on focus
   useFocusEffect(useCallback(() => {
     if (!user) return;
     let stale = false;
     fetchMySports(user.id).then((sp) => { if (!stale && sp.length) setMySports(sp); });
+    fetchVerifiedRecord(user.id).then((v) => { if (!stale) setVerified(v); });
     return () => { stale = true; };
   }, [user?.id]));
 
@@ -312,8 +317,8 @@ export default function ProfileScreen() {
 
         {/* Stats Card */}
         {(() => {
-          const totalMatches = playerStats.reduce((s, p) => s + p.matches, 0);
-          const totalWins    = playerStats.reduce((s, p) => s + p.wins, 0);
+          const totalMatches = playerStats.reduce((s, p) => s + p.matches, 0) + verified.reduce((s, v) => s + v.played, 0);
+          const totalWins    = playerStats.reduce((s, p) => s + p.wins, 0) + verified.reduce((s, v) => s + v.wins, 0);
           const winRate      = totalMatches > 0 ? Math.round((totalWins / totalMatches) * 100) : 0;
           return (
             <View style={styles.statsCard}>
@@ -337,9 +342,18 @@ export default function ProfileScreen() {
           );
         })()}
 
-        {/* Player Stats */}
+        {/* Player Stats — manual stats + verified results from recorded games */}
         {(() => {
-          const currentStat = playerStats.find((s) => s.sport === selectedStatSport);
+          const manualStat = playerStats.find((s) => s.sport === selectedStatSport);
+          const ver = verified.find((v) => v.sport === selectedStatSport);
+          const currentStat: PlayerStat | undefined = manualStat || ver ? {
+            sport: selectedStatSport,
+            matches: (manualStat?.matches ?? 0) + (ver?.played ?? 0),
+            wins: (manualStat?.wins ?? 0) + (ver?.wins ?? 0),
+            losses: (manualStat?.losses ?? 0) + (ver?.losses ?? 0),
+            draws: (manualStat?.draws ?? 0) + (ver?.draws ?? 0),
+            sportStats: manualStat?.sportStats ?? {},
+          } : undefined;
           const winRate = currentStat && currentStat.matches > 0
             ? Math.round((currentStat.wins / currentStat.matches) * 100) : 0;
           return (
@@ -409,6 +423,25 @@ export default function ProfileScreen() {
                           <Text style={styles.wldNum}>{currentStat.matches}</Text>
                           <Text style={styles.wldLbl}>Played</Text>
                         </View>
+                      </View>
+
+                      {/* Where the numbers come from */}
+                      <View style={styles.sourceRow}>
+                        {!!ver && (
+                          <View style={styles.verifiedPill}>
+                            <Ionicons name="shield-checkmark" size={13} color="#16a34a" />
+                            <Text style={styles.verifiedText}>{ver.played} verified from recorded games</Text>
+                          </View>
+                        )}
+                        {!!manualStat && manualStat.matches > 0 && (
+                          <Text style={styles.manualText}>{manualStat.matches} added by you</Text>
+                        )}
+                        <TouchableOpacity
+                          style={{ marginLeft: 'auto' }}
+                          onPress={() => user && router.push({ pathname: '/match-history', params: { userId: user.id, name: displayName, sport: selectedStatSport } })}
+                        >
+                          <Text style={styles.historyLink}>Match history ›</Text>
+                        </TouchableOpacity>
                       </View>
 
                       {/* Win rate bar */}
@@ -552,6 +585,7 @@ export default function ProfileScreen() {
               { icon: 'person-outline' as const,      label: 'Edit Profile',      onPress: () => router.push('/edit-profile') },
               { icon: 'notifications-outline' as const, label: 'Notifications',   onPress: () => router.push('/notifications') },
               { icon: 'stats-chart-outline' as const, label: 'My Statistics',   onPress: () => router.push('/statistics') },
+              { icon: 'time-outline' as const,        label: 'Match History',   onPress: () => user && router.push({ pathname: '/match-history', params: { userId: user.id, name: displayName } }) },
               { icon: 'people-outline' as const,      label: 'My Teams',          onPress: () => router.push('/my-teams') },
               { icon: 'medal-outline' as const,       label: 'Ratings & Badges',  onPress: () => user && router.push({ pathname: '/ratings', params: { kind: 'player', id: user.id, name: displayName } }) },
               { icon: 'card-outline' as const,        label: 'Payment Methods',   onPress: () => Alert.alert('Payment Methods', 'Online payments are coming soon. For now, pay at the venue on the day of your booking or event.') },
@@ -679,6 +713,9 @@ export default function ProfileScreen() {
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalBody}>
               {/* Match record row */}
               <Text style={styles.fieldLabel}>Match Record</Text>
+              <Text style={styles.recordHint}>
+                Results recorded in MatchDay (challenges, events, pickup games) are counted automatically — only add games you played elsewhere.
+              </Text>
               <View style={styles.matchRecordRow}>
                 {([
                   { label: 'Played', value: recordMatches, set: setRecordMatches },
@@ -1020,6 +1057,15 @@ const styles = StyleSheet.create({
   },
   logoutConfirmText: { color: '#fff', fontWeight: '700' },
   longPressHint: { color: '#9ca3af', fontSize: 11, textAlign: 'center', marginTop: 4 },
+  sourceRow: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8,
+    paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6',
+  },
+  verifiedPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f0fdf4', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  verifiedText: { fontSize: 11, fontWeight: '700', color: '#166534' },
+  manualText: { fontSize: 11, color: '#6b7280', fontWeight: '600' },
+  historyLink: { fontSize: 13, fontWeight: '700', color: '#16a34a' },
+  recordHint: { fontSize: 12, color: '#6b7280', lineHeight: 17, marginTop: -4, marginBottom: 10 },
   askRatingsBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14,
     backgroundColor: '#f0fdf4', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#bbf7d0',

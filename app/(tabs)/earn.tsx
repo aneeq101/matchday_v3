@@ -32,6 +32,7 @@ import {
 import { getFormatsForSport, eventRules, entrantNouns, MIN_ENTRANTS } from '../../lib/sportRules';
 import DatePickerField from '../../components/DatePickerField';
 import LocationPickerModal from '../../components/LocationPickerModal';
+import { toISODate } from '../../lib/matchday';
 
 
 const TYPE_COLORS: Record<EventType, string> = {
@@ -233,6 +234,7 @@ export default function EarnScreen() {
           minParticipants: hasBracket ? newMin : newMaxParticipants,
           entrantType: hasBracket ? rules.entrant : 'player',
           format: newFormat,
+          startsOn: newDate ? toISODate(newDate) : null,
         },
         user?.id ?? null
       );

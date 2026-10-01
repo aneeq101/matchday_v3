@@ -11,7 +11,9 @@ import {
   fetchTournament, fetchEntrants, fetchBracket, registerForTournament, unregisterFromTournament,
   startTournament, recordMatchResult,
 } from '../lib/tournaments';
-import { fetchCaptainTeams, type Team } from '../lib/teams';
+import { fetchCaptainTeams, fetchMyTeams, type Team } from '../lib/teams';
+import MatchDayPanel from '../components/MatchDayPanel';
+import { matchDayReached } from '../lib/matchday';
 import {
   previewKnockout, computeStandings, canEditResult, totalRounds, roundName,
   type BracketMatch, type Entrant,
@@ -53,6 +55,7 @@ export default function TournamentScreen() {
   const [score, setScore]             = useState('');
   const [resultError, setResultError] = useState('');
   const [profile, setProfile]         = useState<Player | null>(null);
+  const [myTeamIds, setMyTeamIds]     = useState<Set<string>>(new Set());
 
   // Player events: tap a name to see their profile (and challenge / message them)
   const openProfile = async (e: Entrant) => {
@@ -73,12 +76,15 @@ export default function TournamentScreen() {
     const tour = await fetchTournament(id);
     setT(tour);
     if (tour) {
-      const [e, m] = await Promise.all([fetchEntrants(tour), fetchBracket(tour.id)]);
+      const [e, m, teams] = await Promise.all([
+        fetchEntrants(tour), fetchBracket(tour.id), user ? fetchMyTeams(user.id) : Promise.resolve([]),
+      ]);
       setEntrants(e);
       setMatches(m);
+      setMyTeamIds(new Set(teams.map((x) => x.id)));
     }
     setLoading(false);
-  }, [id]);
+  }, [id, user?.id]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -94,6 +100,11 @@ export default function TournamentScreen() {
   const myEntries    = entrants.filter((e) => e.userId === user?.id);
   const myIds        = new Set(myEntries.map((e) => e.id));
   const isRegistered = myEntries.length > 0;
+  // In the event: signed up, on a signed-up team, or the organiser
+  const isParticipant = isRegistered || isOrganiser || entrants.some((e) => myTeamIds.has(e.id));
+  const dayReached   = matchDayReached(t?.startsOn);
+  // Organiser can always start; once match day arrives any entrant can
+  const canStart     = isOrganiser || (isRegistered && dayReached);
   const isTeam       = t?.entrantType === 'team';
   const { noun, nouns } = entrantNouns(t?.entrantType, t?.format);
   const pairs        = isTeam && isDoubles(t?.format);
@@ -173,9 +184,15 @@ export default function TournamentScreen() {
     },
   });
 
-  // ── Organiser: results ──────────────────────────────────────
+  // ── Results ─────────────────────────────────────────────────
+  // The two sides can record their own game; any entrant can once match day
+  // has arrived; the organiser always can. (Same rule in record_match_result.)
+  const mySide = (m: BracketMatch) =>
+    !!((m.aId && (myIds.has(m.aId) || myTeamIds.has(m.aId))) || (m.bId && (myIds.has(m.bId) || myTeamIds.has(m.bId))));
   const editable = (m: BracketMatch) =>
-    isOrganiser && status !== 'active' && canEditResult(m, matches, league);
+    status !== 'active' && canEditResult(m, matches, league)
+    && (isOrganiser || mySide(m) || (isRegistered && dayReached));
+  const canRecordAny = status !== 'active' && (isOrganiser || isRegistered || myTeamIds.size > 0);
 
   const openResult = (m: BracketMatch) => {
     setResultMatch(m);
@@ -278,6 +295,25 @@ export default function TournamentScreen() {
           hasDraw={hasDraw}
         />
 
+        {isReal && (
+          <MatchDayPanel
+            kind="event"
+            id={t.id}
+            isParticipant={isParticipant}
+            startsOn={t.startsOn}
+            readyAt={t.readyAt}
+            lineup={`${count} ${count === 1 ? noun : nouns}`}
+            color={color}
+            finalScore={t.type === 'match'
+              ? {
+                  allowed: true, score: t.resultScore, note: t.resultNote, summary: t.resultSummary,
+                  completed: !!t.resultScore, oneVsOne: !isTeam && maxAllowed === 2,
+                }
+              : undefined}
+            onChanged={load}
+          />
+        )}
+
         {!!notice && (
           <View style={[styles.notice, notice.error && styles.noticeError]}>
             <Ionicons name={notice.error ? 'alert-circle' : 'checkmark-circle'} size={18} color={notice.error ? '#dc2626' : '#16a34a'} />
@@ -327,7 +363,7 @@ export default function TournamentScreen() {
                 )}
               </TouchableOpacity>
             )}
-            {isOrganiser && hasDraw && (
+            {canStart && hasDraw && (
               <TouchableOpacity
                 style={[styles.startBtn, count < minNeeded && styles.startBtnDisabled]}
                 onPress={askStart}
@@ -341,13 +377,23 @@ export default function TournamentScreen() {
                 </Text>
               </TouchableOpacity>
             )}
+            {!isOrganiser && canStart && hasDraw && (
+              <Text style={styles.organiserHint}>
+                <Ionicons name="information-circle-outline" size={13} color="#6b7280" />
+                {' '}Match day is here and the organiser hasn’t started yet — any player can start it.
+              </Text>
+            )}
           </View>
         ) : null}
 
-        {isOrganiser && status !== 'active' && hasDraw && (
+        {canRecordAny && hasDraw && status !== 'completed' && (
           <Text style={styles.organiserHint}>
             <Ionicons name="information-circle-outline" size={13} color="#6b7280" />
-            {' '}You're the organiser — tap a match to enter the result.
+            {' '}{isOrganiser
+              ? 'You’re the organiser — tap any match to enter the result.'
+              : dayReached
+                ? 'Tap any finished match to record its score.'
+                : 'Played your match? Tap it to record the score.'}
           </Text>
         )}
 
@@ -505,7 +551,9 @@ export default function TournamentScreen() {
                     onPress={() => setPick(s.id)}
                   >
                     <Ionicons name={pick === s.id ? 'radio-button-on' : 'radio-button-off'} size={20} color={pick === s.id ? '#16a34a' : '#9ca3af'} />
-                    <Text style={styles.winnerName}>{s.name}</Text>
+                    <Text style={styles.winnerName}>
+                      {s.name}{myIds.has(s.id) || myTeamIds.has(s.id) ? (isTeam ? ' (your team)' : ' (you)') : ''} won
+                    </Text>
                     {pick === s.id && <Ionicons name="trophy" size={16} color="#f59e0b" />}
                   </TouchableOpacity>
                 ))}
@@ -515,7 +563,7 @@ export default function TournamentScreen() {
                     onPress={() => setPick('draw')}
                   >
                     <Ionicons name={pick === 'draw' ? 'radio-button-on' : 'radio-button-off'} size={20} color={pick === 'draw' ? '#3b82f6' : '#9ca3af'} />
-                    <Text style={styles.winnerName}>Draw</Text>
+                    <Text style={styles.winnerName}>It was a draw</Text>
                   </TouchableOpacity>
                 )}
                 <Text style={[styles.label, { marginTop: 8 }]}>Score (optional)</Text>
@@ -527,6 +575,7 @@ export default function TournamentScreen() {
                   placeholderTextColor="#9ca3af"
                   maxLength={40}
                 />
+                <Text style={styles.hint}>Everyone in the event gets an alert with the result.</Text>
                 {!league && (
                   <Text style={styles.hint}>The winner moves into the next round automatically.</Text>
                 )}
@@ -591,8 +640,8 @@ function StatusCard({ status, count, min, max, nouns, color, champion, hasDraw }
       <View style={[styles.statusCard, { backgroundColor: '#fffbeb', borderColor: '#fde68a' }]}>
         <Ionicons name="trophy" size={28} color="#f59e0b" />
         <View style={{ flex: 1 }}>
-          <Text style={styles.statusTitle}>Champion: {champion ?? '—'}</Text>
-          <Text style={styles.statusSub}>This event is finished.</Text>
+          <Text style={styles.statusTitle}>{hasDraw ? `Champion: ${champion ?? '—'}` : 'Match played'}</Text>
+          <Text style={styles.statusSub}>{hasDraw ? 'This event is finished.' : 'The final score is below.'}</Text>
         </View>
       </View>
     );

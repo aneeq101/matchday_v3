@@ -64,6 +64,8 @@ export default function NotificationsScreen() {
       router.push('/challenges');
     } else if (typeof n.data.rating_player_id === 'string') {
       router.push({ pathname: '/ratings', params: { kind: 'player', id: n.data.rating_player_id } });
+    } else if (typeof n.data.match_id === 'string') {
+      router.push('/(tabs)/myturf');
     } else if (n.type === 'new_message') {
       router.push('/messages');
     }

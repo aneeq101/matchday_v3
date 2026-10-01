@@ -30,6 +30,11 @@ function dbToTournament(row: Record<string, unknown>): Tournament {
     status: ((row.status as TournamentStatus) ?? 'active'),
     championName: (row.champion_name as string) ?? null,
     organiserId: (row.organiser_id as string) ?? null,
+    startsOn: (row.starts_on as string) ?? null,
+    readyAt: (row.ready_at as string) ?? null,
+    resultScore: (row.result_score as string) ?? null,
+    resultNote: (row.result_note as string) ?? null,
+    resultSummary: (row.result_summary as string) ?? null,
   };
 }
 
@@ -47,6 +52,7 @@ function friendlyError(message?: string, fallback = 'Something went wrong. Pleas
   if (m.includes('NEXT_ROUND_PLAYED')) return 'The winner has already played their next match, so this result can no longer be changed.';
   if (m.includes('NO_DRAWS_IN_KNOCKOUT')) return 'Knockout matches need a winner.';
   if (m.includes('MATCH_NOT_READY')) return 'Both sides of this match aren\'t decided yet.';
+  if (m.includes('NOT_ALLOWED')) return 'Only the players in this match (or the organiser) can record it — any entrant can once the event date has passed.';
   return fallback;
 }
 
@@ -140,6 +146,8 @@ export async function createTournament(
     minParticipants: number;
     entrantType: EntrantType;
     format: string;
+    /** YYYY-MM-DD; lets players record scores once match day arrives */
+    startsOn?: string | null;
     /** Venue coordinates — lets the database alert nearby players */
     latitude?: number | null;
     longitude?: number | null;
@@ -162,6 +170,7 @@ export async function createTournament(
       min_participants: params.minParticipants,
       entrant_type: params.entrantType,
       format: params.format,
+      starts_on: params.startsOn ?? null,
       latitude: params.latitude ?? null,
       longitude: params.longitude ?? null,
       participants_count: 0,

@@ -39,7 +39,7 @@ The app has five bottom tabs plus a set of stacked screens.
 | **Profile** (tab) | Your sports and skill levels, stats, privacy & messaging settings, menu. |
 | Welcome (first run) | Pick the sports you play, optionally add level, position and a quick self-rating per sport. Skippable, shown once. |
 | Messages / Chat | 1-on-1 conversations, live updates via Supabase Realtime. |
-| Notifications | In-app list; every notification is also sent as a phone push. Challenges, rating requests, new ratings and badges also **pop up** over the app. |
+| Notifications | In-app list; every notification is also sent as a phone push. Challenges, rating requests, new ratings, badges and nearby events also **pop up** over the app. |
 | Teams | Create/join teams with sport-specific squad sizes and formats, captain tools. |
 | Challenges | Player vs player or team vs team challenge matches, with results. New challenges and every change to them (accepted, declined, called off, result) **pop up in-app**. |
 | Ratings & badges | Rate players/teams per sport (overall + skills + conduct), reviews, Bronze to Diamond badges. Players (and captains) can **ask people they've played with to rate them**. |
@@ -177,6 +177,7 @@ app/                         expo-router screens (file name = route)
   tournament.tsx             Event detail: sign-ups, bracket / league table, organiser results
   challenges.tsx             Challenges (create, respond, record result)
   ratings.tsx                All ratings & reviews for a player/team
+  match-history.tsx          A player's recorded games, head-to-head + Rematch (?userId=&name=&sport=)
   welcome.tsx                First-run sports setup (shown once; Profile → "Set up my sports" re-opens it)
   statistics.tsx, privacy.tsx, help.tsx
 
@@ -191,7 +192,8 @@ components/
   TeamFormModal.tsx        Create/edit team (sport → format → squad size)
   BracketView.tsx          Knockout bracket drawing
   ChallengeModal.tsx       New challenge sheet
-  InAppPopups.tsx          All in-app popups: challenges + updates, rating requests, new ratings, badges (mounted in app/_layout.tsx)
+  InAppPopups.tsx          All in-app popups: challenges + updates, rating requests, new ratings, badges, nearby events, ready-for-match-day, results (mounted in app/_layout.tsx)
+  MatchDayPanel.tsx        Event page / Organize Match: who's ready, "I'm ready", final score + "Record final score"
   AskRatingsModal.tsx      Ask people you've played with to rate you / your team
   RatingsSection.tsx       Ratings summary, badge progress, skill bars, reviews
   RateModal.tsx            Rate a player/team
@@ -205,6 +207,8 @@ lib/                       Service layer (Supabase calls) + pure rule modules
   players.ts profile.ts follows.ts settings.ts statistics.ts sportStats.ts
   posts.ts comments.ts chatService.ts notifications.ts push.ts support.ts
   venues.ts matches.ts teams.ts tournaments.ts challenges.ts ratings.ts ratingRequests.ts
+  matchday.ts              Ready confirmations, final scores, match-day date helpers
+  history.ts               match_history / verified_record RPCs, rivalsFrom() head-to-head
   bracket.ts               PURE: knockout with byes, round robin, standings, round names
   sportRules.ts            PURE: match formats, booking limits, event entry rules, team squad formats
   ratingRules.ts           PURE: 1–10 level scale, NTRP map, skills per sport, badge tiers
@@ -387,6 +391,34 @@ Posts with optional media (Storage), likes/comments with trigger-maintained coun
 - `tournament_matches` has no client write policies; changes only happen through the RPCs.
 - The event location is picked with `LocationPickerModal`, which passes venue coordinates so the event can trigger nearby alerts.
 
+### 8.6b Match day: ready confirmations & recording scores (`lib/db/patch_matchday.sql`)
+- **Dates:** `tournaments.starts_on` / `matches.starts_on` (date) are sent by the app on create and parsed from the date text by triggers (`fn_parse_event_date`), so "has match day arrived?" can be checked.
+- **READY FOR MATCH DAY?**
+  - **When:** the moment an event has what it needs, it's announced once (`ready_at`):
+    - tournaments and leagues: the minimum number of entrants;
+    - pickup "match" events and Organize Match games: a full line-up.
+  - **Who:** everyone involved (`fn_event_people` / `fn_match_people`: sign-ups, members of signed-up teams, organiser) gets an `event_ready` notification, shown as a popup.
+  - **Confirming:** `ack_ready()` stores it in `event_ready_acks`, and `MatchDayPanel` lists who has confirmed.
+  - **Reminder:** the popup comes from `my_pending_ready()` (ready, not yet confirmed, not snoozed, not finished, match day not passed). It's checked on app start / foreground and when an alert arrives, and keeps coming back until "I'm ready". "Remind me later" → `snooze_ready()` (12 h, or until match day; `event_ready_snoozes`).
+- **Recording scores**
+  - **Tournament/league games** (`record_match_result`): the two sides (player or team captain) can record their own game; any entrant can once `starts_on` has passed; the organiser always can. Results not entered by the organiser notify the organiser and both sides (`match_result`).
+  - **Starting the draw:** once match day arrives, any entrant can start it (`start_tournament`).
+  - **Pickup games:** `record_event_result` / `record_pickup_result(id, score, note, outcome)` (events of type `match` / Organize Match).
+    - Any player in it records who won (`won` / `lost` / `draw`, from their side) plus the score and an optional note, once match day arrives (or, with no date, once the line-up is full).
+    - `result_summary` reads "Aneeq won" for 1-v-1 games, or "Aneeq’s side won" otherwise.
+  - **Everyone is told:** every recorded result (brackets and pickup, including the organiser's) sends `match_result` to everyone in the event except the recorder, as an in-app popup and a phone push.
+
+### 8.6c Match history & automatic win/loss (`lib/db/patch_match_history.sql`)
+- **`fn_match_history(user)`** derives one row per game from recorded results, every time it's called (so a corrected result corrects the record):
+  - **Challenges:** team challenges count for every team member.
+  - **Tournament/league games:** byes are skipped; team entries count for every member.
+  - **Pickup games** (event `match` / Organize Match): the recorder gets their outcome; in a 1-v-1 the other player gets the opposite; in bigger games everyone else gets `played`.
+- **App RPCs:** `match_history(user, limit)` and `verified_record(user)` check `fn_can_view_profile` (same rule as `profiles_select`).
+- **Profile stats per sport** = manual `player_stats` (Profile → Record Stats, now "games played elsewhere") + verified, shown with a "N verified from recorded games" pill on the Profile tab and in `PlayerProfileModal`.
+- **`profiles.stats`** (headline matches/wins, Hood cards, `get_my_ranking`) is recomputed by triggers on `challenges`, `tournament_matches`, `tournaments`, `matches` and `player_stats` (`fn_refresh_profile_stats`; demo players excluded).
+- **`app/match-history.tsx`:** sport filter, W/L/D record, head-to-head per opponent with Rematch / "Settle it" (opens `/challenges` prefilled), and games by month. Opened from the Profile menu, the stats card, and other players' profiles.
+- `tournament_matches.played_at` is stamped when a result is entered.
+
 ### 8.7 Challenges (`challenges.tsx`)
 Player vs player, or captain vs another team of the same sport. Flow: create → opponent accepts/declines (demo opponents auto-accept) → either side records the result. Each step notifies the other side. "Where" uses `VenueList` (DB venues for the sport, nearest first, or a custom place).
 
@@ -399,7 +431,7 @@ Player vs player, or captain vs another team of the same sport. Flow: create →
   - Several updates on one challenge collapse into one card showing its latest state.
   - Cards offer Message, My challenges, Challenge someone, or (after a result) Rate the opponent.
   - Demo auto-accepts don't pop up.
-- While the app is open, push banners for `challenge`, `challenge_update`, `rating_request`, `new_rating` and `new_badge` are suppressed in `lib/push.ts`, so nothing shows twice.
+- While the app is open, push banners for `challenge`, `challenge_update`, `rating_request`, `new_rating`, `new_badge` and `nearby_event` are suppressed in `lib/push.ts`, so nothing shows twice.
 
 ### 8.8 Teams (`my-teams.tsx`, `team.tsx`, `TeamFormModal`)
 - A team has a sport, a **format** and a squad size (`max_members`). The squad size must fit the format (§9.3). Tennis/Badminton teams are doubles pairs of exactly 2.
@@ -435,6 +467,7 @@ Some are inserted by DB functions (tournaments, challenges, ratings, event alert
 - **Limits:** max **3 alerts per player per 24 h**; nearest 500 per event.
 - Inserts `nearby_event` notifications (`data.tournament_id`), which are pushed by the normal pipeline. Errors are swallowed, so an alert problem can never block event creation.
 - Settings UI: Privacy & Security → Nearby Event Alerts.
+- **In-app popup** (`InAppPopups`): "NEW NEAR YOU", showing the event name, date, place, distance, spots left, fee/prize and format, with **View & join** (→ `/tournament`) / Not interested. It only shows while sign-ups are open and spots remain; otherwise the notification is just marked read.
 
 ### 8.12 First-run sports setup (`app/welcome.tsx`)
 - Opens automatically, at most once, when a signed-in user reaches the tabs with no `profile_sports` and without `user_metadata.onboarding_done`. Opening it sets that flag via `supabase.auth.updateUser`, so it never nags and works across devices with no table.
@@ -515,6 +548,8 @@ lib/db/patch_team_sizes_event_alerts.sql
 lib/db/patch_challenge_popup.sql
 lib/db/patch_rating_requests.sql
 lib/db/patch_rating_popups.sql
+lib/db/patch_matchday.sql
+lib/db/patch_match_history.sql
 ```
 
 ### Testing SQL locally before running it in Supabase

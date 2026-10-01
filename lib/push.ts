@@ -37,7 +37,7 @@ export async function setupNotificationHandlers(onTap: (data: Record<string, unk
           // and badges already appear as in-app popups (components/InAppPopups.tsx),
           // so don't also show a banner.
           const type = (n.request.content.data as { type?: string } | undefined)?.type;
-          const inAppPopup = ['challenge', 'challenge_update', 'rating_request', 'new_rating', 'new_badge'].includes(type ?? '');
+          const inAppPopup = ['challenge', 'challenge_update', 'rating_request', 'new_rating', 'new_badge', 'nearby_event', 'event_ready', 'match_result'].includes(type ?? '');
           return {
             shouldShowBanner: !inAppPopup,
             shouldShowList: true,

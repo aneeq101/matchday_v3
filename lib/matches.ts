@@ -18,6 +18,12 @@ function rowToMatchItem(row: Record<string, unknown>): MatchItem {
     maxPlayers:     row.max_players as number | undefined,
     currentPlayers: row.current_players as number | undefined,
     creatorId:      row.creator_id as string,
+    status:         (row.status as MatchItem['status']) ?? 'upcoming',
+    startsOn:       (row.starts_on as string) ?? null,
+    readyAt:        (row.ready_at as string) ?? null,
+    resultScore:    (row.result_score as string) ?? null,
+    resultNote:     (row.result_note as string) ?? null,
+    resultSummary:  (row.result_summary as string) ?? null,
   };
 }
 
@@ -41,6 +47,7 @@ export async function createMatch(params: {
   maxPlayers: number;
   matchDate: string;
   location: string;
+  startsOn?: string | null;   // YYYY-MM-DD
 }): Promise<MatchItem | null> {
   const emoji = SPORT_EMOJIS[params.sport] ?? '🏟️';
   const { data, error } = await supabase
@@ -54,6 +61,7 @@ export async function createMatch(params: {
       max_players:     params.maxPlayers,
       current_players: 0,
       match_date:      params.matchDate,
+      starts_on:       params.startsOn ?? null,
       location:        params.location,
     })
     .select()
@@ -67,6 +75,13 @@ export async function createMatch(params: {
   // The auto_join_creator_trigger in Supabase handles inserting the creator
   // into match_players (and incrementing current_players) atomically on INSERT.
   return { ...rowToMatchItem(data), currentPlayers: 1 };
+}
+
+/** One Organize Match game (for the "ready for match day" popup). */
+export async function fetchMatch(id: string): Promise<MatchItem | null> {
+  const { data, error } = await supabase.from('matches').select('*').eq('id', id).maybeSingle();
+  if (error || !data) return null;
+  return rowToMatchItem(data as Record<string, unknown>);
 }
 
 export async function cancelMatch(matchId: string): Promise<boolean> {

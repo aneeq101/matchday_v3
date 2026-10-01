@@ -58,6 +58,7 @@ app/
   tournament.tsx           # Event details: sign-ups, knockout bracket / league table + fixtures, organiser results
   challenges.tsx           # Challenge matches (player vs player, team vs team)
   ratings.tsx              # All ratings & reviews for a player/team (?kind=player|team&id=&name=)
+  match-history.tsx        # Recorded games, head-to-head, Rematch (?userId=&name=&sport=)
   welcome.tsx              # First-run flow: pick sports → optional level/position/self-rating per sport → done
   statistics.tsx           # Aggregated player statistics
   privacy.tsx              # Privacy & Security (nearby, push, password, sign out all, delete account)
@@ -75,7 +76,8 @@ components/
   BracketView.tsx          # Knockout bracket drawing with connector lines
   ChallengeModal.tsx       # New challenge sheet
   NotifBell.tsx            # Bell icon with unread count
-  InAppPopups.tsx          # All in-app popups (one queue): new challenges + updates, rating requests, new ratings (shows the rating), badges; Realtime + on-foreground check
+  InAppPopups.tsx          # All in-app popups (one queue): new challenges + updates, rating requests, new ratings (shows the rating), badges, nearby events, READY FOR MATCH DAY?, results; Realtime + on-foreground check
+  MatchDayPanel.tsx        # Event page + Organize Match details: ready list / "I'm ready", final score / "Record final score"
   AskRatingsModal.tsx      # Ask people you've played with to rate you / your team
   RatingsSection.tsx       # Ratings summary, badge progress, skill bars, reviews (profile modal, team page, ratings screen)
   RateModal.tsx            # Rate a player/team: overall 1–10, per-skill 1–10, conduct stars, review
@@ -93,10 +95,12 @@ lib/                       # Service layer — screens never call Supabase direc
   ratingRules.ts           # pure: 1–10 level scale, NTRP map, skills per sport (player + team), badge tiers/rules
   ratings.ts               # rating_summary / submit_rating RPC wrappers, ratings list, delete
   ratingRequests.ts        # request_ratings / suggestions / decline wrappers
+  matchday.ts              # ack_ready / ready list / final scores; toISODate, matchDayReached, canRecordFinal
+  history.ts               # match_history / verified_record RPCs, rivalsFrom()
   sportProfile.ts          # pure: profile sports, skill levels, per-sport fields, self-rating skills, summarizeDetails()
   onboarding.ts            # when to show the welcome flow (user_metadata.onboarding_done)
   sportRules.ts            # sport formats, booking limits, event entry rules (min 4, singles/doubles/teams), TEAM_FORMATS squad sizes
-  db/                      # SQL migrations / patches (all run in Supabase except patch_rating_popups.sql)
+  db/                      # SQL migrations / patches (all run in Supabase except the updated patch_matchday.sql + patch_match_history.sql)
 
 data/
   mockData.ts              # All types + mock/demo data + venue helpers
@@ -282,6 +286,7 @@ Full plan in `PLAN.md`. Summary:
 - **Team formats** (`TEAM_FORMATS` in `lib/sportRules.ts`, mirrored by `fn_team_formats()` in SQL — keep in step): Tennis/Badminton `Doubles` exactly 2; Football 5-a-side 5–10 / 7-a-side 7–14 / 11-a-side 11–25; Cricket 8-a-side 8–12 / 11-a-side 11–16; Basketball 3x3 3–4 / 5-on-5 5–15; Baseball 9 players 9–20; Hockey 6 on ice 6–22. `teams.format` column; `trg_teams_validate_size` checks on insert and when size/format/sport change (errors `TEAM_SIZE_INVALID: …`, `TEAM_FORMAT_INVALID`, `TEAM_TOO_SMALL`); missing format is guessed (older app versions). `TeamFormModal` has a Format picker and the squad stepper is clamped to the format (pairs show a fixed "2 players").
 - Patch backfills formats for existing teams; demo badminton "Queen West Smashers" had 3 members → demo Sara removed so it's Zara + the owner's account.
 - **Nearby event alerts:** `trg_alert_nearby_event` (AFTER INSERT on tournaments) → `notifications` rows of type `nearby_event` (data `tournament_id`), which the existing push trigger sends to phones. Fires for tournaments, leagues, and matches with entry fee > 0, status active. Recipients: not demo, not organiser, `event_alerts` on, play that sport (`profile_sports`), location saved in the last 90 days within their `event_alert_radius_km` (5/10/25/50, default 25), max 3 per 24 h, nearest 500. Event point = venue coord from `LocationPickerModal` (now passes `coord`) → else venue whose name starts the location text → else (alert only) organiser's location. `tournaments.latitude/longitude/geo` + sync trigger. Settings in Privacy & Security ("Nearby Event Alerts" + radius chips), `lib/settings.ts`.
+- **Popup (2026-10-01):** `nearby_event` is in `POPUP_TYPES` → "NEW NEAR YOU" card in `InAppPopups` (View & join / Not interested), only while sign-ups are open and not full. Before this, alerts only reached the Notifications list (no phone push without an FCM build), so users never noticed them.
 - Tested locally (all migrations replayed + patch run twice) with a copy of the live team data. Bundles for web + Android; not clicked through. Phone pushes still need Firebase + a build; the alerts show in the in-app Notifications list regardless.
 
 ## First-run sports setup (2026-10-01) — no SQL needed
@@ -298,7 +303,7 @@ Full plan in `PLAN.md`. Summary:
 - Profile tab: tapping a sport card already opens Edit (level, positions, self-rating) since `c17f8f9`.
 - SQL tested with `lib/db/testing/replay.sh` (incl. re-run); app type-checks and bundles for web + Android; not clicked through.
 
-## Rating popups (2026-10-01) — `lib/db/patch_rating_popups.sql` ⚠️ NOT YET RUN in Supabase
+## Rating popups (2026-10-01) — `lib/db/patch_rating_popups.sql` run in Supabase 2026-10-01
 
 - `components/ChallengePopup.tsx` → renamed **`components/InAppPopups.tsx`**: one queue for all popups so they never stack. Notification-driven items use `POPUP_TYPES` in `lib/notifications.ts` (`challenge_update`, `rating_request`, `new_rating`, `new_badge`), fetched unread (7 days) on start/foreground + Realtime; closing marks read.
 - `rating_request` → Rate now (`/ratings?...&rate=sport`) / Not now (`decline_rating_request`) / Later. Skipped if the request is no longer pending.
@@ -306,6 +311,25 @@ Full plan in `PLAN.md`. Summary:
 - Patch also notifies on a *changed* rating (score or review differs) — "X updated their rating of you to 8/10" (`data.updated = true`, popup says UPDATED RATING); unchanged re-saves stay silent.
 - `new_badge` → celebration card.
 - Patch redefines `submit_rating()` (identical logic) so `new_rating`/`new_badge` notifications include `rating_id`/`badge` + `rate_kind/rate_id/rate_name/sport`. Foreground push banners suppressed for these types too.
+
+## Match day: ready popups + players record scores (2026-10-01) — `lib/db/patch_matchday.sql` ⚠️ first version run 2026-10-01; UPDATED version must be RE-RUN
+
+- `starts_on date` on tournaments + matches (app sends it; triggers parse "Sat, Oct 12, 2026[ at 5:00 PM]" via `fn_parse_event_date`; backfilled).
+- READY: `ready_at` + triggers on `tournament_registrations` / `match_players` → once per event, `event_ready` notifications to `fn_event_people` / `fn_match_people` (sign-ups, members of signed-up teams, organiser; no demo). Threshold: tournament/league = `min_participants`, match event = `max_participants`, Organize Match = `max_players`. Already-ready events marked silently by the patch. `event_ready_acks` + `ack_ready()`; popup "READY FOR MATCH DAY?" → I'm ready / View event / Later (skipped if already acked or finished).
+- **Reminder (update):** the ready popup is driven by `my_pending_ready()` (ready, not confirmed, not snoozed, not finished, match day not passed), checked on app start/foreground and when an `event_ready` notification arrives — it keeps coming back until "I'm ready" (`ack_ready`, which also clears the snooze + marks alerts read). "Remind me later" / closing → `snooze_ready` (12 h, or until match day). Table `event_ready_snoozes`.
+- **Who won (update):** pickup scores need an outcome from the recorder's side (`won`/`lost`/`draw`) → `result_outcome` + `result_summary` ("Aneeq won" for 1v1, "Aneeq’s side won" otherwise; `fn_result_summary`). RPCs are now `record_event_result/record_pickup_result(id, score, note, outcome)` (old 3-arg versions dropped). Bracket sheet labels "X (you) won".
+- **Everyone alerted (update):** every recorded result (organiser too, brackets + pickup) sends `match_result` to all `fn_event_people`/`fn_match_people` except the recorder → in-app popup + phone push.
+- Scores: `record_match_result` now allows the two sides, any entrant after `starts_on`, organiser; non-organiser results notify organiser + sides (`match_result`). `start_tournament` allows any entrant after `starts_on`. `record_event_result` (type 'match') / `record_pickup_result` (matches): any player once match day (or full line-up if no date) → status completed, `result_score/note/by/at`, `match_result` to everyone else.
+- UI: `components/MatchDayPanel.tsx` on the event page + My Turf match details; My Turf cards show "🏆 Final: …" / "✏️ Played? Record the score" / "📣 Ready for match day"; event page lets sides/entrants tap bracket games, entrant "start" after match day. Notification `match_id` taps → My Turf.
+- Tested with `lib/db/testing/replay.sh` (dates, once-only announcement, acks, side/entrant/organiser permissions before/after date, pickup scores, re-run).
+
+## Match history + automatic W/L (2026-10-01) — `lib/db/patch_match_history.sql` ⚠️ NOT YET RUN (run AFTER re-running patch_matchday.sql)
+
+- `fn_match_history(user)` (derived from results, no stored tally → corrections never double count): challenges (team → all members), tournament/league games (team entries → all members; byes skipped), pickup events + Organize Match (recorder's outcome; 1-v-1 opponent gets the opposite; bigger games → 'played').
+- RPCs `match_history(user, limit)`, `verified_record(user)` gated by `fn_can_view_profile` (mirrors profiles_select).
+- Displayed per-sport stats = manual `player_stats` + verified (Profile tab + PlayerProfileModal, "N verified" pill, "Match history ›"). Record Stats modal now says only add games played elsewhere. Detailed stats (goals, aces…) stay manual.
+- `profiles.stats` matches/wins kept = manual + verified by triggers (`fn_refresh_profile_stats`; demo excluded; backfilled) → headline, Hood cards, ranking.
+- `app/match-history.tsx`: sport filter, record, head-to-head (Rematch / "Settle it" → `/challenges` prefilled; ChallengeModal already explains team challenges need a captain), games by month. Profile menu "Match History".
 
 ## Progress log
 
@@ -322,7 +346,7 @@ Full plan in `PLAN.md`. Summary:
 | 2026-10-01 | Challenge popups (new + accepted/declined/called off/result), rating requests | `ba743de` |
 | 2026-10-01 | Rating popups (request, new/updated rating, badge), fix for missing rated-you alert | `199b783` |
 
-**SQL status:** everything up to `patch_rating_requests.sql` has been run in Supabase (2026-10-01, verified live). **Pending: `patch_rating_popups.sql`** — until run, rating-request and badge popups work but "X rated you" popups don't appear (old notifications lack `rating_id`).
+**SQL status:** everything up to `patch_rating_popups.sql` has been run in Supabase (2026-10-01). **Pending: `patch_matchday.sql`** — until run, creating events/matches fails (new `starts_on` column) and ready/score features don't work.
 
 ## Your to-do list (things only the owner can do)
 
