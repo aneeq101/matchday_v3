@@ -14,10 +14,10 @@ import {
 } from '../lib/notifications';
 import { fetchRating, findRatingNear, type Rating } from '../lib/ratings';
 import { fetchTeam } from '../lib/teams';
-import { fetchTournament, eventCategory } from '../lib/tournaments';
-import { fetchMatch } from '../lib/matches';
-import { ackReady, fetchPendingReady, snoozeReady, toISODate, type EventKind, type PendingReady } from '../lib/matchday';
-import type { Tournament } from '../data/mockData';
+import { fetchTournament, eventCategory, categoryLabel } from '../lib/tournaments';
+import { fetchMatch, joinMatch, isInMatch } from '../lib/matches';
+import { ackReady, fetchPendingReady, snoozeReady, toISODate, isPastGame, type EventKind, type PendingReady } from '../lib/matchday';
+import type { Tournament, MatchItem } from '../data/mockData';
 import { fetchRequest, declineRatingRequest } from '../lib/ratingRequests';
 import { skillsFor, levelFor, levelColor, ntrpFor, badgeInfo, BADGE_RULES, type RatingTargetKind } from '../lib/ratingRules';
 import { openConversation } from '../lib/chatService';
@@ -58,6 +58,7 @@ type Item =
   | { type: 'new_rating'; key: string; notifId: string; rating: Rating; target: Target; updated: boolean }
   | { type: 'new_badge'; key: string; notifId: string; badge: string; target: Target }
   | { type: 'nearby_event'; key: string; notifId: string; event: Tournament; distance: string }
+  | { type: 'nearby_match'; key: string; notifId: string; match: MatchItem; distance: string }
   | { type: 'event_ready'; key: string; ready: PendingReady }
   | { type: 'match_result'; key: string; notifId: string; title: string; body: string; kind: EventKind; id: string };
 
@@ -159,6 +160,19 @@ export default function InAppPopups({ userId }: { userId: string }) {
         type: 'new_rating', key: `n:${n.id}`, notifId: n.id, rating, updated,
         target: { ...target, sport: target.sport || rating.sport },
       }]);
+      return;
+    }
+
+    if (n.type === 'nearby_event' && str(d.match_id)) {
+      // A prize Organize Match game — only while it's still to be played, has spots and I'm not in it
+      const m = await fetchMatch(str(d.match_id));
+      if (!m || m.status !== 'upcoming' || isPastGame(m)
+          || (m.currentPlayers ?? 0) >= (m.maxPlayers ?? Infinity) || await isInMatch(m.id, userId)) {
+        markRead(n.id).catch(() => {});
+        return;
+      }
+      const distance = n.body.match(/(under 1|\d+) km away/)?.[0] ?? '';
+      enqueue([{ type: 'nearby_match', key: `n:${n.id}`, notifId: n.id, match: m, distance }]);
       return;
     }
 
@@ -459,6 +473,46 @@ export default function InAppPopups({ userId }: { userId: string }) {
           <Btn kind="ghost" half label={item.kind === 'event' ? 'View event' : 'My Turf'} onPress={() => openEvent(item.kind, item.id)} />
           <Btn kind="primary" half label={closeLabel} onPress={close} />
         </View>
+      </>,
+      close,
+    );
+  }
+
+  // ── New prize match near you (Organize Match) ───────────────
+  if (item.type === 'nearby_match') {
+    const m = item.match;
+    const spotsLeft = Math.max(0, (m.maxPlayers ?? 0) - (m.currentPlayers ?? 0));
+    const join = async () => {
+      setBusy('accept');
+      setError('');
+      const ok = await joinMatch(m.id, userId);
+      setBusy(null);
+      if (!ok) { setError('Couldn’t join — the match may be full now.'); return; }
+      close();
+      router.push('/(tabs)/myturf');
+    };
+    return wrap(
+      <>
+        <Badge icon="trophy" color="#7c3aed" />
+        <Text style={[styles.kicker, { color: '#7c3aed' }]}>NEW NEAR YOU{more > 0 ? ` · ${more} more` : ''}</Text>
+        <Text style={styles.title}>
+          {SPORT_EMOJI[m.sport] ?? m.sportEmoji ?? '🏆'} New {m.sport} prize match{item.distance ? `, ${item.distance}` : ''}
+        </Text>
+        <Text style={styles.eventName} numberOfLines={2}>{m.title}</Text>
+        <View style={styles.details}>
+          <Row icon="calendar-outline" text={m.date || 'Date to be announced'} />
+          <Row icon="location-outline" text={m.location || 'Location to be announced'} />
+          <Row icon="people-outline" text={`${m.players} · ${m.currentPlayers ?? 0}/${m.maxPlayers ?? '?'} joined · ${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left`} />
+        </View>
+        <View style={styles.chips}>
+          <Text style={styles.chip}>{categoryLabel(m)}</Text>
+        </View>
+        {!!error && <Text style={styles.error}>{error}</Text>}
+        <View style={styles.row2}>
+          <Btn kind="ghost" half label="Not interested" onPress={close} disabled={busy !== null} />
+          <Btn kind="primary" half icon="add" label="Join match" onPress={join} loading={busy === 'accept'} disabled={busy !== null} />
+        </View>
+        <Text style={styles.footnote}>Alerts for your sports within your chosen distance · Privacy & Security</Text>
       </>,
       close,
     );

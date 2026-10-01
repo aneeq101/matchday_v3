@@ -41,6 +41,38 @@ export function toISODate(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/**
+ * When a game starts, in local time. The day comes from starts_on (YYYY-MM-DD)
+ * or from text like "Sat, Oct 12, 2026"; the time from "5:00 PM" (a separate
+ * time slot, or inside "… at 5:00 PM"). No time → end of that day. Null if no date.
+ */
+export function gameStart(startsOn?: string | null, dateText?: string | null, timeText?: string | null): Date | null {
+  let y: number, m: number, d: number;
+  const iso = startsOn?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const txt = dateText?.match(/([A-Za-z]{3})[a-z]*\.? (\d{1,2}),? (\d{4})/);
+  if (iso) {
+    [y, m, d] = [+iso[1], +iso[2] - 1, +iso[3]];
+  } else if (txt && MONTHS.includes(txt[1].toLowerCase())) {
+    [y, m, d] = [+txt[3], MONTHS.indexOf(txt[1].toLowerCase()), +txt[2]];
+  } else {
+    return null;
+  }
+  const t = `${timeText ?? ''} ${dateText ?? ''}`.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!t) return new Date(y, m, d, 23, 59);
+  let h = +t[1] % 12;
+  if (t[3].toUpperCase() === 'PM') h += 12;
+  return new Date(y, m, d, h, +t[2]);
+}
+
+/** Has the game already started (or been played)? Unknown dates count as upcoming. */
+export function isPastGame(g: { status?: string; startsOn?: string | null; date?: string | null; time?: string | null }): boolean {
+  if (g.status === 'completed') return true;
+  const start = gameStart(g.startsOn, g.date, g.time);
+  return !!start && start.getTime() <= Date.now();
+}
+
 /** Has match day arrived? (starts_on is YYYY-MM-DD; today counts.) */
 export function matchDayReached(startsOn?: string | null): boolean {
   return !!startsOn && startsOn <= toISODate(new Date());

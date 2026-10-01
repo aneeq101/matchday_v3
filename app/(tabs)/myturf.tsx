@@ -38,7 +38,7 @@ import CategoryPicker from '../../components/CategoryPicker';
 import DatePickerField from '../../components/DatePickerField';
 import LocationPickerModal from '../../components/LocationPickerModal';
 import NotifBell from '../../components/NotifBell';
-import { toISODate, canRecordFinal } from '../../lib/matchday';
+import { toISODate, canRecordFinal, isPastGame, gameStart } from '../../lib/matchday';
 import MatchDayPanel from '../../components/MatchDayPanel';
 import { createNotification } from '../../lib/notifications';
 
@@ -129,6 +129,7 @@ export default function MyTurfScreen() {
   const [joining, setJoining]               = useState<string | null>(null);
 
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [showAllPast, setShowAllPast]         = useState(false);
   const [selectedMatch, setSelectedMatch]     = useState<MatchItem | null>(null);
   const [cancellingBooking, setCancellingBooking] = useState(false);
 
@@ -145,6 +146,7 @@ export default function MyTurfScreen() {
   const [matchTime, setMatchTime]                   = useState('');
   const [matchLocation, setMatchLocation]           = useState('');
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [matchCoord, setMatchCoord] = useState<{ latitude: number; longitude: number } | null>(null);
   const [creatingMatch, setCreatingMatch]           = useState(false);
   const [createError, setCreateError]               = useState('');
 
@@ -247,6 +249,8 @@ export default function MyTurfScreen() {
       category:      matchCategory,
       entryFee:      money.entryFee,
       prizePool:     money.prizePool,
+      latitude:      matchCoord?.latitude ?? null,
+      longitude:     matchCoord?.longitude ?? null,
     });
 
     if (!newMatch) {
@@ -262,6 +266,7 @@ export default function MyTurfScreen() {
     setMatchDate(null);
     setMatchTime('');
     setMatchLocation('');
+    setMatchCoord(null);
     setMatchCategory('friendly');
     setMatchFee('');
     setMatchPrize('');
@@ -357,9 +362,19 @@ export default function MyTurfScreen() {
     }
   };
 
-  const upcomingBookings = bookings.filter((b) => b.status !== 'Cancelled');
-  // Open matches excludes ones the user has already joined (those go to "Joined Matches")
-  const displayedOpenMatches = openMatches.filter((m) => !joinedMatchIds.has(m.id));
+  // Games that have started or been played move from the upcoming lists to "Past"
+  const bookingIsPast = (b: Booking) => isPastGame({ date: b.date, time: b.time });
+  const activeBookings   = bookings.filter((b) => b.status !== 'Cancelled');
+  const upcomingBookings = activeBookings.filter((b) => !bookingIsPast(b));
+  const pastBookings     = activeBookings.filter(bookingIsPast)
+    .sort((a, b) => (gameStart(null, b.date, b.time)?.getTime() ?? 0) - (gameStart(null, a.date, a.time)?.getTime() ?? 0));
+  const upcomingMatches       = matches.filter((m) => !isPastGame(m));
+  const upcomingJoinedMatches = joinedMatches.filter((m) => !isPastGame(m));
+  const pastMatches = [...matches, ...joinedMatches].filter((m) => isPastGame(m))
+    .sort((a, b) => (gameStart(b.startsOn, b.date)?.getTime() ?? 0) - (gameStart(a.startsOn, a.date)?.getTime() ?? 0));
+  // Open matches excludes ones the user has already joined (those go to "Joined Matches") and ones already played
+  const displayedOpenMatches = openMatches.filter((m) => !joinedMatchIds.has(m.id) && !isPastGame(m));
+  const PAST_PREVIEW = 3;
 
   // Match detail helpers
   const isOwnMatch = selectedMatch?.creatorId === user?.id;
@@ -428,7 +443,7 @@ export default function MyTurfScreen() {
             <Text style={styles.addBtnText}>Organize</Text>
           </TouchableOpacity>
         </View>
-        {!loading && matches.length === 0 && joinedMatches.length === 0 && (
+        {!loading && upcomingMatches.length === 0 && upcomingJoinedMatches.length === 0 && (
           <View style={styles.emptyState}>
             <Ionicons name="football-outline" size={36} color="#d1d5db" />
             <Text style={styles.emptyText}>No matches yet</Text>
@@ -437,14 +452,14 @@ export default function MyTurfScreen() {
             </TouchableOpacity>
           </View>
         )}
-        {matches.map((m) => (
+        {upcomingMatches.map((m) => (
           <MatchCard key={m.id} match={m} onPress={() => setSelectedMatch(m)} />
         ))}
 
-        {joinedMatches.length > 0 && (
+        {upcomingJoinedMatches.length > 0 && (
           <>
             <Text style={styles.subSectionTitle}>Joined Matches</Text>
-            {joinedMatches.map((m) => (
+            {upcomingJoinedMatches.map((m) => (
               <JoinedMatchCard
                 key={m.id}
                 match={m}
@@ -491,6 +506,31 @@ export default function MyTurfScreen() {
             onLeave={() => handleLeaveMatch(m.id)}
           />
         ))}
+
+        {/* Past: games that have started or been played */}
+        {(pastMatches.length > 0 || pastBookings.length > 0) && (
+          <>
+            <Text style={styles.sectionTitle}>Past Matches</Text>
+            {(showAllPast ? pastMatches : pastMatches.slice(0, PAST_PREVIEW)).map((m) => (
+              <MatchCard key={m.id} match={m} onPress={() => setSelectedMatch(m)} />
+            ))}
+            {pastBookings.length > 0 && (
+              <>
+                <Text style={styles.subSectionTitle}>Past Bookings</Text>
+                {(showAllPast ? pastBookings : pastBookings.slice(0, PAST_PREVIEW)).map((b) => (
+                  <BookingCard key={b.id} booking={b} onPress={() => setSelectedBooking(b)} />
+                ))}
+              </>
+            )}
+            {(pastMatches.length > PAST_PREVIEW || pastBookings.length > PAST_PREVIEW) && (
+              <TouchableOpacity style={styles.showAllBtn} onPress={() => setShowAllPast((v) => !v)}>
+                <Text style={styles.showAllText}>
+                  {showAllPast ? 'Show less' : `Show all (${pastMatches.length + pastBookings.length})`}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </>
+        )}
 
         {/* Quick Actions */}
         <Text style={styles.sectionTitle}>Quick Actions</Text>
@@ -661,7 +701,7 @@ export default function MyTurfScreen() {
                 </View>
 
                 {/* Action button based on relationship to match (none once it's been played) */}
-                {selectedMatch.status === 'completed' ? null : isOwnMatch ? (
+                {selectedMatch.status === 'completed' || isPastGame(selectedMatch) ? null : isOwnMatch ? (
                   <TouchableOpacity style={styles.cancelBookingBtn} onPress={handleCancelSelectedMatch}>
                     <Text style={styles.cancelBookingText}>Cancel Match</Text>
                   </TouchableOpacity>
@@ -854,7 +894,7 @@ export default function MyTurfScreen() {
       <LocationPickerModal
         visible={showLocationPicker}
         sport={matchSport}
-        onSelect={(loc) => { setMatchLocation(loc); setShowLocationPicker(false); setCreateError(''); }}
+        onSelect={(loc, coord) => { setMatchLocation(loc); setMatchCoord(coord ?? null); setShowLocationPicker(false); setCreateError(''); }}
         onClose={() => setShowLocationPicker(false)}
       />
 
@@ -1449,6 +1489,8 @@ const styles = StyleSheet.create({
   earnTypeBadgeText: { fontSize: 11, fontWeight: '700' },
   earnMeta: { color: '#6b7280', fontSize: 12, marginBottom: 6 },
   earnFooter: { flexDirection: 'row', gap: 12 },
+  showAllBtn: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 16, marginBottom: 8 },
+  showAllText: { color: '#fff', fontWeight: '700', fontSize: 13, textDecorationLine: 'underline' },
   categoryText: { color: '#6b7280', fontSize: 12, fontWeight: '600', marginTop: 2 },
   earnFee: { color: '#374151', fontSize: 12, fontWeight: '600' },
   earnPrize: { color: '#16a34a', fontSize: 12, fontWeight: '700' },

@@ -54,6 +54,9 @@ export async function createMatch(params: {
   category: EventCategory;
   entryFee: number;
   prizePool: number;
+  /** Venue coordinates — lets the database alert nearby players about prize matches */
+  latitude?: number | null;
+  longitude?: number | null;
 }): Promise<MatchItem | null> {
   const emoji = SPORT_EMOJIS[params.sport] ?? '🏟️';
   const { data, error } = await supabase
@@ -72,6 +75,8 @@ export async function createMatch(params: {
       category:        params.category,
       entry_fee:       params.entryFee,
       prize_pool:      params.prizePool,
+      latitude:        params.latitude ?? null,
+      longitude:       params.longitude ?? null,
     })
     .select()
     .single();
@@ -154,6 +159,17 @@ export async function fetchJoinedMatches(userId: string): Promise<MatchItem[]> {
     .order('created_at', { ascending: false });
 
   return (data ?? []).map(rowToMatchItem);
+}
+
+/** Is this player already in the match (joined or organiser)? */
+export async function isInMatch(matchId: string, userId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('match_players')
+    .select('match_id')
+    .eq('match_id', matchId)
+    .eq('player_id', userId)
+    .maybeSingle();
+  return !!data;
 }
 
 export async function fetchJoinedMatchIds(userId: string): Promise<Set<string>> {

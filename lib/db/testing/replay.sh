@@ -63,6 +63,7 @@ ORDER=(
   lib/db/patch_matchday.sql
   lib/db/patch_match_history.sql
   lib/db/patch_event_category.sql
+  lib/db/patch_match_alerts.sql
 )
 for f in "${ORDER[@]}" "$@"; do run "$f"; done
 echo "Replayed ${#ORDER[@]} migrations$([ $# -gt 0 ] && echo " + $*") into container '$NAME'."

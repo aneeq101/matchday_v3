@@ -338,6 +338,13 @@ Full plan in `PLAN.md`. Summary:
 - `fn_alert_nearby_event` redefined: single matches alert only when category = 'prize'; alert text "friendly tournament" / "prize match".
 - **Also on Organize Match (My Turf) and venue booking (Book tab):** shared `components/CategoryPicker.tsx` (cards + Prize pool required / Entry fee optional, or Friendly note); `categoryMoney()` / `categoryLabel()` / `eventCategory()` in `lib/tournaments.ts`. Patch adds `category`, `entry_fee`, `prize_pool` to `matches` + `bookings` with the same trigger (`fn_tournaments_category`). My Turf booking/match cards + detail sheets show the category.
 
+## Prize match alerts + past matches (2026-10-01) — `lib/db/patch_match_alerts.sql` run in Supabase 2026-10-01
+
+- Before this, nearby alerts only existed for Play to Earn events; Organize Match games had no location point or trigger, so prize matches made in My Turf alerted nobody.
+- Patch: `matches.latitude/longitude/geo` + `trg_matches_sync_geo` (reuses `fn_tournaments_sync_geo`), `trg_alert_nearby_match` → `nearby_event` notifications with data `{ match_id }` for **prize** matches that are upcoming and not in the past; same recipient rules + shared 3/24 h cap as event alerts.
+- App: Organize Match sends the picked venue coord (`createMatch` latitude/longitude). `InAppPopups` `nearby_match` card (Join match / Not interested), skipped if the match is full, past, not upcoming or you're already in it (`isInMatch`).
+- My Turf: `isPastGame()` / `gameStart()` in `lib/matchday.ts` (starts_on or "Sat, Oct 12, 2026" + "5:00 PM"; no time → end of day; completed → past). Games that have started or been played leave Upcoming Bookings / My Matches / Joined / Open Matches and show under **Past Matches** (+ Past Bookings), newest first, 3 shown + Show all. Past matches show no Join/Leave/Cancel.
+
 ## Progress log
 
 | Date | What was done | Commit |
@@ -353,9 +360,10 @@ Full plan in `PLAN.md`. Summary:
 | 2026-10-01 | Challenge popups (new + accepted/declined/called off/result), rating requests | `ba743de` |
 | 2026-10-01 | Rating popups (request, new/updated rating, badge), fix for missing rated-you alert | `199b783` |
 | 2026-10-01 | Event alert popups, ready-for-match-day reminders, player-recorded scores, match history + auto W/L | `78f97ac` |
-| 2026-10-01 | Friendly vs Prize money on events, Organize Match and venue bookings (shared CategoryPicker) | see git log |
+| 2026-10-01 | Friendly vs Prize money on events, Organize Match and venue bookings (shared CategoryPicker) | `f4786d3` |
+| 2026-10-01 | Nearby alerts + popup for prize Organize Match games; My Turf Past Matches / Past Bookings | see git log |
 
-**SQL status:** every patch in `lib/db` up to and including `patch_event_category.sql` has been run in Supabase (2026-10-01, verified live). Nothing pending.
+**SQL status:** every patch in `lib/db` up to and including `patch_event_category.sql` plus `patch_match_alerts.sql` has been run in Supabase (2026-10-01, verified live). Nothing pending.
 
 ## Your to-do list (things only the owner can do)
 
