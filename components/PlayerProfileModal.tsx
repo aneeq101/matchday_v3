@@ -26,6 +26,7 @@ import { createNotification } from '../lib/notifications';
 import { useRouter } from 'expo-router';
 import RatingsSection from './RatingsSection';
 import BadgeChip from './BadgeChip';
+import { summarizeDetails } from '../lib/sportProfile';
 import type { RatingSummary } from '../lib/ratings';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -326,8 +327,8 @@ export default function PlayerProfileModal({ player, onClose, onMessage }: Props
                         <View style={[styles.skillBadge, { backgroundColor: SKILL_COLORS[s.skill] }]}>
                           <Text style={styles.skillBadgeText}>{s.skill}</Text>
                         </View>
-                        {Object.entries(s.details ?? {}).map(([k, v]) => (
-                          <Text key={k} style={styles.sportDetail}>{k}: {v}</Text>
+                        {summarizeDetails(s.name, s.details ?? {}).map((line) => (
+                          <Text key={line} style={styles.sportDetail} numberOfLines={2}>{line}</Text>
                         ))}
                       </View>
                     ))}

@@ -58,6 +58,7 @@ app/
   tournament.tsx           # Event details: sign-ups, knockout bracket / league table + fixtures, organiser results
   challenges.tsx           # Challenge matches (player vs player, team vs team)
   ratings.tsx              # All ratings & reviews for a player/team (?kind=player|team&id=&name=)
+  welcome.tsx              # First-run flow: pick sports → optional level/position/self-rating per sport → done
   statistics.tsx           # Aggregated player statistics
   privacy.tsx              # Privacy & Security (nearby, push, password, sign out all, delete account)
   help.tsx                 # Help & Support (FAQ + tickets)
@@ -77,6 +78,7 @@ components/
   RatingsSection.tsx       # Ratings summary, badge progress, skill bars, reviews (profile modal, team page, ratings screen)
   RateModal.tsx            # Rate a player/team: overall 1–10, per-skill 1–10, conduct stars, review
   BadgeChip.tsx            # Bronze/Silver/Gold/Platinum/Diamond pill
+  SportDetailsEditor.tsx   # Level + position fields + optional self-rating (welcome flow + Profile Add/Edit Sport)
 
 lib/                       # Service layer — screens never call Supabase directly
   supabase.ts, AuthContext.tsx          # client + session
@@ -88,6 +90,8 @@ lib/                       # Service layer — screens never call Supabase direc
   challenges.ts            # challenge RPC wrappers
   ratingRules.ts           # pure: 1–10 level scale, NTRP map, skills per sport (player + team), badge tiers/rules
   ratings.ts               # rating_summary / submit_rating RPC wrappers, ratings list, delete
+  sportProfile.ts          # pure: profile sports, skill levels, per-sport fields, self-rating skills, summarizeDetails()
+  onboarding.ts            # when to show the welcome flow (user_metadata.onboarding_done)
   sportRules.ts            # sport formats, booking limits, event entry rules (min 4, singles/doubles/teams), TEAM_FORMATS squad sizes
   db/                      # SQL migrations / patches (all run in Supabase as of 2026-10-01)
 
@@ -276,6 +280,13 @@ Full plan in `PLAN.md`. Summary:
 - Patch backfills formats for existing teams; demo badminton "Queen West Smashers" had 3 members → demo Sara removed so it's Zara + the owner's account.
 - **Nearby event alerts:** `trg_alert_nearby_event` (AFTER INSERT on tournaments) → `notifications` rows of type `nearby_event` (data `tournament_id`), which the existing push trigger sends to phones. Fires for tournaments, leagues, and matches with entry fee > 0, status active. Recipients: not demo, not organiser, `event_alerts` on, play that sport (`profile_sports`), location saved in the last 90 days within their `event_alert_radius_km` (5/10/25/50, default 25), max 3 per 24 h, nearest 500. Event point = venue coord from `LocationPickerModal` (now passes `coord`) → else venue whose name starts the location text → else (alert only) organiser's location. `tournaments.latitude/longitude/geo` + sync trigger. Settings in Privacy & Security ("Nearby Event Alerts" + radius chips), `lib/settings.ts`.
 - Tested locally (all migrations replayed + patch run twice) with a copy of the live team data. Bundles for web + Android; not clicked through. Phone pushes still need Firebase + a build; the alerts show in the in-app Notifications list regardless.
+
+## First-run sports setup (2026-10-01) — no SQL needed
+
+- `app/welcome.tsx` (modal): 1) "Which sports do you play?" multi-select tiles → picked sports are saved immediately (level Intermediate) 2) one optional page per sport via `components/SportDetailsEditor.tsx`: level (Beginner/Intermediate/Advanced with plain descriptions), position-type chips (`SPORT_FIELDS`, some multi-select), and a collapsed "Rate your own game" (`SELF_RATING_SKILLS`, answers Working on it / Solid / Strength) 3) "You're all set" tips. Skip on every step; back button; un-picking a just-saved sport removes it.
+- Shown automatically once (`lib/onboarding.ts`): signed-in, inside the tabs, no `profile_sports`, and `user_metadata.onboarding_done` not set. Opening it sets the flag (cross-device, via `supabase.auth.updateUser`); existing players with sports get the flag silently. Re-entry: Profile → My Sports empty state "Set up my sports".
+- Stored in `profile_sports.skill` + `details` jsonb (labels as keys, multi-select joined with ", "). Self-ratings are only shown as a "Strengths: …" line (`summarizeDetails`) — they don't affect ratings/badges.
+- Profile tab: tap a sport card to edit it (same editor), long-press to remove; Add Sport sheet uses the same editor (old NTRP/Role-only fields replaced; old saved details still display).
 
 ## Progress log
 

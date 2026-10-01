@@ -26,7 +26,9 @@ import NotifBell from '../../components/NotifBell';
 import { SPORT_STAT_FIELDS } from '../../lib/sportStats';
 
 const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import SportDetailsEditor from '../../components/SportDetailsEditor';
+import { summarizeDetails } from '../../lib/sportProfile';
 
 const SKILL_COLORS: Record<string, string> = {
   Beginner: '#3b82f6',
@@ -37,16 +39,6 @@ const SKILL_COLORS: Record<string, string> = {
 const SPORT_EMOJIS: Record<string, string> = {
   Football: '⚽', Cricket: '🏏', Tennis: '🎾',
   Basketball: '🏀', Hockey: '🏑', Badminton: '🏸', Baseball: '⚾',
-};
-
-const SPORT_DETAILS_FIELDS: Record<string, { label: string; options: string[] }[]> = {
-  Tennis:     [{ label: 'NTRP Rating', options: ['1.0','1.5','2.0','2.5','3.0','3.5','4.0','4.5','5.0','5.5','6.0','7.0'] }],
-  Cricket:    [{ label: 'Role', options: ['Batsman','Bowler','All-rounder','Wicket-keeper'] }, { label: 'Batting Hand', options: ['Right','Left'] }],
-  Football:   [{ label: 'Position', options: ['Forward','Midfielder','Defender','Goalkeeper'] }],
-  Basketball: [{ label: 'Position', options: ['Point Guard','Shooting Guard','Small Forward','Power Forward','Center'] }],
-  Badminton:  [{ label: 'Style', options: ['Singles','Doubles','Mixed'] }],
-  Baseball:   [{ label: 'Position', options: ['Pitcher','Catcher','First Base','Second Base','Shortstop','Third Base','Outfield'] }],
-  Hockey:     [{ label: 'Position', options: ['Forward','Midfielder','Defender','Goalkeeper'] }],
 };
 
 export default function ProfileScreen() {
@@ -88,6 +80,7 @@ export default function ProfileScreen() {
   const [newSport, setNewSport] = useState('Football');
   const [newSkill, setNewSkill] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Intermediate');
   const [newDetails, setNewDetails] = useState<Record<string, string>>({});
+  const [editingSport, setEditingSport] = useState(false);   // sheet opened by tapping an existing sport
 
   // Record Stats modal
   const [showRecordStats, setShowRecordStats] = useState(false);
@@ -136,6 +129,31 @@ export default function ProfileScreen() {
   }, [user]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
+
+  // Sports can be added from the welcome flow — refresh just the sports list on focus
+  useFocusEffect(useCallback(() => {
+    if (!user) return;
+    let stale = false;
+    fetchMySports(user.id).then((sp) => { if (!stale && sp.length) setMySports(sp); });
+    return () => { stale = true; };
+  }, [user?.id]));
+
+  const openAddSport = () => {
+    const taken = new Set(mySports.map((s) => s.name));
+    setNewSport(Object.keys(SPORT_EMOJIS).find((s) => !taken.has(s)) ?? 'Football');
+    setNewSkill('Intermediate');
+    setNewDetails({});
+    setEditingSport(false);
+    setShowAddSport(true);
+  };
+
+  const openEditSport = (s: ProfileSport) => {
+    setNewSport(s.name);
+    setNewSkill(s.skill);
+    setNewDetails({ ...s.details });
+    setEditingSport(true);
+    setShowAddSport(true);
+  };
 
   const handleAddSport = async () => {
     if (!user) return;
@@ -427,7 +445,7 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>My Sports</Text>
-            <TouchableOpacity style={styles.addSportBtn} onPress={() => setShowAddSport(true)}>
+            <TouchableOpacity style={styles.addSportBtn} onPress={openAddSport}>
               <Ionicons name="add" size={18} color="#16a34a" />
               <Text style={styles.addSportText}>Add Sport</Text>
             </TouchableOpacity>
@@ -437,6 +455,7 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 key={s.id}
                 style={styles.sportCard}
+                onPress={() => openEditSport(s)}
                 onLongPress={() => handleRemoveSport(s)}
               >
                 <Text style={styles.sportEmoji}>{s.emoji}</Text>
@@ -444,18 +463,27 @@ export default function ProfileScreen() {
                 <View style={[styles.skillBadge, { backgroundColor: SKILL_COLORS[s.skill] }]}>
                   <Text style={styles.skillBadgeText}>{s.skill}</Text>
                 </View>
-                {Object.entries(s.details).map(([k, v]) => (
-                  <Text key={k} style={styles.sportDetail}>{k}: {v}</Text>
+                {summarizeDetails(s.name, s.details).map((line) => (
+                  <Text key={line} style={styles.sportDetail} numberOfLines={2}>{line}</Text>
                 ))}
               </TouchableOpacity>
             ))}
-            <TouchableOpacity style={styles.addSportCard} onPress={() => setShowAddSport(true)}>
+            <TouchableOpacity style={styles.addSportCard} onPress={openAddSport}>
               <Ionicons name="add" size={28} color="#d1d5db" />
               <Text style={styles.addSportCardText}>Add</Text>
             </TouchableOpacity>
           </View>
-          {mySports.length > 0 && (
-            <Text style={styles.longPressHint}>Long press a sport to remove it</Text>
+          {mySports.length > 0 ? (
+            <Text style={styles.longPressHint}>Tap a sport to edit it · long press to remove</Text>
+          ) : (
+            <TouchableOpacity style={styles.setupCard} onPress={() => router.push('/welcome')}>
+              <Text style={{ fontSize: 26 }}>🏅</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.setupTitle}>Set up my sports</Text>
+                <Text style={styles.setupSub}>Takes a minute — helps you find players and events that suit you.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#16a34a" />
+            </TouchableOpacity>
           )}
         </View>
 
@@ -706,68 +734,46 @@ export default function ProfileScreen() {
           <SafeAreaView style={{ flex: 1 }}>
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Sport</Text>
+              <Text style={styles.modalTitle}>{editingSport ? `Edit ${newSport}` : 'Add Sport'}</Text>
               <TouchableOpacity onPress={() => { setShowAddSport(false); setNewDetails({}); }}>
                 <Ionicons name="close" size={24} color="#111827" />
               </TouchableOpacity>
             </View>
             <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.modalBody}>
-              <Text style={styles.fieldLabel}>Sport</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {Object.keys(SPORT_EMOJIS).map((s) => (
-                    <TouchableOpacity
-                      key={s}
-                      style={[styles.sportChip, newSport === s && styles.sportChipActive]}
-                      onPress={() => { setNewSport(s); setNewDetails({}); }}
-                    >
-                      <Text style={styles.sportChipEmoji}>{SPORT_EMOJIS[s]}</Text>
-                      <Text style={[styles.sportChipText, newSport === s && { color: '#fff' }]}>{s}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
+              {!editingSport && (
+                <>
+                <Text style={styles.fieldLabel}>Sport</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {Object.keys(SPORT_EMOJIS).map((s) => (
+                      <TouchableOpacity
+                        key={s}
+                        style={[styles.sportChip, newSport === s && styles.sportChipActive]}
+                        onPress={() => { setNewSport(s); setNewDetails({}); }}
+                      >
+                        <Text style={styles.sportChipEmoji}>{SPORT_EMOJIS[s]}</Text>
+                        <Text style={[styles.sportChipText, newSport === s && { color: '#fff' }]}>{s}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+                </>
+              )}
 
-              <Text style={styles.fieldLabel}>Skill Level</Text>
-              <View style={styles.skillRow}>
-                {(['Beginner', 'Intermediate', 'Advanced'] as const).map((lvl) => (
-                  <TouchableOpacity
-                    key={lvl}
-                    style={[styles.skillChip, newSkill === lvl && { backgroundColor: SKILL_COLORS[lvl], borderColor: SKILL_COLORS[lvl] }]}
-                    onPress={() => setNewSkill(lvl)}
-                  >
-                    <Text style={[styles.skillChipText, newSkill === lvl && { color: '#fff' }]}>{lvl}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Sport-specific fields */}
-              {(SPORT_DETAILS_FIELDS[newSport] ?? []).map((field) => (
-                <View key={field.label}>
-                  <Text style={styles.fieldLabel}>{field.label}</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                      {field.options.map((opt) => (
-                        <TouchableOpacity
-                          key={opt}
-                          style={[styles.optionPill, newDetails[field.label] === opt && styles.optionPillActive]}
-                          onPress={() => setNewDetails((prev) => ({ ...prev, [field.label]: opt }))}
-                        >
-                          <Text style={[styles.optionPillText, newDetails[field.label] === opt && { color: '#fff' }]}>
-                            {opt}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </ScrollView>
-                </View>
-              ))}
+              <SportDetailsEditor
+                key={newSport}
+                sport={newSport}
+                skill={newSkill}
+                details={newDetails}
+                onChange={(skill, details) => { setNewSkill(skill); setNewDetails(details); }}
+              />
+              <View style={{ height: 18 }} />
 
               <TouchableOpacity style={styles.saveBtn} onPress={handleAddSport} disabled={addingSport}>
                 {addingSport
                   ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={styles.saveBtnText}>Save Sport</Text>}
+                  : <Text style={styles.saveBtnText}>{editingSport ? 'Save Changes' : 'Save Sport'}</Text>}
               </TouchableOpacity>
               <View style={{ height: 20 }} />
             </ScrollView>
@@ -987,6 +993,12 @@ const styles = StyleSheet.create({
   },
   logoutConfirmText: { color: '#fff', fontWeight: '700' },
   longPressHint: { color: '#9ca3af', fontSize: 11, textAlign: 'center', marginTop: 4 },
+  setupCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10,
+    backgroundColor: '#f0fdf4', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#bbf7d0',
+  },
+  setupTitle: { fontSize: 15, fontWeight: '800', color: '#166534' },
+  setupSub: { fontSize: 12, color: '#4b5563', marginTop: 2 },
   sportDetail: { fontSize: 10, color: '#6b7280', marginTop: 2 },
   // Add Sport Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },

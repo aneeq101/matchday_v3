@@ -37,6 +37,7 @@ The app has five bottom tabs plus a set of stacked screens.
 | **Play to Earn** (tab) | Tournaments (knockout brackets), leagues (round-robin tables), and pickup matches. Create, sign up, run results. |
 | **Book** (tab) | Venue search with a map (native maps / Leaflet on web), sport filter, radius slider, booking sheet. |
 | **Profile** (tab) | Your sports and skill levels, stats, privacy & messaging settings, menu. |
+| Welcome (first run) | Pick the sports you play, optionally add level, position and a quick self-rating per sport. Skippable, shown once. |
 | Messages / Chat | 1-on-1 conversations, live updates via Supabase Realtime. |
 | Notifications | In-app list; every notification is also sent as a phone push. |
 | Teams | Create/join teams with sport-specific squad sizes and formats, captain tools. |
@@ -176,6 +177,7 @@ app/                         expo-router screens (file name = route)
   tournament.tsx             Event detail: sign-ups, bracket / league table, organiser results
   challenges.tsx             Challenges (create, respond, record result)
   ratings.tsx                All ratings & reviews for a player/team
+  welcome.tsx                First-run sports setup (shown once; Profile → "Set up my sports" re-opens it)
   statistics.tsx, privacy.tsx, help.tsx
 
 components/
@@ -192,6 +194,7 @@ components/
   RatingsSection.tsx       Ratings summary, badge progress, skill bars, reviews
   RateModal.tsx            Rate a player/team
   BadgeChip.tsx            Bronze/Silver/Gold/Platinum/Diamond pill
+  SportDetailsEditor.tsx   Level + position fields + optional self-rating for one sport
   NotifBell.tsx            Bell with unread count
 
 lib/                       Service layer (Supabase calls) + pure rule modules
@@ -203,6 +206,8 @@ lib/                       Service layer (Supabase calls) + pure rule modules
   bracket.ts               PURE: knockout with byes, round robin, standings, round names
   sportRules.ts            PURE: match formats, booking limits, event entry rules, team squad formats
   ratingRules.ts           PURE: 1–10 level scale, NTRP map, skills per sport, badge tiers
+  sportProfile.ts          PURE: profile sports, skill levels, per-sport fields, self-rating skills
+  onboarding.ts            When to show the welcome flow (auth user_metadata.onboarding_done)
   db/*.sql                 Database migrations ("patches"), applied by hand in Supabase
   db/testing/              Local replay harness (Supabase stubs + script)
 
@@ -402,7 +407,17 @@ Some are inserted by DB functions (tournaments, challenges, ratings, event alert
 - Inserts `nearby_event` notifications (`data.tournament_id`), which are pushed by the normal pipeline. Errors are swallowed, so an alert problem can never block event creation.
 - Settings UI: Privacy & Security → Nearby Event Alerts.
 
-### 8.12 Privacy & account
+### 8.12 First-run sports setup (`app/welcome.tsx`)
+- Opens automatically, at most once, when a signed-in user reaches the tabs with no `profile_sports` and without `user_metadata.onboarding_done`. Opening it sets that flag via `supabase.auth.updateUser`, so it never nags and works across devices with no table.
+- Steps:
+  1. Pick sports (multi-select). They are saved immediately with level Intermediate.
+  2. One optional page per sport (`SportDetailsEditor`): level, position-type chips (`SPORT_FIELDS`), and a collapsed self-rating (`SELF_RATING_SKILLS`: Working on it / Solid / Strength).
+  3. "All set" tips.
+- Every step has Skip, and leaving half-way keeps what was saved.
+- Data goes into `profile_sports.skill` and `details` (jsonb, label → text). Self-ratings show as a "Strengths: …" line (`summarizeDetails`) and are separate from peer ratings/badges.
+- The Profile tab reuses the same editor: tap a sport to edit, use Add Sport, or "Set up my sports" when empty.
+
+### 8.13 Privacy & account
 `app/privacy.tsx` + `lib/settings.ts`: nearby visibility, push on/off, event alerts and radius, change password, sign out everywhere, delete account (`delete_my_account()`). Messaging privacy is on the Profile tab.
 
 ---
@@ -579,6 +594,7 @@ There are no automated tests yet. Verification is `tsc`, web/Android exports, an
 
 **A new sport**
 Update every sport table together:
+- `PROFILE_SPORTS`, `SPORT_EMOJI`, `SPORT_FIELDS`, `SELF_RATING_SKILLS` in `lib/sportProfile.ts`;
 - `SPORT_FORMATS`, `BOOKING_MAX_PLAYERS`, `TEAM_FORMATS` (+ `fn_team_formats()`) in `lib/sportRules.ts`;
 - `PLAYER_SKILLS` / `TEAM_SKILLS` in `lib/ratingRules.ts` (+ the sport list in `submit_rating()`);
 - `SPORT_STAT_FIELDS` in `lib/sportStats.ts`;

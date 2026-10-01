@@ -3,6 +3,7 @@ import { Stack, router, useSegments } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../lib/AuthContext';
 import { registerForPush, setupNotificationHandlers } from '../lib/push';
+import { shouldShowWelcome, claimWelcomeOpen } from '../lib/onboarding';
 
 function RootNavigator() {
   const { session, loading } = useAuth();
@@ -20,6 +21,18 @@ function RootNavigator() {
       router.replace('/(tabs)');
     }
   }, [session, loading, segments]);
+
+  // First run: once the user is inside the app, offer the sports welcome flow
+  // (only if they have no sports yet; shown at most once — see lib/onboarding.ts)
+  const inTabs = segments[0] === '(tabs)';
+  useEffect(() => {
+    if (!session?.user || !inTabs) return;
+    let cancelled = false;
+    shouldShowWelcome(session.user).then((show) => {
+      if (show && !cancelled && claimWelcomeOpen()) router.push('/welcome');
+    });
+    return () => { cancelled = true; };
+  }, [session?.user?.id, inTabs]);
 
   // Push notifications: register this device once signed in, route taps
   const userId = session?.user?.id;
@@ -62,6 +75,7 @@ function RootNavigator() {
       <Stack.Screen name="tournament" options={{ headerShown: false }} />
       <Stack.Screen name="challenges" options={{ headerShown: false }} />
       <Stack.Screen name="ratings" options={{ headerShown: false }} />
+      <Stack.Screen name="welcome" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
     </Stack>
   );
