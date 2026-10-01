@@ -20,17 +20,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
-import { TOURNAMENTS, type Tournament, type EventType } from '../../data/mockData';
+import { TOURNAMENTS, type Tournament, type EventType, type EventCategory } from '../../data/mockData';
 import { useAuth } from '../../lib/AuthContext';
 import {
   fetchTournaments,
   fetchRegisteredIds,
   registerForTournament,
   unregisterFromTournament,
-  createTournament as dbCreateTournament,
+  createTournament as dbCreateTournament, eventCategory, categoryMoney, CATEGORY_INFO,
 } from '../../lib/tournaments';
 import { getFormatsForSport, eventRules, entrantNouns, MIN_ENTRANTS } from '../../lib/sportRules';
 import DatePickerField from '../../components/DatePickerField';
+import CategoryPicker from '../../components/CategoryPicker';
 import LocationPickerModal from '../../components/LocationPickerModal';
 import { toISODate } from '../../lib/matchday';
 
@@ -52,6 +53,12 @@ const FILTER_TABS: Array<{ key: string; label: string }> = [
   { key: 'tournament', label: 'Tournament' },
   { key: 'league', label: 'League' },
   { key: 'match', label: 'Match' },
+];
+
+const CATEGORY_FILTERS: Array<{ key: 'all' | EventCategory; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'friendly', label: '🤝 Friendly' },
+  { key: 'prize', label: '💰 Prize money' },
 ];
 
 const SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton', 'Baseball'];
@@ -82,6 +89,8 @@ export default function EarnScreen() {
   const [newLocation, setNewLocation] = useState('');
   const [newCoord, setNewCoord] = useState<{ latitude: number; longitude: number } | null>(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [newCategory, setNewCategory] = useState<EventCategory>('friendly');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | EventCategory>('all');
   const [newFee, setNewFee] = useState('');
   const [newPrize, setNewPrize] = useState('');
   const hasBracket = newType === 'tournament' || newType === 'league';
@@ -123,7 +132,9 @@ export default function EarnScreen() {
     setRefreshing(false);
   };
 
-  const filtered = activeFilter === 'All' ? events : events.filter((e) => e.type === activeFilter);
+  const filtered = events
+    .filter((e) => activeFilter === 'All' || e.type === activeFilter)
+    .filter((e) => categoryFilter === 'all' || eventCategory(e) === categoryFilter);
 
   const handleRegister = async () => {
     if (!registerEvent || registering) return;
@@ -213,6 +224,11 @@ export default function EarnScreen() {
         return;
       }
     }
+    const { entryFee: fee, prizePool: prize, error: moneyError } = categoryMoney(newCategory, newFee, newPrize);
+    if (moneyError) {
+      Alert.alert('Add a prize pool', moneyError);
+      return;
+    }
     setSaving(true);
     try {
       const formattedDate = newDate
@@ -227,8 +243,9 @@ export default function EarnScreen() {
           location: newLocation || '',
           latitude: newCoord?.latitude ?? null,
           longitude: newCoord?.longitude ?? null,
-          entryFee: Math.max(0, parseInt(newFee) || 0),
-          prizePool: Math.max(0, parseInt(newPrize) || 0),
+          entryFee: fee,
+          prizePool: prize,
+          category: newCategory,
           maxParticipants: hasBracket ? newMax : newMaxParticipants,
           // A single match needs its full line-up (e.g. 5v5 → 10 players)
           minParticipants: hasBracket ? newMin : newMaxParticipants,
@@ -259,6 +276,7 @@ export default function EarnScreen() {
       setNewCoord(null);
       setNewFee('');
       setNewPrize('');
+      setNewCategory('friendly');
     } catch (e) {
       Alert.alert('Error', 'Something went wrong. Please try again.');
     } finally {
@@ -296,6 +314,17 @@ export default function EarnScreen() {
             <Text style={[styles.filterTabText, activeFilter === tab.key && styles.filterTabTextActive]}>
               {tab.label}
             </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={styles.categoryBar}>
+        {CATEGORY_FILTERS.map((c) => (
+          <TouchableOpacity
+            key={c.key}
+            style={[styles.categoryChip, categoryFilter === c.key && styles.categoryChipActive]}
+            onPress={() => setCategoryFilter(c.key)}
+          >
+            <Text style={[styles.categoryChipText, categoryFilter === c.key && styles.categoryChipTextActive]}>{c.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -352,6 +381,12 @@ export default function EarnScreen() {
                   </View>
                 </View>
 
+                {eventCategory(registerEvent) === 'friendly' ? (
+                  <View style={styles.friendlyNote}>
+                    <Text style={{ fontSize: 18 }}>🤝</Text>
+                    <Text style={styles.friendlyNoteText}>Friendly event — free to join, no prize money.</Text>
+                  </View>
+                ) : (
                 <View style={styles.feeBox}>
                   <Text style={styles.feeTitle}>Fee Breakdown</Text>
                   <View style={styles.feeRow}>
@@ -367,6 +402,7 @@ export default function EarnScreen() {
                     <Text style={styles.feeTotalVal}>CAD {registerEvent.entryFee.toLocaleString()}</Text>
                   </View>
                 </View>
+                )}
 
                 <View style={styles.paymentNote}>
                   <Ionicons name="information-circle-outline" size={16} color="#3b82f6" />
@@ -483,6 +519,17 @@ export default function EarnScreen() {
                 ))}
               </View>
 
+              <CategoryPicker
+                value={newCategory}
+                onChange={setNewCategory}
+                entryFee={newFee}
+                prizePool={newPrize}
+                onEntryFee={setNewFee}
+                onPrizePool={setNewPrize}
+                spots={hasBracket ? newMax : newMaxParticipants}
+                what={newType === 'match' ? 'match' : newType}
+              />
+
               <Text style={styles.fieldLabel}>Event Name</Text>
               <TextInput
                 style={styles.formInput}
@@ -576,31 +623,6 @@ export default function EarnScreen() {
                 <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
               </TouchableOpacity>
 
-              <View style={styles.twoCol}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldLabel}>Entry Fee (CAD)</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    placeholder="0"
-                    placeholderTextColor="#9ca3af"
-                    keyboardType="numeric"
-                    value={newFee}
-                    onChangeText={setNewFee}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldLabel}>Prize Pool (CAD)</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    placeholder="0"
-                    placeholderTextColor="#9ca3af"
-                    keyboardType="numeric"
-                    value={newPrize}
-                    onChangeText={setNewPrize}
-                  />
-                </View>
-              </View>
-
               <TouchableOpacity style={styles.confirmBtn} onPress={handleCreate} disabled={saving}>
                 {saving
                   ? <ActivityIndicator size="small" color="#fff" />
@@ -660,6 +682,7 @@ function EventCard({
   const status = event.status ?? 'active';
   const who = entrantNouns(event.entrantType, event.format).nouns;
   const hasDraw = event.type === 'tournament' || event.type === 'league';
+  const category = eventCategory(event);
 
   return (
     <TouchableOpacity style={styles.eventCard} onPress={onOpen} activeOpacity={0.85}>
@@ -668,6 +691,11 @@ function EventCard({
         <View style={{ flex: 1 }}>
           <View style={styles.eventTitleRow}>
             <Text style={styles.eventName} numberOfLines={1}>{event.name}</Text>
+            <View style={[styles.typeBadge, { backgroundColor: CATEGORY_INFO[category].bg }]}>
+              <Text style={[styles.typeBadgeText, { color: CATEGORY_INFO[category].color }]}>
+                {CATEGORY_INFO[category].emoji} {category === 'prize' ? 'Prize' : 'Friendly'}
+              </Text>
+            </View>
             <View style={[styles.typeBadge, { backgroundColor: typeColor + '20' }]}>
               <Text style={[styles.typeBadgeText, { color: typeColor }]}>{TYPE_LABELS[event.type]}</Text>
             </View>
@@ -706,7 +734,11 @@ function EventCard({
 
       <View style={styles.eventFooter}>
         <View>
-          <Text style={styles.feeLabel}>Entry: <Text style={styles.feeAmount}>CAD {event.entryFee.toLocaleString()}</Text></Text>
+          {category === 'friendly' ? (
+            <Text style={styles.feeLabel}>Free · <Text style={styles.feeAmount}>Friendly</Text></Text>
+          ) : (
+            <Text style={styles.feeLabel}>Entry: <Text style={styles.feeAmount}>{event.entryFee > 0 ? `CAD ${event.entryFee.toLocaleString()}` : 'Free'}</Text></Text>
+          )}
           {event.prizePool > 0 && (
             <Text style={styles.prizeLabel}>Prize: <Text style={styles.prizeAmount}>CAD {event.prizePool.toLocaleString()}</Text></Text>
           )}
@@ -782,6 +814,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
   },
   filterTabActive: { backgroundColor: '#16a34a' },
+  categoryBar: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingBottom: 10 },
+  categoryChip: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.85)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.9)',
+  },
+  categoryChipActive: { backgroundColor: '#111827', borderColor: '#111827' },
+  categoryChipText: { fontSize: 12, fontWeight: '700', color: '#374151' },
+  categoryChipTextActive: { color: '#fff' },
+  friendlyNote: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#e0f2fe',
+    borderRadius: 12, padding: 12, marginBottom: 16,
+  },
+  friendlyNoteText: { flex: 1, fontSize: 13, color: '#075985', fontWeight: '600', lineHeight: 18 },
   filterTabText: { color: '#6b7280', fontSize: 13, fontWeight: '600' },
   filterTabTextActive: { color: '#fff' },
   scroll: { flex: 1 },

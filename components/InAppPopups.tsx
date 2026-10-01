@@ -14,7 +14,7 @@ import {
 } from '../lib/notifications';
 import { fetchRating, findRatingNear, type Rating } from '../lib/ratings';
 import { fetchTeam } from '../lib/teams';
-import { fetchTournament } from '../lib/tournaments';
+import { fetchTournament, eventCategory } from '../lib/tournaments';
 import { fetchMatch } from '../lib/matches';
 import { ackReady, fetchPendingReady, snoozeReady, toISODate, type EventKind, type PendingReady } from '../lib/matchday';
 import type { Tournament } from '../data/mockData';
@@ -467,7 +467,8 @@ export default function InAppPopups({ userId }: { userId: string }) {
   // ── New event near you ──────────────────────────────────────
   if (item.type === 'nearby_event') {
     const ev = item.event;
-    const kind = ev.type === 'league' ? 'league' : ev.type === 'match' ? 'paid match' : 'tournament';
+    const kind = (eventCategory(ev) === 'prize' ? 'prize ' : 'friendly ')
+      + (ev.type === 'league' ? 'league' : ev.type === 'match' ? 'match' : 'tournament');
     const spotsLeft = Math.max(0, ev.maxParticipants - ev.participants);
     return wrap(
       <>
@@ -483,6 +484,9 @@ export default function InAppPopups({ userId }: { userId: string }) {
           <Row icon="people-outline" text={`${ev.participants}/${ev.maxParticipants} signed up · ${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left`} />
         </View>
         <View style={styles.chips}>
+          <Text style={[styles.chip, eventCategory(ev) === 'prize' ? null : styles.chipBlue]}>
+            {eventCategory(ev) === 'prize' ? '💰 Prize money' : '🤝 Friendly'}
+          </Text>
           <Text style={[styles.chip, styles.chipGreen]}>{ev.entryFee > 0 ? `CAD ${ev.entryFee} entry` : 'Free entry'}</Text>
           {ev.prizePool > 0 && <Text style={styles.chip}>🏆 CAD {ev.prizePool} prize</Text>}
           {!!ev.format && <Text style={[styles.chip, styles.chipGrey]}>{ev.format}</Text>}
@@ -757,6 +761,7 @@ const styles = StyleSheet.create({
   },
   chipGreen: { color: '#166534', backgroundColor: '#dcfce7' },
   chipGrey: { color: '#374151', backgroundColor: '#f3f4f6' },
+  chipBlue: { color: '#075985', backgroundColor: '#e0f2fe' },
   eventName: { fontSize: 16, fontWeight: '800', color: '#4c1d95', textAlign: 'center', marginTop: 6 },
   readyTitle: { fontSize: 28, fontWeight: '900', color: '#111827', textAlign: 'center', lineHeight: 32, letterSpacing: 0.5 },
   footnote: { fontSize: 11, color: '#9ca3af', textAlign: 'center', marginTop: 10 },

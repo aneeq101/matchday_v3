@@ -386,6 +386,12 @@ Posts with optional media (Storage), likes/comments with trigger-maintained coun
 
 ### 8.6 Events: tournaments, leagues, matches (`earn.tsx`, `tournament.tsx`)
 - **Types:** `tournament` = knockout bracket, `league` = round robin (3 pts win / 1 draw), `match` = sign-up list only (needs the full line-up).
+- **Category** (`tournaments.category`, `lib/db/patch_event_category.sql`):
+  - `friendly`: no entry fee, no prize; the money fields are hidden in Create Event.
+  - `prize`: prize pool required, entry fee optional.
+  - **Enforced:** trigger `trg_tournaments_category` checks it on save; new events saved with money but no category become `prize`.
+  - **In the app:** `eventCategory()` / `CATEGORY_INFO` in `lib/tournaments.ts`, plus badges and a Friendly / Prize filter in Play to Earn.
+  - **Nearby alerts:** single matches alert only when they're `prize`.
 - **Entry rules** (`eventRules()`; DB `trg_tournaments_validate`): knockouts/leagues need ≥ 4 entrants. Tennis/Badminton singles → players; doubles → pairs (2-player teams, the captain signs the pair up); other sports → teams.
 - **Lifecycle:** `active` (sign-ups open) → organiser taps Start → the app shuffles and generates the draw (`lib/bracket.ts`: byes for non-powers of two, round-robin fixtures) → `start_tournament()` saves `tournament_matches` → `in_progress` → `record_match_result()` per match. Knockout winners auto-advance, and a knockout result can't be edited once the next round is played. The event becomes `completed` with `champion_name`.
 - `tournament_matches` has no client write policies; changes only happen through the RPCs.
@@ -550,6 +556,7 @@ lib/db/patch_rating_requests.sql
 lib/db/patch_rating_popups.sql
 lib/db/patch_matchday.sql
 lib/db/patch_match_history.sql
+lib/db/patch_event_category.sql
 ```
 
 ### Testing SQL locally before running it in Supabase

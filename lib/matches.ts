@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { type MatchItem } from '../data/mockData';
+import { type MatchItem, type EventCategory } from '../data/mockData';
 
 const SPORT_EMOJIS: Record<string, string> = {
   Football: '⚽', Cricket: '🏏', Tennis: '🎾',
@@ -24,6 +24,9 @@ function rowToMatchItem(row: Record<string, unknown>): MatchItem {
     resultScore:    (row.result_score as string) ?? null,
     resultNote:     (row.result_note as string) ?? null,
     resultSummary:  (row.result_summary as string) ?? null,
+    category:       (row.category as EventCategory) ?? undefined,
+    entryFee:       Number(row.entry_fee ?? 0),
+    prizePool:      Number(row.prize_pool ?? 0),
   };
 }
 
@@ -48,6 +51,9 @@ export async function createMatch(params: {
   matchDate: string;
   location: string;
   startsOn?: string | null;   // YYYY-MM-DD
+  category: EventCategory;
+  entryFee: number;
+  prizePool: number;
 }): Promise<MatchItem | null> {
   const emoji = SPORT_EMOJIS[params.sport] ?? '🏟️';
   const { data, error } = await supabase
@@ -63,6 +69,9 @@ export async function createMatch(params: {
       match_date:      params.matchDate,
       starts_on:       params.startsOn ?? null,
       location:        params.location,
+      category:        params.category,
+      entry_fee:       params.entryFee,
+      prize_pool:      params.prizePool,
     })
     .select()
     .single();

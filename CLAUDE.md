@@ -100,7 +100,7 @@ lib/                       # Service layer — screens never call Supabase direc
   sportProfile.ts          # pure: profile sports, skill levels, per-sport fields, self-rating skills, summarizeDetails()
   onboarding.ts            # when to show the welcome flow (user_metadata.onboarding_done)
   sportRules.ts            # sport formats, booking limits, event entry rules (min 4, singles/doubles/teams), TEAM_FORMATS squad sizes
-  db/                      # SQL migrations / patches (all run in Supabase as of 2026-10-01)
+  db/                      # SQL migrations / patches (all run in Supabase)
 
 data/
   mockData.ts              # All types + mock/demo data + venue helpers
@@ -331,6 +331,13 @@ Full plan in `PLAN.md`. Summary:
 - `profiles.stats` matches/wins kept = manual + verified by triggers (`fn_refresh_profile_stats`; demo excluded; backfilled) → headline, Hood cards, ranking.
 - `app/match-history.tsx`: sport filter, record, head-to-head (Rematch / "Settle it" → `/challenges` prefilled; ChallengeModal already explains team challenges need a captain), games by month. Profile menu "Match History".
 
+## Friendly vs Prize money events (2026-10-01) — `lib/db/patch_event_category.sql` run in Supabase 2026-10-01
+
+- `tournaments.category` 'friendly' | 'prize' (backfill: any fee/prize → prize). Trigger: friendly can't carry money; prize needs prize pool or fee; insert with money but default category → prize (old app versions).
+- Create Event (earn.tsx): Category cards after Event Type; Friendly hides money fields (fee/prize sent as 0); Prize requires a prize pool, fee optional, shows "entry fees add up to…". Play to Earn: second filter row All / 🤝 Friendly / 💰 Prize money; card badge; footer "Free · Friendly". Register sheet shows "free to join" for friendly. Event page shows a Friendly box or Prize pool + Entry. My Turf event cards + nearby popup show the category.
+- `fn_alert_nearby_event` redefined: single matches alert only when category = 'prize'; alert text "friendly tournament" / "prize match".
+- **Also on Organize Match (My Turf) and venue booking (Book tab):** shared `components/CategoryPicker.tsx` (cards + Prize pool required / Entry fee optional, or Friendly note); `categoryMoney()` / `categoryLabel()` / `eventCategory()` in `lib/tournaments.ts`. Patch adds `category`, `entry_fee`, `prize_pool` to `matches` + `bookings` with the same trigger (`fn_tournaments_category`). My Turf booking/match cards + detail sheets show the category.
+
 ## Progress log
 
 | Date | What was done | Commit |
@@ -346,8 +353,9 @@ Full plan in `PLAN.md`. Summary:
 | 2026-10-01 | Challenge popups (new + accepted/declined/called off/result), rating requests | `ba743de` |
 | 2026-10-01 | Rating popups (request, new/updated rating, badge), fix for missing rated-you alert | `199b783` |
 | 2026-10-01 | Event alert popups, ready-for-match-day reminders, player-recorded scores, match history + auto W/L | `78f97ac` |
+| 2026-10-01 | Friendly vs Prize money on events, Organize Match and venue bookings (shared CategoryPicker) | see git log |
 
-**SQL status:** every file in `lib/db/` has been run in Supabase (latest: updated `patch_matchday.sql` + `patch_match_history.sql`, 2026-10-01 — verified live: new columns + RPCs present, match history/verified records returning real games). Nothing pending.
+**SQL status:** every patch in `lib/db` up to and including `patch_event_category.sql` has been run in Supabase (2026-10-01, verified live). Nothing pending.
 
 ## Your to-do list (things only the owner can do)
 

@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import {
-  TOURNAMENTS, type Tournament, type EventType, type EntrantType, type TournamentStatus,
+  TOURNAMENTS, type Tournament, type EventType, type EntrantType, type TournamentStatus, type EventCategory,
 } from '../data/mockData';
 import {
   generateKnockout, generateRoundRobin, shuffle, type BracketMatch, type Entrant,
@@ -35,6 +35,7 @@ function dbToTournament(row: Record<string, unknown>): Tournament {
     resultScore: (row.result_score as string) ?? null,
     resultNote: (row.result_note as string) ?? null,
     resultSummary: (row.result_summary as string) ?? null,
+    category: (row.category as EventCategory) ?? undefined,
   };
 }
 
@@ -52,9 +53,45 @@ function friendlyError(message?: string, fallback = 'Something went wrong. Pleas
   if (m.includes('NEXT_ROUND_PLAYED')) return 'The winner has already played their next match, so this result can no longer be changed.';
   if (m.includes('NO_DRAWS_IN_KNOCKOUT')) return 'Knockout matches need a winner.';
   if (m.includes('MATCH_NOT_READY')) return 'Both sides of this match aren\'t decided yet.';
+  if (m.includes('PRIZE_REQUIRED')) return 'A prize money event needs a prize pool.';
+  if (m.includes('FRIENDLY_NO_MONEY')) return 'Friendly events can’t have an entry fee or prize pool.';
   if (m.includes('NOT_ALLOWED')) return 'Only the players in this match (or the organiser) can record it — any entrant can once the event date has passed.';
   return fallback;
 }
+
+/** Friendly or prize money — events, matches and bookings without a category: any money means prize. */
+export function eventCategory(t: { category?: EventCategory; entryFee?: number; prizePool?: number }): EventCategory {
+  return t.category ?? ((t.entryFee ?? 0) > 0 || (t.prizePool ?? 0) > 0 ? 'prize' : 'friendly');
+}
+
+/** "🤝 Friendly" / "💰 Prize CAD 500 · CAD 20 entry" for cards and detail rows. */
+export function categoryLabel(t: { category?: EventCategory; entryFee?: number; prizePool?: number }): string {
+  if (eventCategory(t) === 'friendly') return '🤝 Friendly';
+  const parts = ['💰 Prize money'];
+  if ((t.prizePool ?? 0) > 0) parts.push(`CAD ${t.prizePool!.toLocaleString()} prize`);
+  if ((t.entryFee ?? 0) > 0) parts.push(`CAD ${t.entryFee!.toLocaleString()} entry`);
+  return parts.join(' · ');
+}
+
+/**
+ * Money to save for a category (friendly → 0/0) from the form text, or an error
+ * message when a prize money event/match/booking has no prize pool.
+ */
+export function categoryMoney(category: EventCategory, entryFee: string, prizePool: string):
+  { entryFee: number; prizePool: number; error?: string } {
+  if (category === 'friendly') return { entryFee: 0, prizePool: 0 };
+  const fee = Math.max(0, parseInt(entryFee) || 0);
+  const prize = Math.max(0, parseInt(prizePool) || 0);
+  if (prize <= 0) {
+    return { entryFee: fee, prizePool: prize, error: 'Prize money needs a prize pool. If there’s no prize, choose Friendly instead.' };
+  }
+  return { entryFee: fee, prizePool: prize };
+}
+
+export const CATEGORY_INFO: Record<EventCategory, { label: string; emoji: string; color: string; bg: string; blurb: string }> = {
+  friendly: { label: 'Friendly', emoji: '🤝', color: '#0369a1', bg: '#e0f2fe', blurb: 'Just for fun — no entry fee, no prize money.' },
+  prize:    { label: 'Prize money', emoji: '💰', color: '#a16207', bg: '#fef3c7', blurb: 'Compete for a prize pool — players may pay an entry fee.' },
+};
 
 export async function fetchTournaments(): Promise<Tournament[]> {
   const { data, error } = await supabase
@@ -146,6 +183,7 @@ export async function createTournament(
     minParticipants: number;
     entrantType: EntrantType;
     format: string;
+    category: EventCategory;
     /** YYYY-MM-DD; lets players record scores once match day arrives */
     startsOn?: string | null;
     /** Venue coordinates — lets the database alert nearby players */
@@ -171,6 +209,7 @@ export async function createTournament(
       entrant_type: params.entrantType,
       format: params.format,
       starts_on: params.startsOn ?? null,
+      category: params.category,
       latitude: params.latitude ?? null,
       longitude: params.longitude ?? null,
       participants_count: 0,

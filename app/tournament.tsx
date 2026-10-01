@@ -9,7 +9,7 @@ import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useAuth } from '../lib/AuthContext';
 import {
   fetchTournament, fetchEntrants, fetchBracket, registerForTournament, unregisterFromTournament,
-  startTournament, recordMatchResult,
+  startTournament, recordMatchResult, eventCategory, CATEGORY_INFO,
 } from '../lib/tournaments';
 import { fetchCaptainTeams, fetchMyTeams, type Team } from '../lib/teams';
 import MatchDayPanel from '../components/MatchDayPanel';
@@ -271,16 +271,26 @@ export default function TournamentScreen() {
           <InfoRow icon="calendar-outline" text={t.date} />
           {!!t.location && <InfoRow icon="location-outline" text={t.location} />}
           <InfoRow icon={isTeam ? 'people-outline' : 'person-outline'} text={`Open to ${nouns} · min ${minNeeded}, max ${maxAllowed}`} />
-          <View style={styles.moneyRow}>
-            <View style={styles.moneyBox}>
-              <Text style={styles.moneyLabel}>Entry</Text>
-              <Text style={styles.moneyValue}>CAD {t.entryFee.toLocaleString()}</Text>
+          {eventCategory(t) === 'friendly' ? (
+            <View style={[styles.moneyRow, styles.friendlyBox]}>
+              <Text style={{ fontSize: 22 }}>🤝</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.friendlyTitle}>Friendly</Text>
+                <Text style={styles.friendlyText}>{CATEGORY_INFO.friendly.blurb}</Text>
+              </View>
             </View>
-            <View style={styles.moneyBox}>
-              <Text style={styles.moneyLabel}>Prize pool</Text>
-              <Text style={[styles.moneyValue, { color: '#16a34a' }]}>CAD {t.prizePool.toLocaleString()}</Text>
+          ) : (
+            <View style={styles.moneyRow}>
+              <View style={styles.moneyBox}>
+                <Text style={styles.moneyLabel}>💰 Prize pool</Text>
+                <Text style={[styles.moneyValue, { color: '#16a34a' }]}>CAD {t.prizePool.toLocaleString()}</Text>
+              </View>
+              <View style={styles.moneyBox}>
+                <Text style={styles.moneyLabel}>Entry</Text>
+                <Text style={styles.moneyValue}>{t.entryFee > 0 ? `CAD ${t.entryFee.toLocaleString()}` : 'Free'}</Text>
+              </View>
             </View>
-          </View>
+          )}
         </View>
 
         {/* Status */}
@@ -787,6 +797,9 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
   infoRowText: { color: '#374151', fontSize: 13, flex: 1 },
   moneyRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  friendlyBox: { alignItems: 'center', gap: 10, backgroundColor: '#e0f2fe', borderRadius: 12, padding: 12 },
+  friendlyTitle: { fontSize: 15, fontWeight: '800', color: '#075985' },
+  friendlyText: { fontSize: 12, color: '#0c4a6e', marginTop: 2 },
   moneyBox: { flex: 1, backgroundColor: '#f9fafb', borderRadius: 10, padding: 10 },
   moneyLabel: { fontSize: 11, color: '#6b7280' },
   moneyValue: { fontSize: 15, fontWeight: '800', color: '#111827', marginTop: 2 },

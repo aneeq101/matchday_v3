@@ -80,7 +80,11 @@ export interface Tournament {
   resultScore?: string | null;    // pickup "match" events: final score
   resultNote?: string | null;
   resultSummary?: string | null;  // "Aneeq won", "Draw", "Aneeq’s side won"
+  category?: EventCategory;       // friendly (no money) or prize money
 }
+
+/** 'friendly' = just for fun, no fee or prize; 'prize' = prize money (+ optional entry fee) */
+export type EventCategory = 'friendly' | 'prize';
 
 export type EntrantType = 'player' | 'team';
 /** 'active' = sign-ups open, 'in_progress' = bracket drawn, 'completed' = has a champion */
@@ -99,6 +103,9 @@ export interface Booking {
   players?: number;
   address?: string;
   specialRequests?: string;
+  category?: EventCategory;       // friendly game or prize money
+  entryFee?: number;              // CAD per player (prize only)
+  prizePool?: number;             // CAD (prize only)
 }
 
 export interface MatchItem {
@@ -118,6 +125,9 @@ export interface MatchItem {
   resultScore?: string | null;
   resultNote?: string | null;
   resultSummary?: string | null;
+  category?: EventCategory;       // friendly game or prize money
+  entryFee?: number;              // CAD per player (prize only)
+  prizePool?: number;             // CAD (prize only)
 }
 
 export interface Conversation {

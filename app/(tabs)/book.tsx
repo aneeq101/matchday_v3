@@ -23,7 +23,7 @@ import {
 const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { VENUES, venueDistanceKm, type Venue } from '../../data/mockData';
+import { VENUES, venueDistanceKm, type Venue, type EventCategory } from '../../data/mockData';
 import { formatDistance, type Coord } from '../../utils/geo';
 import { useUserLocation } from '../../hooks/useUserLocation';
 import BookMap from '../../components/BookMap';
@@ -31,6 +31,8 @@ import DatePickerField from '../../components/DatePickerField';
 import { getFormatsForSport } from '../../lib/sportRules';
 import { createNotification } from '../../lib/notifications';
 import { fetchVenues } from '../../lib/venues';
+import { categoryMoney } from '../../lib/tournaments';
+import CategoryPicker from '../../components/CategoryPicker';
 
 const LIVE_SEARCH_ENABLED = false;
 const PEEK_HEIGHT = 168; // px visible when sheet is at its lowest snap
@@ -178,6 +180,9 @@ export default function BookScreen() {
   const [selectedFormat, setSelectedFormat]     = useState('3v3');
   const [selectedMaxPlayers, setSelectedMaxPlayers] = useState(6);
   const [specialRequests, setSpecialRequests]   = useState('');
+  const [category, setCategory]                 = useState<EventCategory>('friendly');
+  const [entryFee, setEntryFee]                 = useState('');
+  const [prizePool, setPrizePool]               = useState('');
   const [bookingError, setBookingError]         = useState('');
 
   // ── Bottom sheet animation ──
@@ -361,6 +366,11 @@ export default function BookScreen() {
       setBookingError('Please select a time slot');
       return;
     }
+    const money = categoryMoney(category, entryFee, prizePool);
+    if (money.error) {
+      setBookingError(money.error);
+      return;
+    }
     setBookingError('');
 
     if (user) {
@@ -378,6 +388,9 @@ export default function BookScreen() {
         players_count:   selectedMaxPlayers,
         special_requests: specialRequests || null,
         total_price:     totalPrice,
+        category,
+        entry_fee:       money.entryFee,
+        prize_pool:      money.prizePool,
         status:          'confirmed',
       }).then(({ error }) => {
         if (error) {
@@ -401,6 +414,7 @@ export default function BookScreen() {
     setSelectedDuration(1); setSelectedSport('Football');
     setSelectedFormat('3v3'); setSelectedMaxPlayers(6);
     setSpecialRequests('');
+    setCategory('friendly'); setEntryFee(''); setPrizePool('');
     setBookingError('');
   };
 
@@ -670,6 +684,17 @@ export default function BookScreen() {
                   ))}
                 </View>
                 <Text style={styles.fieldHint}>Max {selectedMaxPlayers} players total</Text>
+
+                <CategoryPicker
+                  value={category}
+                  onChange={(c) => { setCategory(c); setBookingError(''); }}
+                  entryFee={entryFee}
+                  prizePool={prizePool}
+                  onEntryFee={setEntryFee}
+                  onPrizePool={(v) => { setPrizePool(v); setBookingError(''); }}
+                  spots={selectedMaxPlayers}
+                  what="game"
+                />
 
                 <Text style={styles.fieldLabel}>Special Requests (optional)</Text>
                 <TextInput

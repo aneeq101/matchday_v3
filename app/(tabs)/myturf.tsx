@@ -28,9 +28,13 @@ import {
 import {
   fetchMyRegistrations,
   unregisterFromTournament,
+  eventCategory,
+  categoryMoney,
+  categoryLabel,
 } from '../../lib/tournaments';
 import { getFormatsForSport } from '../../lib/sportRules';
-import { type Booking, type MatchItem, type Tournament } from '../../data/mockData';
+import { type Booking, type MatchItem, type Tournament, type EventCategory } from '../../data/mockData';
+import CategoryPicker from '../../components/CategoryPicker';
 import DatePickerField from '../../components/DatePickerField';
 import LocationPickerModal from '../../components/LocationPickerModal';
 import NotifBell from '../../components/NotifBell';
@@ -94,6 +98,9 @@ function dbToBooking(row: Record<string, unknown>): Booking {
     players:         (row.players_count as number) ?? undefined,
     address:         (row.venue_address as string) ?? undefined,
     specialRequests: (row.special_requests as string) ?? undefined,
+    category:        (row.category as EventCategory) ?? undefined,
+    entryFee:        Number(row.entry_fee ?? 0),
+    prizePool:       Number(row.prize_pool ?? 0),
   };
 }
 
@@ -132,6 +139,9 @@ export default function MyTurfScreen() {
   const [matchFormat, setMatchFormat]               = useState('3v3');
   const [matchMaxPlayers, setMatchMaxPlayers]       = useState(6);
   const [matchDate, setMatchDate]                   = useState<Date | null>(null);
+  const [matchCategory, setMatchCategory]           = useState<EventCategory>('friendly');
+  const [matchFee, setMatchFee]                     = useState('');
+  const [matchPrize, setMatchPrize]                 = useState('');
   const [matchTime, setMatchTime]                   = useState('');
   const [matchLocation, setMatchLocation]           = useState('');
   const [showLocationPicker, setShowLocationPicker] = useState(false);
@@ -212,6 +222,11 @@ export default function MyTurfScreen() {
       setCreateError(`Please fill in: ${missing.join(', ')}`);
       return;
     }
+    const money = categoryMoney(matchCategory, matchFee, matchPrize);
+    if (money.error) {
+      setCreateError(money.error);
+      return;
+    }
 
     setCreateError('');
     setCreatingMatch(true);
@@ -229,9 +244,17 @@ export default function MyTurfScreen() {
       matchDate:     `${formattedDate} at ${matchTime}`,
       location:      matchLocation.trim(),
       startsOn:      toISODate(matchDate!),
+      category:      matchCategory,
+      entryFee:      money.entryFee,
+      prizePool:     money.prizePool,
     });
 
-    if (newMatch) setMatches((prev) => [newMatch, ...prev]);
+    if (!newMatch) {
+      setCreatingMatch(false);
+      setCreateError('Couldn’t create the match. Please try again.');
+      return;
+    }
+    setMatches((prev) => [newMatch, ...prev]);
 
     setCreatingMatch(false);
     setShowCreateMatch(false);
@@ -239,6 +262,9 @@ export default function MyTurfScreen() {
     setMatchDate(null);
     setMatchTime('');
     setMatchLocation('');
+    setMatchCategory('friendly');
+    setMatchFee('');
+    setMatchPrize('');
     setCreateError('');
   };
 
@@ -515,6 +541,7 @@ export default function MyTurfScreen() {
                     ...(selectedBooking.duration ? [{ icon: 'hourglass-outline' as const, label: 'Duration', value: `${selectedBooking.duration}h` }] : []),
                     ...(selectedBooking.players  ? [{ icon: 'people-outline' as const,   label: 'Players',  value: String(selectedBooking.players) }] : []),
                     ...(selectedBooking.address  ? [{ icon: 'location-outline' as const, label: 'Address',  value: selectedBooking.address }] : []),
+                    { icon: 'trophy-outline' as const, label: 'Category', value: categoryLabel(selectedBooking) },
                     { icon: 'cash-outline' as const, label: 'Total', value: `CAD ${selectedBooking.price.toLocaleString()}` },
                   ].map((row) => (
                     <View key={row.label} style={styles.detailRow}>
@@ -619,6 +646,7 @@ export default function MyTurfScreen() {
                     { icon: 'people-outline' as const,    label: 'Format',      value: selectedMatch.players },
                     { icon: 'time-outline' as const,      label: 'Date & Time', value: selectedMatch.date },
                     { icon: 'location-outline' as const,  label: 'Venue',       value: selectedMatch.location },
+                    { icon: 'trophy-outline' as const,    label: 'Category',    value: categoryLabel(selectedMatch) },
                   ].map((row) => (
                     <View key={row.label} style={styles.detailRow}>
                       <View style={styles.detailIcon}>
@@ -742,6 +770,17 @@ export default function MyTurfScreen() {
                 Max {matchMaxPlayers} players total
               </Text>
 
+              <CategoryPicker
+                value={matchCategory}
+                onChange={(c) => { setMatchCategory(c); setCreateError(''); }}
+                entryFee={matchFee}
+                prizePool={matchPrize}
+                onEntryFee={setMatchFee}
+                onPrizePool={(v) => { setMatchPrize(v); setCreateError(''); }}
+                spots={matchMaxPlayers}
+                what="match"
+              />
+
               <Text style={styles.fieldLabel}>
                 Date<Text style={styles.required}> *</Text>
               </Text>
@@ -855,6 +894,7 @@ function BookingCard({ booking, onPress }: { booking: Booking; onPress: () => vo
           <Text style={styles.bookingVenue} numberOfLines={1}>{booking.venueName}</Text>
           <Text style={styles.bookingMeta}>{booking.date} · {booking.time}</Text>
           <Text style={styles.bookingPrice}>CAD {booking.price.toLocaleString()}</Text>
+          <Text style={styles.categoryText}>{categoryLabel(booking)}</Text>
         </View>
       </View>
       <StatusBadge status={booking.status} />
@@ -888,6 +928,7 @@ function MatchCard({ match, onPress }: { match: MatchItem; onPress: () => void }
         <View style={{ flex: 1 }}>
           <Text style={styles.matchTitle} numberOfLines={1}>{match.title}</Text>
           <Text style={styles.matchMeta}>{match.players} · {match.date}</Text>
+          <Text style={styles.categoryText}>{categoryLabel(match)}</Text>
           <Text style={styles.matchMeta}>{match.location}</Text>
           {match.maxPlayers != null && (
             <Text style={styles.matchSlotText}>
@@ -917,6 +958,7 @@ function JoinedMatchCard({ match, joining, onPress, onLeave }: {
         <View style={{ flex: 1 }}>
           <Text style={styles.matchTitle} numberOfLines={1}>{match.title}</Text>
           <Text style={styles.matchMeta}>{match.players} · {match.date}</Text>
+          <Text style={styles.categoryText}>{categoryLabel(match)}</Text>
           <Text style={styles.matchMeta} numberOfLines={1}>{match.location}</Text>
           {match.maxPlayers != null && (
             <Text style={styles.matchSlotText}>
@@ -960,6 +1002,7 @@ function OpenMatchCard({ match, isJoined, joining, onPress, onJoin, onLeave }: {
         <View style={{ flex: 1 }}>
           <Text style={styles.matchTitle} numberOfLines={1}>{match.title}</Text>
           <Text style={styles.matchMeta}>{match.players} · {match.date}</Text>
+          <Text style={styles.categoryText}>{categoryLabel(match)}</Text>
           <View style={styles.slotTrack}>
             <View style={[styles.slotFill, { width: `${pct}%` }]} />
           </View>
@@ -1028,6 +1071,9 @@ function EarnEventCard({ event, onOpen, onLeave }: { event: Tournament; onOpen: 
             {event.date}{event.location ? `  ·  ${event.location}` : ''}
           </Text>
           <View style={styles.earnFooter}>
+            {eventCategory(event) === 'friendly' && (
+              <Text style={styles.earnFee}>🤝 Friendly</Text>
+            )}
             {event.entryFee > 0 && (
               <Text style={styles.earnFee}>Entry: CAD {event.entryFee.toLocaleString()}</Text>
             )}
@@ -1403,6 +1449,7 @@ const styles = StyleSheet.create({
   earnTypeBadgeText: { fontSize: 11, fontWeight: '700' },
   earnMeta: { color: '#6b7280', fontSize: 12, marginBottom: 6 },
   earnFooter: { flexDirection: 'row', gap: 12 },
+  categoryText: { color: '#6b7280', fontSize: 12, fontWeight: '600', marginTop: 2 },
   earnFee: { color: '#374151', fontSize: 12, fontWeight: '600' },
   earnPrize: { color: '#16a34a', fontSize: 12, fontWeight: '700' },
   earnActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
