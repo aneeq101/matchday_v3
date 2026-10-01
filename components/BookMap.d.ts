@@ -9,6 +9,10 @@ interface BookMapProps {
   onBookVenue: (venue: Venue) => void;
   onSwitchToList: () => void;
   onRadiusChange?: (km: number) => void;
+  /** Button text on a tapped venue (default "Book" / "Book Now") */
+  actionLabel?: string;
+  /** Phone only: false = a tap calls onBookVenue straight away (the caller shows its own card) */
+  showPreview?: boolean;
 }
 
 declare const BookMap: React.ComponentType<BookMapProps>;

@@ -433,9 +433,6 @@ export default function BookScreen() {
               <ActivityIndicator size="small" color="#16a34a" />
             )}
           </View>
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{listVenues.length} venues</Text>
-          </View>
         </View>
 
         {/* Search */}
@@ -843,15 +840,6 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   pageTitle: { fontSize: 22, fontWeight: '800', color: '#111827' },
-  countBadge: {
-    backgroundColor: '#f0fdf4',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-  },
-  countBadgeText: { fontSize: 12, fontWeight: '700', color: '#16a34a' },
   searchRow:  { paddingHorizontal: 12, paddingBottom: 10 },
   searchBox:  {
     flexDirection: 'row',

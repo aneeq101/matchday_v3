@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { MapContainer, TileLayer, Marker, Popup, Tooltip, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import type { Venue } from '../data/mockData';
 import type { Coord } from '../utils/geo';
+import { clusterVenues } from '../utils/cluster';
 
 // Inject Leaflet CSS from CDN (runs once at module load)
 if (typeof document !== 'undefined' && !document.getElementById('leaflet-css')) {
@@ -27,33 +28,45 @@ function sportEmoji(sports: string[]): string {
   return '🏟️';
 }
 
-function createVenueIcon(emoji: string, name: string) {
+// Compact pin: the sport emoji in a white circle. The name shows on hover
+// (Tooltip) and with full details on click (Popup) — no always-on labels.
+const iconCache = new Map<string, L.DivIcon>();
+function venueIcon(emoji: string) {
+  let icon = iconCache.get(emoji);
+  if (!icon) {
+    icon = L.divIcon({
+      className: '',
+      html: `<div style="width:30px;height:30px;border-radius:50%;background:#fff;border:2px solid #16a34a;
+        display:flex;align-items:center;justify-content:center;font-size:16px;line-height:1;cursor:pointer;
+        box-shadow:0 1px 4px rgba(0,0,0,0.3);">${emoji}</div>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+      popupAnchor: [0, -16],
+    });
+    iconCache.set(emoji, icon);
+  }
+  return icon;
+}
+
+// Numbered bubble for venues that would overlap at this zoom
+function clusterIcon(count: number) {
+  const size = count >= 20 ? 44 : count >= 10 ? 38 : 32;
   return L.divIcon({
     className: '',
-    html: `
-      <div style="display:flex;flex-direction:column;align-items:center;cursor:pointer;">
-        <div style="font-size:30px;line-height:1;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.35));">${emoji}</div>
-        <div style="
-          background:rgba(255,255,255,0.97);
-          border-radius:6px;
-          padding:2px 8px;
-          font-size:11px;
-          font-weight:700;
-          color:#111827;
-          margin-top:3px;
-          box-shadow:0 2px 6px rgba(0,0,0,0.22);
-          white-space:nowrap;
-          max-width:150px;
-          overflow:hidden;
-          text-overflow:ellipsis;
-          border:1px solid rgba(0,0,0,0.06);
-        ">${name}</div>
-      </div>
-    `,
-    iconSize: [160, 60],
-    iconAnchor: [80, 60],
-    popupAnchor: [0, -62],
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:#16a34a;color:#fff;
+      border:3px solid rgba(255,255,255,0.9);display:flex;align-items:center;justify-content:center;
+      font:800 13px system-ui,sans-serif;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.35);">${count}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   });
+}
+
+/** Reports the zoom level so markers can be grouped, and gives cluster clicks a map handle. */
+function ZoomWatcher({ onZoom, mapRef }: { onZoom: (z: number) => void; mapRef: React.MutableRefObject<L.Map | null> }) {
+  const map = useMap();
+  useEffect(() => { mapRef.current = map; onZoom(map.getZoom()); }, [map]); // eslint-disable-line react-hooks/exhaustive-deps
+  useMapEvents({ zoomend: () => onZoom(map.getZoom()) });
+  return null;
 }
 
 const userIcon = L.divIcon({
@@ -121,10 +134,21 @@ interface Props {
   onBookVenue: (venue: Venue) => void;
   onSwitchToList: () => void;
   onRadiusChange?: (km: number) => void;
+  /** Button text on a tapped venue (default "Book" / "Book Now") */
+  actionLabel?: string;
+  /** Phone only: false = a tap calls onBookVenue straight away (the caller shows its own card) */
+  showPreview?: boolean;
 }
 
-export default function BookMap({ location, venues, radius, onBookVenue, onRadiusChange }: Props) {
+export default function BookMap({ location, venues, radius, onBookVenue, onRadiusChange, actionLabel = 'Book Now' }: Props) {
   const [mapHeight, setMapHeight] = useState(500);
+  const [zoom, setZoom] = useState(location ? 13 : 11);
+  const mapRef = useRef<L.Map | null>(null);
+  // A cell ≈ 56 px at this zoom (256 px tiles); from zoom 14 every venue gets its own pin
+  const items = useMemo(
+    () => clusterVenues(venues, zoom >= 14 ? 0 : (360 / (256 * Math.pow(2, zoom))) * 56),
+    [venues, zoom],
+  );
 
   const venueCenter: [number, number] | null =
     venues.length > 0
@@ -151,6 +175,7 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
       >
         <RecenterMap location={location ? [location.latitude, location.longitude] : null} />
         <MapZoomSync radius={radius} onRadiusChange={onRadiusChange} />
+        <ZoomWatcher onZoom={setZoom} mapRef={mapRef} />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -174,16 +199,34 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
           </>
         )}
 
-        {venues.map((venue) => {
-          const coord = venue.coord;
-          if (!coord) return null;
+        {items.map((it) => {
+          if (it.kind === 'cluster') {
+            return (
+              <Marker
+                key={it.key}
+                position={[it.coord.latitude, it.coord.longitude]}
+                icon={clusterIcon(it.count)}
+                eventHandlers={{
+                  click: () => mapRef.current?.setView([it.coord.latitude, it.coord.longitude], Math.min(16, zoom + 2)),
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -18]} opacity={0.95}>
+                  <span style={{ fontWeight: 700, fontSize: 12, fontFamily: 'system-ui,sans-serif' }}>
+                    {it.count} venues · click to zoom in
+                  </span>
+                </Tooltip>
+              </Marker>
+            );
+          }
+          const venue = it.venue;
+          const coord = it.coord;
           return (
             <Marker
               key={venue.id}
               position={[coord.latitude, coord.longitude]}
-              icon={createVenueIcon(sportEmoji(venue.sports), venue.name)}
+              icon={venueIcon(sportEmoji(venue.sports))}
             >
-              <Tooltip direction="top" offset={[0, -68]} opacity={0.95}>
+              <Tooltip direction="top" offset={[0, -16]} opacity={0.95}>
                 <span style={{ fontWeight: 700, fontSize: 13, fontFamily: 'system-ui,sans-serif' }}>
                   {venue.name}
                 </span>
@@ -215,7 +258,7 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
                     ))}
                   </div>
                   <div style={{ color: '#16a34a', fontWeight: 700, fontSize: 15, marginBottom: 10 }}>
-                    CAD {venue.pricePerHour.toLocaleString()}/hr
+                    {venue.pricePerHour > 0 ? `CAD ${venue.pricePerHour.toLocaleString()}/hr` : 'Contact venue for price'}
                   </div>
                   <button
                     onClick={() => onBookVenue(venue)}
@@ -231,7 +274,7 @@ export default function BookMap({ location, venues, radius, onBookVenue, onRadiu
                       fontSize: 13,
                     }}
                   >
-                    Book Now
+                    {actionLabel}
                   </button>
                 </div>
               </Popup>
