@@ -299,6 +299,7 @@ Full plan in `PLAN.md`. Summary:
 | 2026-10-01 | Player/team skill ratings per sport, reviews, Bronze→Diamond badges | `c530078` |
 | 2026-10-01 | Realistic team squad sizes per sport/format; nearby event alerts (push) | `c530078` |
 | 2026-10-01 | Technical README.md, local SQL replay harness (`lib/db/testing`) | `757a22f` |
+| 2026-10-01 | First-run sports setup (welcome flow), sport editor on Profile | `c17f8f9` |
 
 **SQL status:** every file in `lib/db/` has been run in Supabase (latest: `patch_team_sizes_event_alerts.sql`, 2026-10-01 — verified live: all teams have formats, all 8 events have coordinates). Nothing pending.
 
