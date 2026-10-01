@@ -100,7 +100,7 @@ lib/                       # Service layer — screens never call Supabase direc
   sportProfile.ts          # pure: profile sports, skill levels, per-sport fields, self-rating skills, summarizeDetails()
   onboarding.ts            # when to show the welcome flow (user_metadata.onboarding_done)
   sportRules.ts            # sport formats, booking limits, event entry rules (min 4, singles/doubles/teams), TEAM_FORMATS squad sizes
-  db/                      # SQL migrations / patches (all run in Supabase except the updated patch_matchday.sql + patch_match_history.sql)
+  db/                      # SQL migrations / patches (all run in Supabase as of 2026-10-01)
 
 data/
   mockData.ts              # All types + mock/demo data + venue helpers
@@ -312,7 +312,7 @@ Full plan in `PLAN.md`. Summary:
 - `new_badge` → celebration card.
 - Patch redefines `submit_rating()` (identical logic) so `new_rating`/`new_badge` notifications include `rating_id`/`badge` + `rate_kind/rate_id/rate_name/sport`. Foreground push banners suppressed for these types too.
 
-## Match day: ready popups + players record scores (2026-10-01) — `lib/db/patch_matchday.sql` ⚠️ first version run 2026-10-01; UPDATED version must be RE-RUN
+## Match day: ready popups + players record scores (2026-10-01) — `lib/db/patch_matchday.sql` run (updated version) 2026-10-01
 
 - `starts_on date` on tournaments + matches (app sends it; triggers parse "Sat, Oct 12, 2026[ at 5:00 PM]" via `fn_parse_event_date`; backfilled).
 - READY: `ready_at` + triggers on `tournament_registrations` / `match_players` → once per event, `event_ready` notifications to `fn_event_people` / `fn_match_people` (sign-ups, members of signed-up teams, organiser; no demo). Threshold: tournament/league = `min_participants`, match event = `max_participants`, Organize Match = `max_players`. Already-ready events marked silently by the patch. `event_ready_acks` + `ack_ready()`; popup "READY FOR MATCH DAY?" → I'm ready / View event / Later (skipped if already acked or finished).
@@ -323,7 +323,7 @@ Full plan in `PLAN.md`. Summary:
 - UI: `components/MatchDayPanel.tsx` on the event page + My Turf match details; My Turf cards show "🏆 Final: …" / "✏️ Played? Record the score" / "📣 Ready for match day"; event page lets sides/entrants tap bracket games, entrant "start" after match day. Notification `match_id` taps → My Turf.
 - Tested with `lib/db/testing/replay.sh` (dates, once-only announcement, acks, side/entrant/organiser permissions before/after date, pickup scores, re-run).
 
-## Match history + automatic W/L (2026-10-01) — `lib/db/patch_match_history.sql` ⚠️ NOT YET RUN (run AFTER re-running patch_matchday.sql)
+## Match history + automatic W/L (2026-10-01) — `lib/db/patch_match_history.sql` run 2026-10-01
 
 - `fn_match_history(user)` (derived from results, no stored tally → corrections never double count): challenges (team → all members), tournament/league games (team entries → all members; byes skipped), pickup events + Organize Match (recorder's outcome; 1-v-1 opponent gets the opposite; bigger games → 'played').
 - RPCs `match_history(user, limit)`, `verified_record(user)` gated by `fn_can_view_profile` (mirrors profiles_select).
@@ -347,7 +347,7 @@ Full plan in `PLAN.md`. Summary:
 | 2026-10-01 | Rating popups (request, new/updated rating, badge), fix for missing rated-you alert | `199b783` |
 | 2026-10-01 | Event alert popups, ready-for-match-day reminders, player-recorded scores, match history + auto W/L | `78f97ac` |
 
-**SQL status:** everything up to `patch_rating_popups.sql` has been run in Supabase (2026-10-01). **Pending: `patch_matchday.sql`** — until run, creating events/matches fails (new `starts_on` column) and ready/score features don't work.
+**SQL status:** every file in `lib/db/` has been run in Supabase (latest: updated `patch_matchday.sql` + `patch_match_history.sql`, 2026-10-01 — verified live: new columns + RPCs present, match history/verified records returning real games). Nothing pending.
 
 ## Your to-do list (things only the owner can do)
 
