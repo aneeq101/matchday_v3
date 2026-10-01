@@ -310,6 +310,7 @@ Full plan in `PLAN.md`. Summary:
 | 2026-10-01 | Realistic team squad sizes per sport/format; nearby event alerts (push) | `c530078` |
 | 2026-10-01 | Technical README.md, local SQL replay harness (`lib/db/testing`) | `757a22f` |
 | 2026-10-01 | First-run sports setup (welcome flow), sport editor on Profile | `c17f8f9` |
+| 2026-10-01 | Challenge popups (new + accepted/declined/called off/result), rating requests | `ba743de` |
 
 **SQL status:** everything up to `patch_team_sizes_event_alerts.sql` has been run in Supabase (2026-10-01, verified live). **Pending: `patch_challenge_popup.sql`, then `patch_rating_requests.sql`** — until run, the challenge popup and rating requests fail quietly (no popup / "Something went wrong").
 
