@@ -285,8 +285,9 @@ Full plan in `PLAN.md`. Summary:
 | 2026-09-30 | My Teams, Statistics, Privacy & Security, Help & Support, persisted privacy/messaging settings, PostGIS nearby players, push notification plumbing, eas.json, supabase-js pinned | `96cd848` |
 | 2026-09-30 | Tournament brackets (knockout + league), challenge matches, challenge venue picker, sport-based min/max entry rules, sign-up counter/guard RLS bug fixed | `d737d31` |
 | 2026-09-30 | EAS project linked (`eas init`) — push setup started, waiting on Firebase | `57b86a5` |
-| 2026-10-01 | Player/team skill ratings per sport, reviews, Bronze→Diamond badges | (uncommitted) |
-| 2026-10-01 | Realistic team squad sizes per sport/format; nearby event alerts (push) | (uncommitted) |
+| 2026-10-01 | Player/team skill ratings per sport, reviews, Bronze→Diamond badges | `c530078` |
+| 2026-10-01 | Realistic team squad sizes per sport/format; nearby event alerts (push) | `c530078` |
+| 2026-10-01 | Technical README.md, local SQL replay harness (`lib/db/testing`) | `757a22f` |
 
 **SQL status:** every file in `lib/db/` has been run in Supabase (latest: `patch_team_sizes_event_alerts.sql`, 2026-10-01 — verified live: all teams have formats, all 8 events have coordinates). Nothing pending.
 
