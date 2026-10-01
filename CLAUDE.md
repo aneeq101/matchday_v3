@@ -57,6 +57,7 @@ app/
   my-tournaments.tsx       # Events I organise / joined
   tournament.tsx           # Event details: sign-ups, knockout bracket / league table + fixtures, organiser results
   challenges.tsx           # Challenge matches (player vs player, team vs team)
+  ratings.tsx              # All ratings & reviews for a player/team (?kind=player|team&id=&name=)
   statistics.tsx           # Aggregated player statistics
   privacy.tsx              # Privacy & Security (nearby, push, password, sign out all, delete account)
   help.tsx                 # Help & Support (FAQ + tickets)
@@ -73,6 +74,9 @@ components/
   BracketView.tsx          # Knockout bracket drawing with connector lines
   ChallengeModal.tsx       # New challenge sheet
   NotifBell.tsx            # Bell icon with unread count
+  RatingsSection.tsx       # Ratings summary, badge progress, skill bars, reviews (profile modal, team page, ratings screen)
+  RateModal.tsx            # Rate a player/team: overall 1–10, per-skill 1–10, conduct stars, review
+  BadgeChip.tsx            # Bronze/Silver/Gold/Platinum/Diamond pill
 
 lib/                       # Service layer — screens never call Supabase directly
   supabase.ts, AuthContext.tsx          # client + session
@@ -82,8 +86,10 @@ lib/                       # Service layer — screens never call Supabase direc
   tournaments.ts           # events, sign-ups, bracket fetch, start/record-result RPCs
   bracket.ts               # pure bracket/fixture/standings logic (no Supabase)
   challenges.ts            # challenge RPC wrappers
-  sportRules.ts            # sport formats, booking limits, event entry rules (min 4, singles/doubles/teams)
-  db/                      # SQL migrations / patches (all run in Supabase as of 2026-09-30)
+  ratingRules.ts           # pure: 1–10 level scale, NTRP map, skills per sport (player + team), badge tiers/rules
+  ratings.ts               # rating_summary / submit_rating RPC wrappers, ratings list, delete
+  sportRules.ts            # sport formats, booking limits, event entry rules (min 4, singles/doubles/teams), TEAM_FORMATS squad sizes
+  db/                      # SQL migrations / patches (all run in Supabase as of 2026-10-01)
 
 data/
   mockData.ts              # All types + mock/demo data + venue helpers
@@ -253,6 +259,24 @@ Full plan in `PLAN.md`. Summary:
 - **Challenge venues**: "Where" opens `components/VenueList.tsx` — venues from `fetchVenues()` filtered to the challenge's sport, nearest first, or type a custom place.
 - SQL was tested locally against a Postgres+PostGIS container with Supabase stubs (auth.uid, roles, net.http_post) replaying all lib/db migrations.
 
+## Ratings, reviews & badges (2026-10-01) — `lib/db/patch_ratings.sql` run in Supabase 2026-10-01
+
+- **Who rates whom:** a player, or a team via its captain ("Rate as" picker), rates a player or a team in one sport. One rating per rater per target per sport — rating again updates it. Can't rate yourself, your own team, or your own team's members on the team's behalf.
+- **What's rated:** overall level 1–10 (required, fixed meanings in `RATING_LEVELS`: 5 Intermediate, 7 Advanced, 9 Elite, 10 Pro; Tennis also shows NTRP), optional per-skill 1–10 (`PLAYER_SKILLS` / `TEAM_SKILLS` — e.g. tennis serve/return/forehand/backhand/volley/overhead/topspin/slice/movement/consistency/tactics/mental; tennis & badminton teams = doubles pairs), sportsmanship + reliability 1–5, review ≤500 chars. Skills can be skipped (e.g. a keeper's finishing).
+- **Badges:** Bronze 5+, Silver 6+, Gold 7+, Platinum 8+, Diamond 9+. Earned when ≥3 different people rate the overall at that level or higher AND they are ≥ half of all raters for that sport; only the last 12 months count; a person rating as themselves and as their team counts once. Rule lives only in `rating_summary()` (SQL); tier list is mirrored in `BADGE_TIERS` (`lib/ratingRules.ts`) — keep in step with `fn_rating_tiers()`.
+- **Played together** (✓ on reviews) is computed by `fn_played_together()`: completed challenge or tournament match between the sides, same team, or same pickup match.
+- `ratings` table: no insert/update policies (writes only via `submit_rating()`), delete own; select follows profile visibility. Notifications `new_rating` / `new_badge` (data `rating_player_id` → /ratings, or `team_id` → team page).
+- UI: Ratings & Reviews section + badge chips in `PlayerProfileModal` and `app/team.tsx`; Profile tab menu → "Ratings & Badges"; `/ratings` full list.
+- Demo ratings: Daniel Park Platinum (tennis), Zara Diamond (badminton), Ali Gold (football), Bilal Gold (cricket), Priya Silver (tennis), Sara/Usman no badge yet (2 ratings); teams: Daniel & Priya Gold, Scarborough Lions Silver, High Park FC Bronze.
+- SQL tested locally (Postgres+PostGIS with Supabase stubs, all migrations replayed): badges, majority rule, double-count guard, validation errors, RLS (no direct writes, private profiles hidden, delete own only), notifications, re-run safety. UI type-checks and bundles for web + Android, but has **not been clicked through**.
+
+## Team sizes + nearby event alerts (2026-10-01) — `lib/db/patch_team_sizes_event_alerts.sql` run in Supabase 2026-10-01
+
+- **Team formats** (`TEAM_FORMATS` in `lib/sportRules.ts`, mirrored by `fn_team_formats()` in SQL — keep in step): Tennis/Badminton `Doubles` exactly 2; Football 5-a-side 5–10 / 7-a-side 7–14 / 11-a-side 11–25; Cricket 8-a-side 8–12 / 11-a-side 11–16; Basketball 3x3 3–4 / 5-on-5 5–15; Baseball 9 players 9–20; Hockey 6 on ice 6–22. `teams.format` column; `trg_teams_validate_size` checks on insert and when size/format/sport change (errors `TEAM_SIZE_INVALID: …`, `TEAM_FORMAT_INVALID`, `TEAM_TOO_SMALL`); missing format is guessed (older app versions). `TeamFormModal` has a Format picker and the squad stepper is clamped to the format (pairs show a fixed "2 players").
+- Patch backfills formats for existing teams; demo badminton "Queen West Smashers" had 3 members → demo Sara removed so it's Zara + the owner's account.
+- **Nearby event alerts:** `trg_alert_nearby_event` (AFTER INSERT on tournaments) → `notifications` rows of type `nearby_event` (data `tournament_id`), which the existing push trigger sends to phones. Fires for tournaments, leagues, and matches with entry fee > 0, status active. Recipients: not demo, not organiser, `event_alerts` on, play that sport (`profile_sports`), location saved in the last 90 days within their `event_alert_radius_km` (5/10/25/50, default 25), max 3 per 24 h, nearest 500. Event point = venue coord from `LocationPickerModal` (now passes `coord`) → else venue whose name starts the location text → else (alert only) organiser's location. `tournaments.latitude/longitude/geo` + sync trigger. Settings in Privacy & Security ("Nearby Event Alerts" + radius chips), `lib/settings.ts`.
+- Tested locally (all migrations replayed + patch run twice) with a copy of the live team data. Bundles for web + Android; not clicked through. Phone pushes still need Firebase + a build; the alerts show in the in-app Notifications list regardless.
+
 ## Progress log
 
 | Date | What was done | Commit |
@@ -260,11 +284,16 @@ Full plan in `PLAN.md`. Summary:
 | 2026-08-03 | Venues moved to Supabase; Play to Earn registration made foolproof; tournaments moved to GTA/CAD | `0c4076c`, `143556b` |
 | 2026-09-30 | My Teams, Statistics, Privacy & Security, Help & Support, persisted privacy/messaging settings, PostGIS nearby players, push notification plumbing, eas.json, supabase-js pinned | `96cd848` |
 | 2026-09-30 | Tournament brackets (knockout + league), challenge matches, challenge venue picker, sport-based min/max entry rules, sign-up counter/guard RLS bug fixed | `d737d31` |
-| 2026-09-30 | EAS project linked (`eas init`) — push setup started, waiting on Firebase | (this commit) |
+| 2026-09-30 | EAS project linked (`eas init`) — push setup started, waiting on Firebase | `57b86a5` |
+| 2026-10-01 | Player/team skill ratings per sport, reviews, Bronze→Diamond badges | (uncommitted) |
+| 2026-10-01 | Realistic team squad sizes per sport/format; nearby event alerts (push) | (uncommitted) |
 
-**SQL status:** every file in `lib/db/` has been run in Supabase (latest: `patch_phase4_complete.sql`, `patch_brackets_challenges.sql`, `patch_event_rules.sql`, all 2026-09-30). Nothing pending.
+**SQL status:** every file in `lib/db/` has been run in Supabase (latest: `patch_team_sizes_event_alerts.sql`, 2026-10-01 — verified live: all teams have formats, all 8 events have coordinates). Nothing pending.
 
 ## Your to-do list (things only the owner can do)
+
+0. **Try team formats + event alerts:** create a team (format picker, squad limits), set Nearby Event Alerts radius in Privacy & Security.
+0. **Try ratings in the app:** open Daniel Park's profile (Platinum tennis), rate a demo player, rate a team as yourself / as a team you captain.
 
 1. **Firebase for Android push (needed before the first build):**
    1. console.firebase.google.com → Create project "MatchDay".
