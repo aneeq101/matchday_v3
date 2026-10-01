@@ -399,6 +399,32 @@ Full plan in `PLAN.md`. Summary:
 - Push: Firebase/FCM credentials + first EAS build (see to-do list); App Store / Play Store submission; Sentry/analytics (Phase 6)
 - The Hood demo players/posts are still Lahore-themed (kept intentionally as dummy data)
 
+## 🐞 Known bugs (scan 2026-10-01) — NOT fixed yet, owner will pick from this list
+
+Found by reading the code (not clicked through). Suggested order: 1 → 3 + 4 → 2 → 6 + 7.
+
+**High**
+1. **UTC vs Toronto dates in SQL.** Checks use `current_date` (UTC); from ~8 pm–midnight Toronto it's already "tomorrow" in the DB. Effects: same-day prize match created in the evening sends no nearby alert (`patch_match_alerts.sql:47`); ready reminder disappears on the evening of match day (`patch_matchday.sql:299`, `:309`); scores / bracket start allowed a few hours before match day (`patch_matchday.sql:350`, `:506`, `:546`). Fix: compare in `America/Toronto` (e.g. `(now() AT TIME ZONE 'America/Toronto')::date`) or a helper `fn_today()`.
+2. **Team members don't see their team's events.** Team entries register only the captain (`tournament_registrations.user_id` = captain + `team_id`). `fetchMyRegistrations()` only matches `user_id`, so other members miss the event in My Turf → My Events / Past and the Tournaments stat, and Near me still offers them "View & join". Fix: also include registrations whose `team_id` is a team they belong to.
+3. **Booking can fail silently.** `book.tsx` `handleConfirm` inserts fire-and-forget and shows "Booking Confirmed!" regardless. Fix: await the insert, show an error and keep the sheet open on failure.
+4. **Double booking possible.** No check (app or DB) that a venue / date / time slot (with duration) is free. Fix: DB check (trigger or exclusion constraint on venue + time range, ignoring cancelled) + friendly "slot taken" message.
+5. **Nearby alerts depend on opening The Hood.** Location is only saved in `app/(tabs)/index.tsx:115` (`saveMyLocation`); alerts need a location from the last 90 days. Fix: save location on app start / foreground (e.g. in `_layout.tsx`), throttled.
+
+**Medium**
+6. **"Prize match near you" notification tap lands on My Turf → Upcoming**, where that match isn't listed (it's under Near me). `_layout.tsx:53`, `notifications.tsx:67`. Fix: route with `?tab=near` and read it in `myturf.tsx`.
+7. **Demo events can look real.** `fetchTournaments()` falls back to mock `TOURNAMENTS` on error/empty → they appear in My Turf → Near me as joinable friendly events (sign-up fails); Play to Earn also flashes mock events before load (`earn.tsx:71`).
+8. **Only the newest 100 events load** (`fetchTournaments` limit 100, newest first) — older still-open events drop out of Play to Earn / Near me / Past.
+9. **Anyone can insert any notification** (`notifications_insert` policy `WITH CHECK (true)`, `patch_social.sql:45`) → fake notifications/popups possible. App still creates 7 kinds directly (`createNotification`). Fix: move them into DB functions, then restrict the policy.
+10. **Confirm buttons do nothing on web** (`Alert.alert` with buttons): delete comment `comments.tsx:85`, remove sport `profile.tsx:191`, sign-in error `auth/callback.tsx:26`.
+11. **Past matches can still be joined via the API.** `match_players` join trigger checks status + capacity, not date (UI hides past games).
+
+**Low / decide**
+12. Bookings move to Past at **start** time — a 2 h booking leaves Upcoming while it's being played (use start + duration).
+13. My Turf **Bookings** stat counts cancelled + past bookings.
+14. Prize rules differ: app requires a prize pool; DB trigger accepts entry fee only.
+15. Friendly "Match" event type (Create Event from My Turf) duplicates Organize Match (see redundancy #1 below).
+16. Demo content still shown to real users: Lahore-themed Hood players/posts; mock conversations in Messages when signed out.
+
 ## ⚠️ Bring up at the start of the next session (review only — NOT implemented yet)
 
 The owner asked (2026-09-30) to be reminded of these next time and to decide before any work starts. Nothing below has been changed.
