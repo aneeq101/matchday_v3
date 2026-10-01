@@ -59,6 +59,7 @@ ORDER=(
   lib/db/patch_team_sizes_event_alerts.sql
   lib/db/patch_challenge_popup.sql
   lib/db/patch_rating_requests.sql
+  lib/db/patch_rating_popups.sql
 )
 for f in "${ORDER[@]}" "$@"; do run "$f"; done
 echo "Replayed ${#ORDER[@]} migrations$([ $# -gt 0 ] && echo " + $*") into container '$NAME'."

@@ -99,3 +99,22 @@ export async function fetchIncomingRequest(userId: string, subjectId: string, sp
 export async function declineRatingRequest(id: string): Promise<void> {
   await supabase.rpc('decline_rating_request', { p_id: id });
 }
+
+/** One request by id, with the asker's name (for the popup). Null if gone. */
+export async function fetchRequest(id: string): Promise<(IncomingRequest & { status: string; requesterName: string }) | null> {
+  const { data, error } = await supabase.from('rating_requests').select('*').eq('id', id).maybeSingle();
+  if (error || !data) return null;
+  const r = data as Record<string, unknown>;
+  const { data: p } = await supabase.from('profiles').select('name').eq('id', r.requester_user_id as string).maybeSingle();
+  return {
+    id: r.id as string,
+    requesterUserId: r.requester_user_id as string,
+    requesterName: ((p as { name?: string } | null)?.name) ?? 'A player',
+    subjectKind: (r.subject_kind as RatingTargetKind) ?? 'player',
+    subjectId: r.subject_id as string,
+    subjectName: (r.subject_name as string) ?? '',
+    sport: r.sport as string,
+    note: (r.note as string) ?? '',
+    status: (r.status as string) ?? 'pending',
+  };
+}

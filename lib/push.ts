@@ -33,10 +33,11 @@ export async function setupNotificationHandlers(onTap: (data: Record<string, unk
     if (!handlerSet) {
       Notifications.setNotificationHandler({
         handleNotification: async (n) => {
-          // App is open: new challenges and challenge updates already appear as
-          // in-app popups (components/ChallengePopup.tsx), so don't also show a banner.
+          // App is open: challenges, challenge updates, rating requests, new ratings
+          // and badges already appear as in-app popups (components/InAppPopups.tsx),
+          // so don't also show a banner.
           const type = (n.request.content.data as { type?: string } | undefined)?.type;
-          const inAppPopup = type === 'challenge' || type === 'challenge_update';
+          const inAppPopup = ['challenge', 'challenge_update', 'rating_request', 'new_rating', 'new_badge'].includes(type ?? '');
           return {
             shouldShowBanner: !inAppPopup,
             shouldShowList: true,

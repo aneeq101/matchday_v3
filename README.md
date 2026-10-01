@@ -39,7 +39,7 @@ The app has five bottom tabs plus a set of stacked screens.
 | **Profile** (tab) | Your sports and skill levels, stats, privacy & messaging settings, menu. |
 | Welcome (first run) | Pick the sports you play, optionally add level, position and a quick self-rating per sport. Skippable, shown once. |
 | Messages / Chat | 1-on-1 conversations, live updates via Supabase Realtime. |
-| Notifications | In-app list; every notification is also sent as a phone push. |
+| Notifications | In-app list; every notification is also sent as a phone push. Challenges, rating requests, new ratings and badges also **pop up** over the app. |
 | Teams | Create/join teams with sport-specific squad sizes and formats, captain tools. |
 | Challenges | Player vs player or team vs team challenge matches, with results. New challenges and every change to them (accepted, declined, called off, result) **pop up in-app**. |
 | Ratings & badges | Rate players/teams per sport (overall + skills + conduct), reviews, Bronze to Diamond badges. Players (and captains) can **ask people they've played with to rate them**. |
@@ -191,7 +191,7 @@ components/
   TeamFormModal.tsx        Create/edit team (sport → format → squad size)
   BracketView.tsx          Knockout bracket drawing
   ChallengeModal.tsx       New challenge sheet
-  ChallengePopup.tsx       In-app popups for new challenges and challenge updates (mounted in app/_layout.tsx)
+  InAppPopups.tsx          All in-app popups: challenges + updates, rating requests, new ratings, badges (mounted in app/_layout.tsx)
   AskRatingsModal.tsx      Ask people you've played with to rate you / your team
   RatingsSection.tsx       Ratings summary, badge progress, skill bars, reviews
   RateModal.tsx            Rate a player/team
@@ -343,7 +343,7 @@ Metro picks `Foo.native.tsx` on iOS/Android and `Foo.web.tsx` on web. A `Foo.d.t
 | `trg_rating_requests_team_deleted` | teams | remove a deleted team's rating requests |
 
 ### 7.5 Realtime
-Chat subscribes to `postgres_changes` INSERTs on `messages` filtered by `conversation_id` (`subscribeToMessages()` in `lib/chatService.ts`). The challenge popup subscribes to INSERTs on `challenges` filtered by `opponent_user_id` (`subscribeToIncomingChallenges()`) and on `notifications` filtered by `user_id` (`subscribeToChallengeUpdates()`). `messages`, `challenges` and `notifications` are in the `supabase_realtime` publication. Realtime respects RLS.
+Chat subscribes to `postgres_changes` INSERTs on `messages` filtered by `conversation_id` (`subscribeToMessages()` in `lib/chatService.ts`). The popup manager subscribes to INSERTs on `challenges` filtered by `opponent_user_id` (`subscribeToIncomingChallenges()`) and on `notifications` filtered by `user_id` (`subscribeToPopupNotifs()`, types in `POPUP_TYPES`). `messages`, `challenges` and `notifications` are in the `supabase_realtime` publication. Realtime respects RLS.
 
 ### 7.6 Storage
 Public bucket **`post-media`** holds post photos/videos (uploaded from `lib/posts.ts`, served by public URL).
@@ -390,7 +390,7 @@ Posts with optional media (Storage), likes/comments with trigger-maintained coun
 ### 8.7 Challenges (`challenges.tsx`)
 Player vs player, or captain vs another team of the same sport. Flow: create → opponent accepts/declines (demo opponents auto-accept) → either side records the result. Each step notifies the other side. "Where" uses `VenueList` (DB venues for the sport, nearest first, or a custom place).
 
-**In-app popup** (`components/ChallengePopup.tsx`, mounted in the root layout while signed in):
+**In-app popup** (`components/InAppPopups.tsx`, mounted in the root layout while signed in; it also shows rating popups, §8.9):
 - Arrives live via Realtime, or on app start / return to foreground for challenges from the last 7 days with `opponent_seen_at` empty.
 - Shows sport, date, place and message, with **Accept / Decline** (decline asks to confirm) / **Decide later** (`mark_challenge_seen`).
 - After accepting it offers **Message** the challenger or **My challenges**.
@@ -399,7 +399,7 @@ Player vs player, or captain vs another team of the same sport. Flow: create →
   - Several updates on one challenge collapse into one card showing its latest state.
   - Cards offer Message, My challenges, Challenge someone, or (after a result) Rate the opponent.
   - Demo auto-accepts don't pop up.
-- While the app is open, push banners for `challenge` and `challenge_update` are suppressed in `lib/push.ts`, so nothing shows twice.
+- While the app is open, push banners for `challenge`, `challenge_update`, `rating_request`, `new_rating` and `new_badge` are suppressed in `lib/push.ts`, so nothing shows twice.
 
 ### 8.8 Teams (`my-teams.tsx`, `team.tsx`, `TeamFormModal`)
 - A team has a sport, a **format** and a squad size (`max_members`). The squad size must fit the format (§9.3). Tennis/Badminton teams are doubles pairs of exactly 2.
@@ -418,6 +418,11 @@ Player vs player, or captain vs another team of the same sport. Flow: create →
   - **Who:** suggestions come from `rating_request_suggestions` (played together → teammates → follows), plus search, with an optional note.
   - **What the asked person gets:** a `rating_request` notification. It opens `/ratings?...&rate=<sport>`, which shows a "X asked you…" banner (Rate now / Not now) and opens the rating sheet.
   - **What counts:** the resulting rating is a normal rating, so badges keep their rules (≥ 3 people, majority, 12 months).
+- **Rating popups** (`InAppPopups`, from unread notifications):
+  - `rating_request`: "X asked you to rate their game", with Rate now (opens `/ratings?...&rate=`) / Not now (declines) / Later.
+  - `new_rating`: shows the exact rating (`data.rating_id` → `fetchRating`; older notifications are matched by time with `findRatingNear`). Sent for first ratings and for changed ones (new score or review): overall + level/NTRP, top skills, conduct, played-together, review. Offers Say thanks (chat) / All my ratings.
+  - `new_badge`: celebration card with the tier.
+  - `submit_rating()` notifications carry `rating_id` / `badge` + `rate_kind/rate_id/rate_name/sport` (`lib/db/patch_rating_popups.sql`).
 
 ### 8.10 Notifications
 Some are inserted by DB functions (tournaments, challenges, ratings, event alerts), and some still by the app via `createNotification()` (team joins/invites, match joins, follows). Tap routing is shared by `notifications.tsx` and the push handler in `_layout.tsx`.
@@ -509,6 +514,7 @@ lib/db/patch_ratings.sql
 lib/db/patch_team_sizes_event_alerts.sql
 lib/db/patch_challenge_popup.sql
 lib/db/patch_rating_requests.sql
+lib/db/patch_rating_popups.sql
 ```
 
 ### Testing SQL locally before running it in Supabase

@@ -75,7 +75,7 @@ components/
   BracketView.tsx          # Knockout bracket drawing with connector lines
   ChallengeModal.tsx       # New challenge sheet
   NotifBell.tsx            # Bell icon with unread count
-  ChallengePopup.tsx       # In-app popups: new challenges + updates (accepted/declined/called off/result); Realtime + on-foreground check
+  InAppPopups.tsx          # All in-app popups (one queue): new challenges + updates, rating requests, new ratings (shows the rating), badges; Realtime + on-foreground check
   AskRatingsModal.tsx      # Ask people you've played with to rate you / your team
   RatingsSection.tsx       # Ratings summary, badge progress, skill bars, reviews (profile modal, team page, ratings screen)
   RateModal.tsx            # Rate a player/team: overall 1–10, per-skill 1–10, conduct stars, review
@@ -96,7 +96,7 @@ lib/                       # Service layer — screens never call Supabase direc
   sportProfile.ts          # pure: profile sports, skill levels, per-sport fields, self-rating skills, summarizeDetails()
   onboarding.ts            # when to show the welcome flow (user_metadata.onboarding_done)
   sportRules.ts            # sport formats, booking limits, event entry rules (min 4, singles/doubles/teams), TEAM_FORMATS squad sizes
-  db/                      # SQL migrations / patches (all run in Supabase except patch_challenge_popup.sql + patch_rating_requests.sql)
+  db/                      # SQL migrations / patches (all run in Supabase except patch_rating_popups.sql)
 
 data/
   mockData.ts              # All types + mock/demo data + venue helpers
@@ -291,12 +291,21 @@ Full plan in `PLAN.md`. Summary:
 - Stored in `profile_sports.skill` + `details` jsonb (labels as keys, multi-select joined with ", "). Self-ratings are only shown as a "Strengths: …" line (`summarizeDetails`) — they don't affect ratings/badges.
 - Profile tab: tap a sport card to edit it (same editor), long-press to remove; Add Sport sheet uses the same editor (old NTRP/Role-only fields replaced; old saved details still display).
 
-## Challenge popup + rating requests (2026-10-01) — `lib/db/patch_challenge_popup.sql` + `lib/db/patch_rating_requests.sql` ⚠️ NOT YET RUN in Supabase
+## Challenge popup + rating requests (2026-10-01) — `lib/db/patch_challenge_popup.sql` + `lib/db/patch_rating_requests.sql` run in Supabase 2026-10-01
 
 - **Challenge popup** (`components/ChallengePopup.tsx`, mounted in `app/_layout.tsx` while signed in): Realtime INSERT on `challenges` (filter `opponent_user_id`) + check on start/foreground for pending, unseen (`opponent_seen_at` null), last-7-days challenges. Accept / Decline (confirm) / Decide later (`mark_challenge_seen`); accepted → Message challenger / My challenges. Queue for several. `respond_challenge` now also sets `opponent_seen_at`. **Update popups** for the other side when a challenge is accepted / declined / called off / given a result: driven by unread `challenge_update` notifications (Realtime on `notifications` + check on start/foreground, last 7 days), closing marks them read; updates on one challenge collapse to its latest state; demo auto-accepts skipped (`isDemoOpponent`). Foreground push banners suppressed for `challenge` + `challenge_update` (`lib/push.ts`). `challenges` and `notifications` added to `supabase_realtime`.
 - **Rating requests:** `rating_requests` table; `request_ratings()` (subject = yourself or a team you captain; skips self, demo, own team members, anyone asked in 30 days / pending; ≤10 per send, ≤20/day), `rating_request_suggestions()` (played together → teammates → follows), `decline_rating_request()`, trigger `trg_ratings_complete_requests` marks a request done when that person rates. Notification `rating_request` → `/ratings?kind&id&name&rate=<sport>` (banner + auto-open RateModal). Entry points: Profile tap sport → "Ask players to rate my …", Ratings & Badges screen, team page (captain).
 - Profile tab: tapping a sport card already opens Edit (level, positions, self-rating) since `c17f8f9`.
 - SQL tested with `lib/db/testing/replay.sh` (incl. re-run); app type-checks and bundles for web + Android; not clicked through.
+
+## Rating popups (2026-10-01) — `lib/db/patch_rating_popups.sql` ⚠️ NOT YET RUN in Supabase
+
+- `components/ChallengePopup.tsx` → renamed **`components/InAppPopups.tsx`**: one queue for all popups so they never stack. Notification-driven items use `POPUP_TYPES` in `lib/notifications.ts` (`challenge_update`, `rating_request`, `new_rating`, `new_badge`), fetched unread (7 days) on start/foreground + Realtime; closing marks read.
+- `rating_request` → Rate now (`/ratings?...&rate=sport`) / Not now (`decline_rating_request`) / Later. Skipped if the request is no longer pending.
+- `new_rating` → shows the actual rating via `data.rating_id` (`fetchRating` in `lib/ratings.ts`); Say thanks (chat) / All my ratings. Notifications without `rating_id` (sent before the patch) are matched by time with `findRatingNear()`; old badge notifications are parsed from the title/body. **Bug fixed 2026-10-01:** before this fallback, ratings made before the patch was run never popped up.
+- Patch also notifies on a *changed* rating (score or review differs) — "X updated their rating of you to 8/10" (`data.updated = true`, popup says UPDATED RATING); unchanged re-saves stay silent.
+- `new_badge` → celebration card.
+- Patch redefines `submit_rating()` (identical logic) so `new_rating`/`new_badge` notifications include `rating_id`/`badge` + `rate_kind/rate_id/rate_name/sport`. Foreground push banners suppressed for these types too.
 
 ## Progress log
 
@@ -312,7 +321,7 @@ Full plan in `PLAN.md`. Summary:
 | 2026-10-01 | First-run sports setup (welcome flow), sport editor on Profile | `c17f8f9` |
 | 2026-10-01 | Challenge popups (new + accepted/declined/called off/result), rating requests | `ba743de` |
 
-**SQL status:** everything up to `patch_team_sizes_event_alerts.sql` has been run in Supabase (2026-10-01, verified live). **Pending: `patch_challenge_popup.sql`, then `patch_rating_requests.sql`** — until run, the challenge popup and rating requests fail quietly (no popup / "Something went wrong").
+**SQL status:** everything up to `patch_rating_requests.sql` has been run in Supabase (2026-10-01, verified live). **Pending: `patch_rating_popups.sql`** — until run, rating-request and badge popups work but "X rated you" popups don't appear (old notifications lack `rating_id`).
 
 ## Your to-do list (things only the owner can do)
 

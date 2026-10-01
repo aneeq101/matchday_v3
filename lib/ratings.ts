@@ -91,7 +91,39 @@ export async function fetchRatings(
   const { data, error } = await q.order('updated_at', { ascending: false }).limit(opts.limit ?? 100);
   if (error || !data) return [];
 
-  const rows = data as Record<string, unknown>[];
+  return withRaterProfiles(data as Record<string, unknown>[]);
+}
+
+/** One rating by id (for the "X rated you" popup). */
+export async function fetchRating(id: string): Promise<Rating | null> {
+  const { data, error } = await supabase.from('ratings').select('*').eq('id', id).maybeSingle();
+  if (error || !data) return null;
+  return (await withRaterProfiles([data as Record<string, unknown>]))[0] ?? null;
+}
+
+/**
+ * The rating a notification is about when it doesn't carry the rating id
+ * (sent before lib/db/patch_rating_popups.sql): the rating of that player/team
+ * saved at the same moment the notification was created.
+ */
+export async function findRatingNear(kind: RatingTargetKind, targetId: string, at: string): Promise<Rating | null> {
+  const t = new Date(at).getTime();
+  if (!targetId || Number.isNaN(t)) return null;
+  const { data, error } = await supabase
+    .from('ratings')
+    .select('*')
+    .eq(kind === 'team' ? 'target_team' : 'target_player', targetId)
+    .gte('updated_at', new Date(t - 2 * 60_000).toISOString())
+    .lte('updated_at', new Date(t + 60_000).toISOString())
+    .order('updated_at', { ascending: false })
+    .limit(5);
+  if (error || !data?.length) return null;
+  const rows = (data as Record<string, unknown>[])
+    .sort((a, b) => Math.abs(new Date(a.updated_at as string).getTime() - t) - Math.abs(new Date(b.updated_at as string).getTime() - t));
+  return (await withRaterProfiles([rows[0]]))[0] ?? null;
+}
+
+async function withRaterProfiles(rows: Record<string, unknown>[]): Promise<Rating[]> {
   const ids = [...new Set(rows.map((r) => r.rater_user_id as string))];
   const { data: profiles } = ids.length
     ? await supabase.from('profiles').select('id, initials, avatar_color').in('id', ids)

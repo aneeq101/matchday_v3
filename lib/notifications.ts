@@ -103,49 +103,64 @@ export async function createNotification(params: {
   });
 }
 
-// ── Challenge update popups (components/ChallengePopup.tsx) ──
-// Accepted / declined / called off / result recorded all arrive as
-// 'challenge_update' notifications. Unread ones pop up; closing marks them read.
+// ── In-app popups (components/InAppPopups.tsx) ──
+// These notification types also pop up over the app while it's open (or the
+// next time it's opened, for the last 7 days). Closing a popup marks it read.
+//   challenge_update  accepted / declined / called off / result recorded
+//   rating_request    someone asked you to rate them
+//   new_rating        someone rated you (data.rating_id)
+//   new_badge         you earned a badge
 
-export interface ChallengeUpdateNotif {
+export const POPUP_TYPES = ['challenge_update', 'rating_request', 'new_rating', 'new_badge'] as const;
+export type PopupType = typeof POPUP_TYPES[number];
+
+export interface PopupNotif {
   id: string;
-  challengeId: string;
+  type: PopupType;
   title: string;
+  body: string;
+  data: Record<string, unknown>;
   createdAt: string;
 }
 
-function toUpdate(row: Record<string, unknown>): ChallengeUpdateNotif | null {
-  const data = (row.data as Record<string, unknown>) ?? {};
-  if (row.type !== 'challenge_update' || typeof data.challenge_id !== 'string') return null;
-  return { id: row.id as string, challengeId: data.challenge_id, title: (row.title as string) ?? '', createdAt: (row.created_at as string) ?? '' };
+function toPopup(row: Record<string, unknown>): PopupNotif | null {
+  if (!(POPUP_TYPES as readonly string[]).includes(row.type as string)) return null;
+  return {
+    id: row.id as string,
+    type: row.type as PopupType,
+    title: (row.title as string) ?? '',
+    body: (row.body as string) ?? '',
+    data: (row.data as Record<string, unknown>) ?? {},
+    createdAt: (row.created_at as string) ?? '',
+  };
 }
 
-/** Unread challenge updates from the last 7 days, oldest first. */
-export async function fetchUnreadChallengeUpdates(userId: string): Promise<ChallengeUpdateNotif[]> {
+/** Unread popup-type notifications from the last 7 days, oldest first. */
+export async function fetchUnreadPopupNotifs(userId: string): Promise<PopupNotif[]> {
   const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
   const { data, error } = await supabase
     .from('notifications')
-    .select('id, type, title, data, created_at')
+    .select('id, type, title, body, data, created_at')
     .eq('user_id', userId)
-    .eq('type', 'challenge_update')
+    .in('type', POPUP_TYPES as unknown as string[])
     .eq('read', false)
     .gte('created_at', since)
     .order('created_at', { ascending: true })
-    .limit(20);
+    .limit(30);
   if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map(toUpdate).filter((x): x is ChallengeUpdateNotif => !!x);
+  return (data as Record<string, unknown>[]).map(toPopup).filter((x): x is PopupNotif => !!x);
 }
 
-/** Live: calls onUpdate for each new challenge_update notification. Returns an unsubscribe function. */
-export function subscribeToChallengeUpdates(userId: string, onUpdate: (n: ChallengeUpdateNotif) => void): () => void {
+/** Live: calls onNotif for each new popup-type notification. Returns an unsubscribe function. */
+export function subscribeToPopupNotifs(userId: string, onNotif: (n: PopupNotif) => void): () => void {
   const channel = supabase
-    .channel(`challenge-updates:${userId}`)
+    .channel(`popup-notifs:${userId}`)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
       (payload) => {
-        const n = toUpdate(payload.new as Record<string, unknown>);
-        if (n) onUpdate(n);
+        const n = toPopup(payload.new as Record<string, unknown>);
+        if (n) onNotif(n);
       },
     )
     .subscribe();

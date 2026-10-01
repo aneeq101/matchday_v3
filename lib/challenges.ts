@@ -130,7 +130,7 @@ export async function recordChallengeResult(
   return error ? { ok: false, error: friendlyError(error.message) } : { ok: true };
 }
 
-// ── Incoming-challenge popup (components/ChallengePopup.tsx) ──
+// ── Incoming-challenge popup (components/InAppPopups.tsx) ──
 // A challenge pops up for the person who has to answer it while it is
 // pending and they haven't seen it yet (opponent_seen_at, see
 // lib/db/patch_challenge_popup.sql).

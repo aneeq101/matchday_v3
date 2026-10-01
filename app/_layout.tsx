@@ -4,7 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../lib/AuthContext';
 import { registerForPush, setupNotificationHandlers } from '../lib/push';
 import { shouldShowWelcome, claimWelcomeOpen } from '../lib/onboarding';
-import ChallengePopup from '../components/ChallengePopup';
+import InAppPopups from '../components/InAppPopups';
 
 function RootNavigator() {
   const { session, loading } = useAuth();
@@ -84,8 +84,8 @@ function RootNavigator() {
       <Stack.Screen name="welcome" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
     </Stack>
-    {/* Incoming challenges pop up over any screen while signed in */}
-    {userId && <ChallengePopup userId={userId} />}
+    {/* Challenges, rating requests, new ratings and badges pop up over any screen */}
+    {userId && <InAppPopups userId={userId} />}
     </>
   );
 }
