@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
   TextInput, FlatList, Platform,
@@ -9,6 +9,7 @@ import { VENUES, venueDistanceKm, type Venue } from '../data/mockData';
 import { useUserLocation } from '../hooks/useUserLocation';
 import { formatDistance } from '../utils/geo';
 import BookMap from './BookMap';
+import { fetchVenues } from '../lib/venues';
 
 interface Props {
   visible: boolean;
@@ -30,9 +31,17 @@ export default function LocationPickerModal({ visible, sport, onSelect, onClose 
   const [selected, setSelected] = useState<Venue | null>(null);
   const [customText, setCustomText] = useState('');
   const [showCustom, setShowCustom] = useState(false);
+  // Venues from the database (the bundled list shows until it loads, or if it can't)
+  const [allVenues, setAllVenues] = useState<Venue[]>(VENUES);
+  useEffect(() => {
+    if (visible) fetchVenues().then(setAllVenues).catch(() => {});
+  }, [visible]);
+
+  const playsSport = (v: Venue) => !sport || v.sports.some((s) => s.toLowerCase() === sport.toLowerCase());
 
   const venues = useMemo(() => {
-    const withCoords = VENUES.filter((v) => v.coord);
+    // Only venues for the chosen sport — on the map and in the list
+    const withCoords = allVenues.filter((v) => v.coord && playsSport(v));
     const bySearch = search.trim()
       ? withCoords.filter(
           (v) =>
@@ -42,14 +51,10 @@ export default function LocationPickerModal({ visible, sport, onSelect, onClose 
         )
       : withCoords;
 
-    return bySearch.sort((a, b) => {
-      const aMatch = sport ? a.sports.some((s) => s.toLowerCase().includes(sport.toLowerCase())) : false;
-      const bMatch = sport ? b.sports.some((s) => s.toLowerCase().includes(sport.toLowerCase())) : false;
-      if (aMatch !== bMatch) return aMatch ? -1 : 1;
-      if (location) return venueDistanceKm(location, a) - venueDistanceKm(location, b);
-      return 0;
-    });
-  }, [search, sport, location]);
+    return location
+      ? [...bySearch].sort((a, b) => venueDistanceKm(location, a) - venueDistanceKm(location, b))
+      : bySearch;
+  }, [allVenues, search, sport, location]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const confirm = (venue: Venue) => {
     onSelect(venue.name + (venue.address ? `, ${venue.address}` : ''), venue.coord);
@@ -112,7 +117,16 @@ export default function LocationPickerModal({ visible, sport, onSelect, onClose 
               radius={50}
               onBookVenue={(venue) => setSelected(venue)}
               onSwitchToList={() => setViewMode('list')}
+              actionLabel="Select venue"
+              showPreview={false}
             />
+            {!!sport && (
+              <View style={styles.sportBadge} pointerEvents="none">
+                <Text style={styles.sportBadgeText}>
+                  {SPORTS_EMOJI[sport] ?? '🏟️'} {venues.length} {sport} venue{venues.length === 1 ? '' : 's'}
+                </Text>
+              </View>
+            )}
 
             {/* Selected venue overlay at the bottom of map */}
             {selected ? (
@@ -171,11 +185,12 @@ export default function LocationPickerModal({ visible, sport, onSelect, onClose 
               ListEmptyComponent={
                 <View style={styles.emptyState}>
                   <Ionicons name="location-outline" size={36} color="#d1d5db" />
-                  <Text style={styles.emptyText}>No venues found</Text>
+                  <Text style={styles.emptyText}>{sport ? `No ${sport} venues found` : 'No venues found'}</Text>
+                  <Text style={styles.emptyHint}>Type your own place below.</Text>
                 </View>
               }
               renderItem={({ item: v }) => {
-                const sportMatch = sport && v.sports.some((s) => s.toLowerCase().includes(sport.toLowerCase()));
+                const sportMatch = !!sport;
                 const dist = location ? formatDistance(venueDistanceKm(location, v)) : null;
                 const isSelected = selected?.id === v.id;
                 return (
@@ -199,7 +214,7 @@ export default function LocationPickerModal({ visible, sport, onSelect, onClose 
                             key={s}
                             style={[
                               styles.sportTag,
-                              sportMatch && s.toLowerCase().includes((sport ?? '').toLowerCase()) && styles.sportTagActive,
+                              sportMatch && s.toLowerCase() === (sport ?? '').toLowerCase() && styles.sportTagActive,
                             ]}
                           >
                             {s}
@@ -258,6 +273,12 @@ export default function LocationPickerModal({ visible, sport, onSelect, onClose 
 }
 
 const styles = StyleSheet.create({
+  sportBadge: {
+    position: 'absolute', top: 12, alignSelf: 'center', backgroundColor: 'rgba(17,24,39,0.85)',
+    borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6, zIndex: 1000,
+  },
+  sportBadgeText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  emptyHint: { color: '#9ca3af', fontSize: 12, marginTop: 4 },
   root: { flex: 1, backgroundColor: '#fff' },
 
   // Header

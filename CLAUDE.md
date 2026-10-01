@@ -69,7 +69,7 @@ components/
   RadiusSlider.native.tsx / .web.tsx    # slider / <input type="range">
   DatePickerField.native.tsx / .web.tsx # calendar date picker
   *.d.ts                                # type declarations for the platform-split components
-  LocationPickerModal.tsx  # Full-screen venue picker (map + list) — Create Event / bookings
+  LocationPickerModal.tsx  # Full-screen venue picker (map + list) — Create Event / Organize Match; DB venues (fetchVenues), only the chosen sport's venues
   VenueList.tsx            # Inline venue list filtered by sport — challenge "Where"
   PlayerProfileModal.tsx   # Player profile sheet (Follow / Message / Challenge)
   TeamFormModal.tsx        # Create / edit team form
@@ -121,7 +121,7 @@ utils/
 `app/(tabs)/book.tsx` — venue search, map and booking.
 
 **Features live:**
-- Search bar (name / address / sport)
+- Search bar (name / address / sport); venue count only in the sheet header (duplicate top-bar badge removed)
 - Sport filter pills: All / Football / Cricket / Tennis / Basketball / Badminton / Baseball
 - Radius slider 1–20 km, syncs bidirectionally with map zoom
 - List ↔ Map toggle
@@ -202,8 +202,11 @@ Metro resolves `.native.tsx` vs `.web.tsx` automatically. Never import `react-na
 ### Live search toggle
 `book.tsx` has `const LIVE_SEARCH_ENABLED = false;` near the top. Set to `true` to re-enable the Overpass API live venue search. When false: the useEffect returns early, `liveVenues` stays `[]`, the status bar and header spinner are hidden. All Overpass code is intact.
 
+### Map grouping (both platforms, 2026-10-01)
+`utils/cluster.ts` `clusterVenues(venues, cellDeg)` — pure grid grouping: venues in the same cell become one green numbered bubble; `cellDeg = 0` turns it off. Native: cell = `latitudeDelta / 7`, off below 0.03 (~3 km); web: cell ≈ 56 px at the current zoom, off from zoom 14. Tapping a bubble zooms in ×3 / +2 (not programmatic, so the radius slider follows). `BookMap` props `actionLabel` (card/popup button text) and `showPreview={false}` (phone: tap calls `onBookVenue` directly) — used by `LocationPickerModal`, which shows only venues for the chosen sport (exact sport name match) plus a "⚽ N Football venues" badge. 89 GTA venues → ~20 pins zoomed out. Markers still never disappear on radius change — they only merge.
+
 ### Web map markers — hover tooltip
-`BookMap.web.tsx` uses react-leaflet `<Tooltip direction="top" offset={[0, -68]}>` inside each `<Marker>` to show the venue name on hover. The `<Popup>` (on click) shows full details + Book Now. Both coexist — `Tooltip` for quick peek, `Popup` for booking action.
+`BookMap.web.tsx`: compact 30 px pin (sport emoji in a white circle, icons cached per emoji) — no always-on name labels (they overlapped). `<Tooltip offset={[0, -16]}>` shows the name on hover; `<Popup>` (on click) shows details + Book Now; price shows "Contact venue for price" when 0.
 
 ### Native map markers — VenueMarker component
 Custom markers use a `VenueMarker` component with `tracksViewChanges={false}` from mount.
@@ -223,8 +226,8 @@ Custom markers use a `VenueMarker` component with `tracksViewChanges={false}` fr
 - Sport emoji lives only in the bottom tap-card overlay
 - Sport colors: Tennis=#2563eb, Football=#16a34a, Cricket=#d97706, Basketball=#ea580c, Badminton=#7c3aed, Baseball=#1d4ed8
 
-### Native marker tap — bottom card overlay
-`<Callout>` removed (unreliable on Android). Marker `onPress` → sets `selected` state → floating bottom card renders over map. Tap map background (`MapView onPress`) dismisses it.
+### Native marker tap — preview card
+`<Callout>` removed (unreliable on Android). Marker `onPress` → `selected` → a card at the **top** of the map (the list sheet peeks at the bottom): name, sport emoji, distance, price / "Contact venue", **Book** (opens the booking modal) and close. Tapping the map background (`MapView onPress`, ignoring `action === 'marker-press'`) dismisses it. Markers are 28 px sport PNGs (`assets/sports/`) with the tracksViewChanges freeze pattern; cluster bubbles are a plain circle + digits, frozen after 500 ms.
 
 ### GPS fallback
 `useUserLocation` returns `null` on permission deny — no hardcoded fallback city. Map centres on venue centroid (Toronto area).
@@ -404,7 +407,7 @@ The owner asked (2026-09-30) to be reminded of these next time and to decide bef
 1. **Three different "match" concepts.** (a) *Organize Match* in My Turf (`matches` / `match_players` tables, `lib/matches.ts`); (b) Play to Earn events of type **"Match"** (`tournaments.type = 'match'`, "Sunday Pickup Football"); (c) **Challenges** (`challenges` table). (a) and (b) are basically the same thing (a pickup game people join). Suggest: drop the "Match" type from Play to Earn and keep Organize Match; keep Challenges as the competitive 1-v-1 / team-v-team option.
 2. **Tournament lists shown in three places.** Play to Earn tab, `app/my-tournaments.tsx`, and the "My Events" section in My Turf all list the same events with three different card designs. Suggest one shared `EventCard` component, and consider making My Tournaments a filter ("Mine") on the Play to Earn tab instead of a separate screen.
 3. **Two sign-up flows for events.** The Register sheet in `earn.tsx` (player events) and the Sign Up button on `app/tournament.tsx` (all events). Suggest the list's button always opens the details page, so there's one flow.
-4. **Two venue pickers.** `components/LocationPickerModal.tsx` (map + list, all venues, uses mock `VENUES`) and `components/VenueList.tsx` (list, filtered by sport, uses live DB venues). Suggest one picker filtered by sport, using DB venues, with an optional map view.
+4. **Two venue pickers.** `components/LocationPickerModal.tsx` (map + list; since 2026-10-01 also DB venues filtered to the sport) and `components/VenueList.tsx` (list, filtered by sport, DB venues). Suggest one picker filtered by sport, using DB venues, with an optional map view.
 5. **Stats in two places.** Profile tab stats + Record Stats vs `app/statistics.tsx`. Fine to keep both, but the Profile section could become a compact summary that links to Statistics.
 6. **Repeated code (copy-pasted in many files):** the UUID check (5 files), sport→emoji maps (9 places), event type colours/labels (4 files), the confirm dialog (6 screens), the coloured back-button header (12 screens). Suggest shared `lib/constants.ts` (emoji, colours, UUID) + `components/ConfirmDialog.tsx` + `components/ScreenHeader.tsx`.
 7. **Notifications created in two ways.** Some from the app (`createNotification`, 6 calls — team joins/invites, match joins, follows), some by the database (tournaments, challenges). Moving the remaining ones into DB functions would make them reliable and stop anyone faking a notification (the `notifications_insert` policy currently allows any insert).
