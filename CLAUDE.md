@@ -43,8 +43,8 @@ app/
   (tabs)/
     _layout.tsx            # Bottom tab bar (5 tabs)
     index.tsx              # The Hood — social feed + nearby players (PostGIS)
-    myturf.tsx             # My Turf — bookings, organized/joined/open matches, my events, quick actions
-    earn.tsx               # Play to Earn — tournaments / leagues / pickup matches, create event
+    myturf.tsx             # My Turf — quick actions, stats, tabs Upcoming / Near me (open matches + friendly events) / Past
+    earn.tsx               # Play to Earn — prize money tournaments / leagues / matches, create prize event
     book.tsx               # Book Venue — search, map, booking modal
     profile.tsx            # Profile, sports + stats, privacy & messaging, menu
   messages.tsx / chat.tsx  # Conversation list / 1-on-1 chat (Realtime)
@@ -83,6 +83,8 @@ components/
   RateModal.tsx            # Rate a player/team: overall 1–10, per-skill 1–10, conduct stars, review
   BadgeChip.tsx            # Bronze/Silver/Gold/Platinum/Diamond pill
   SportDetailsEditor.tsx   # Level + position fields + optional self-rating (welcome flow + Profile Add/Edit Sport)
+  CreateEventModal.tsx     # Create tournament / league / match event; category fixed by caller (Play to Earn = prize, My Turf = friendly)
+  CategoryPicker.tsx       # Friendly / Prize money cards + prize pool & entry fee fields
 
 lib/                       # Service layer — screens never call Supabase directly
   supabase.ts, AuthContext.tsx          # client + session
@@ -343,7 +345,14 @@ Full plan in `PLAN.md`. Summary:
 - Before this, nearby alerts only existed for Play to Earn events; Organize Match games had no location point or trigger, so prize matches made in My Turf alerted nobody.
 - Patch: `matches.latitude/longitude/geo` + `trg_matches_sync_geo` (reuses `fn_tournaments_sync_geo`), `trg_alert_nearby_match` → `nearby_event` notifications with data `{ match_id }` for **prize** matches that are upcoming and not in the past; same recipient rules + shared 3/24 h cap as event alerts.
 - App: Organize Match sends the picked venue coord (`createMatch` latitude/longitude). `InAppPopups` `nearby_match` card (Join match / Not interested), skipped if the match is full, past, not upcoming or you're already in it (`isInMatch`).
-- My Turf: `isPastGame()` / `gameStart()` in `lib/matchday.ts` (starts_on or "Sat, Oct 12, 2026" + "5:00 PM"; no time → end of day; completed → past). Games that have started or been played leave Upcoming Bookings / My Matches / Joined / Open Matches and show under **Past Matches** (+ Past Bookings), newest first, 3 shown + Show all. Past matches show no Join/Leave/Cancel.
+- My Turf: `isPastGame()` / `gameStart()` in `lib/matchday.ts` (starts_on or "Sat, Oct 12, 2026" + "5:00 PM"; no time → end of day; completed → past). Games that have started or been played leave Upcoming Bookings / My Matches / Joined / Open Matches and go into one **"Past events (N)"** row, collapsed until tapped → Matches / Play to Earn events / Bookings, newest first. Past events = completed, a pickup "match" event that has started, or a tournament/league still unstarted after its date (running brackets stay in My Events). Past matches/events show no Join/Leave/Cancel.
+
+## My Turf tabs + Play to Earn cleanup (2026-10-01) — no SQL
+
+- **My Turf** layout: Quick Actions (horizontal row: New Booking, Organize Match, **Friendly Event**, My Tournaments, My Teams, Challenges, Play to Earn) → stats row → tabs **Upcoming · Near me · Past** (with counts). Upcoming = bookings, my matches (+ Organize), joined matches, My Events — only non-empty sections, one "Nothing coming up" card otherwise. **Near me** = open matches to join + **🤝 Friendly Events** (category friendly, sign-ups open, not past, not already joined; card shows spots left + "View & join" → event page) — not distance-filtered yet. Past = matches / events / bookings that are over. Cards only mark **Prize money** games; detail sheets show both.
+- **Play to Earn = prize money only.** List filters `eventCategory(e) === 'prize'`; Create opens the shared form locked to prize (prize pool required). Friendly events are created from My Turf (Friendly Event quick action / Near me "Host") with the same form locked to friendly. One scrollable type filter row; upcoming first, then collapsed "Past events (N)"; empty state Clear filters / Create event. Card: name on its own line, badges (type · format), footer "🏆 CAD X prize" + "Entry CAD Y / Free entry".
+- Create Event form extracted to `components/CreateEventModal.tsx` (`category` prop fixes it; `CategoryPicker locked` hides the cards). `eventIsPast()` lives in `lib/tournaments.ts`.
+- Organize Match and venue booking still offer both Friendly and Prize money.
 
 ## Progress log
 
@@ -361,7 +370,8 @@ Full plan in `PLAN.md`. Summary:
 | 2026-10-01 | Rating popups (request, new/updated rating, badge), fix for missing rated-you alert | `199b783` |
 | 2026-10-01 | Event alert popups, ready-for-match-day reminders, player-recorded scores, match history + auto W/L | `78f97ac` |
 | 2026-10-01 | Friendly vs Prize money on events, Organize Match and venue bookings (shared CategoryPicker) | `f4786d3` |
-| 2026-10-01 | Nearby alerts + popup for prize Organize Match games; My Turf Past Matches / Past Bookings | see git log |
+| 2026-10-01 | Nearby alerts + popup for prize Organize Match games; My Turf Past Matches / Past Bookings | `2b920e2` |
+| 2026-10-01 | My Turf tabs (Upcoming / Near me / Past), friendly events moved to My Turf, Play to Earn prize-only + cleanup | see git log |
 
 **SQL status:** every patch in `lib/db` up to and including `patch_event_category.sql` plus `patch_match_alerts.sql` has been run in Supabase (2026-10-01, verified live). Nothing pending.
 

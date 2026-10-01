@@ -8,7 +8,7 @@ import { CATEGORY_INFO } from '../lib/tournaments';
  * Used by Create Event (Play to Earn), Organize Match (My Turf) and venue booking.
  */
 export default function CategoryPicker({
-  value, onChange, entryFee, prizePool, onEntryFee, onPrizePool, spots, what = 'event',
+  value, onChange, entryFee, prizePool, onEntryFee, onPrizePool, spots, what = 'event', locked = false,
 }: {
   value: EventCategory;
   onChange: (c: EventCategory) => void;
@@ -20,12 +20,14 @@ export default function CategoryPicker({
   spots?: number;
   /** "event", "match", "game" — used in the helper text */
   what?: string;
+  /** Category is decided by where the form was opened (Play to Earn = prize): hide the choice */
+  locked?: boolean;
 }) {
   const fee = parseInt(entryFee) || 0;
   return (
     <View>
-      <Text style={styles.label}>Category</Text>
-      <View style={styles.row}>
+      {!locked && <Text style={styles.label}>Category</Text>}
+      {!locked && <View style={styles.row}>
         {(['friendly', 'prize'] as const).map((c) => {
           const info = CATEGORY_INFO[c];
           const on = value === c;
@@ -44,7 +46,7 @@ export default function CategoryPicker({
             </TouchableOpacity>
           );
         })}
-      </View>
+      </View>}
 
       {value === 'prize' ? (
         <>

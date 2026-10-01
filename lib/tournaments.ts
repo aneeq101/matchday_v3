@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { isPastGame, toISODate } from './matchday';
 import {
   TOURNAMENTS, type Tournament, type EventType, type EntrantType, type TournamentStatus, type EventCategory,
 } from '../data/mockData';
@@ -71,6 +72,17 @@ export function categoryLabel(t: { category?: EventCategory; entryFee?: number; 
   if ((t.prizePool ?? 0) > 0) parts.push(`CAD ${t.prizePool!.toLocaleString()} prize`);
   if ((t.entryFee ?? 0) > 0) parts.push(`CAD ${t.entryFee!.toLocaleString()} entry`);
   return parts.join(' · ');
+}
+
+/**
+ * Is this event over? Finished, a pickup "match" event that has started, or a
+ * tournament/league whose date has gone by without being started. Running
+ * brackets/leagues are not past until they finish.
+ */
+export function eventIsPast(t: Pick<Tournament, 'status' | 'type' | 'startsOn' | 'date'>): boolean {
+  if (t.status === 'completed') return true;
+  if (t.type === 'match') return isPastGame({ startsOn: t.startsOn, date: t.date });
+  return (t.status ?? 'active') === 'active' && !!t.startsOn && t.startsOn < toISODate(new Date());
 }
 
 /**

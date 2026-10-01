@@ -27,7 +27,9 @@ import {
 } from '../../lib/matches';
 import {
   fetchMyRegistrations,
+  fetchTournaments,
   unregisterFromTournament,
+  eventIsPast,
   eventCategory,
   categoryMoney,
   categoryLabel,
@@ -35,6 +37,7 @@ import {
 import { getFormatsForSport } from '../../lib/sportRules';
 import { type Booking, type MatchItem, type Tournament, type EventCategory } from '../../data/mockData';
 import CategoryPicker from '../../components/CategoryPicker';
+import CreateEventModal from '../../components/CreateEventModal';
 import DatePickerField from '../../components/DatePickerField';
 import LocationPickerModal from '../../components/LocationPickerModal';
 import NotifBell from '../../components/NotifBell';
@@ -104,6 +107,8 @@ function dbToBooking(row: Record<string, unknown>): Booking {
   };
 }
 
+type TurfTab = 'upcoming' | 'near' | 'past';
+
 export default function MyTurfScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -123,13 +128,15 @@ export default function MyTurfScreen() {
   const [joinedMatches, setJoinedMatches]   = useState<MatchItem[]>([]);
   const [joinedMatchIds, setJoinedMatchIds] = useState<Set<string>>(new Set());
   const [myRegistrations, setMyRegistrations] = useState<Tournament[]>([]);
+  const [allEvents, setAllEvents]           = useState<Tournament[]>([]);
+  const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [tournamentCount, setTournamentCount] = useState(0);
   const [loading, setLoading]               = useState(false);
   const [refreshing, setRefreshing]         = useState(false);
   const [joining, setJoining]               = useState<string | null>(null);
 
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
-  const [showAllPast, setShowAllPast]         = useState(false);
+  const [tab, setTab]                         = useState<TurfTab>('upcoming');
   const [selectedMatch, setSelectedMatch]     = useState<MatchItem | null>(null);
   const [cancellingBooking, setCancellingBooking] = useState(false);
 
@@ -163,7 +170,7 @@ export default function MyTurfScreen() {
     if (!user) return;
     setLoading(true);
 
-    const [bData, mData, openData, joinedData, tCount, regs] = await Promise.all([
+    const [bData, mData, openData, joinedData, tCount, regs, evs] = await Promise.all([
       supabase
         .from('bookings')
         .select('*')
@@ -174,6 +181,7 @@ export default function MyTurfScreen() {
       fetchJoinedMatches(user.id),
       fetchMyTournamentCount(user.id),
       fetchMyRegistrations(user.id),
+      fetchTournaments(),
     ]);
 
     if (!bData.error && bData.data) {
@@ -185,6 +193,7 @@ export default function MyTurfScreen() {
     setJoinedMatchIds(new Set(joinedData.map((m) => m.id)));
     setTournamentCount(tCount);
     setMyRegistrations(regs);
+    setAllEvents(evs);
     setLoading(false);
   }, [user]);
 
@@ -374,7 +383,32 @@ export default function MyTurfScreen() {
     .sort((a, b) => (gameStart(b.startsOn, b.date)?.getTime() ?? 0) - (gameStart(a.startsOn, a.date)?.getTime() ?? 0));
   // Open matches excludes ones the user has already joined (those go to "Joined Matches") and ones already played
   const displayedOpenMatches = openMatches.filter((m) => !joinedMatchIds.has(m.id) && !isPastGame(m));
-  const PAST_PREVIEW = 3;
+  const upcomingEvents = myRegistrations.filter((t) => !eventIsPast(t));
+  const pastEvents     = myRegistrations.filter(eventIsPast)
+    .sort((a, b) => (gameStart(b.startsOn, b.date)?.getTime() ?? 0) - (gameStart(a.startsOn, a.date)?.getTime() ?? 0));
+  const pastCount = pastMatches.length + pastEvents.length + pastBookings.length;
+  // Friendly events (free, no prize) live here, not in Play to Earn: ones still open
+  // for sign-ups that I haven't joined yet (joined ones are under Upcoming → My Events)
+  const registeredEventIds = new Set(myRegistrations.map((t) => t.id));
+  const friendlyEvents = allEvents.filter((t) =>
+    eventCategory(t) === 'friendly' && (t.status ?? 'active') === 'active'
+    && !eventIsPast(t) && !registeredEventIds.has(t.id));
+  const upcomingCount = upcomingBookings.length + upcomingMatches.length + upcomingJoinedMatches.length + upcomingEvents.length;
+
+  const QUICK_ACTIONS = [
+    { icon: 'calendar-outline' as const,  label: 'New Booking',    color: '#16a34a', onPress: () => router.push('/(tabs)/book') },
+    { icon: 'football-outline' as const,  label: 'Organize Match', color: '#3b82f6', onPress: () => setShowCreateMatch(true) },
+    { icon: 'happy-outline' as const,     label: 'Friendly Event', color: '#0369a1', onPress: () => setShowCreateEvent(true) },
+    { icon: 'trophy-outline' as const,    label: 'My Tournaments', color: '#f59e0b', onPress: () => router.push('/my-tournaments') },
+    { icon: 'people-outline' as const,    label: 'My Teams',       color: '#8b5cf6', onPress: () => router.push('/my-teams') },
+    { icon: 'flash-outline' as const,     label: 'Challenges',     color: '#f97316', onPress: () => router.push('/challenges') },
+    { icon: 'podium-outline' as const,    label: 'Play to Earn',   color: '#0ea5e9', onPress: () => router.push('/(tabs)/earn') },
+  ];
+  const TABS: Array<{ key: TurfTab; label: string; count: number }> = [
+    { key: 'upcoming', label: 'Upcoming', count: upcomingCount },
+    { key: 'near',     label: 'Near me',  count: displayedOpenMatches.length + friendlyEvents.length },
+    { key: 'past',     label: 'Past',     count: pastCount },
+  ];
 
   // Match detail helpers
   const isOwnMatch = selectedMatch?.creatorId === user?.id;
@@ -405,6 +439,23 @@ export default function MyTurfScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />}
       >
+        {/* Quick Actions */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.quickRow}
+          style={styles.quickScroll}
+        >
+          {QUICK_ACTIONS.map((action) => (
+            <TouchableOpacity key={action.label} style={styles.quickBtn} onPress={action.onPress} accessibilityRole="button">
+              <View style={[styles.quickIcon, { backgroundColor: action.color + '20' }]}>
+                <Ionicons name={action.icon} size={22} color={action.color} />
+              </View>
+              <Text style={styles.quickLabel} numberOfLines={2}>{action.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
         {/* Stats */}
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
@@ -421,136 +472,188 @@ export default function MyTurfScreen() {
           </View>
         </View>
 
-        {/* Upcoming Bookings */}
-        <Text style={styles.sectionTitle}>Upcoming Bookings</Text>
-        {loading && <ActivityIndicator color="#16a34a" style={{ marginVertical: 12 }} />}
-        {!loading && upcomingBookings.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons name="calendar-outline" size={36} color="#d1d5db" />
-            <Text style={styles.emptyText}>No upcoming bookings</Text>
-            <Text style={styles.emptySubText}>Book a venue to see it here</Text>
-          </View>
-        )}
-        {upcomingBookings.map((b) => (
-          <BookingCard key={b.id} booking={b} onPress={() => setSelectedBooking(b)} />
-        ))}
-
-        {/* My Matches */}
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>My Matches</Text>
-          <TouchableOpacity style={styles.addBtn} onPress={() => setShowCreateMatch(true)}>
-            <Ionicons name="add" size={16} color="#16a34a" />
-            <Text style={styles.addBtnText}>Organize</Text>
-          </TouchableOpacity>
-        </View>
-        {!loading && upcomingMatches.length === 0 && upcomingJoinedMatches.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons name="football-outline" size={36} color="#d1d5db" />
-            <Text style={styles.emptyText}>No matches yet</Text>
-            <TouchableOpacity onPress={() => setShowCreateMatch(true)}>
-              <Text style={styles.emptyAction}>Organize a match</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        {upcomingMatches.map((m) => (
-          <MatchCard key={m.id} match={m} onPress={() => setSelectedMatch(m)} />
-        ))}
-
-        {upcomingJoinedMatches.length > 0 && (
-          <>
-            <Text style={styles.subSectionTitle}>Joined Matches</Text>
-            {upcomingJoinedMatches.map((m) => (
-              <JoinedMatchCard
-                key={m.id}
-                match={m}
-                joining={joining === m.id}
-                onPress={() => setSelectedMatch(m)}
-                onLeave={() => handleLeaveMatch(m.id)}
-              />
-            ))}
-          </>
-        )}
-
-        {/* My Events (Play to Earn) */}
-        {myRegistrations.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>My Events (Play to Earn)</Text>
-            {myRegistrations.map((event) => (
-              <EarnEventCard
-                key={event.id}
-                event={event}
-                onOpen={() => router.push({ pathname: '/tournament', params: { id: event.id } })}
-                onLeave={() => handleLeaveEvent(event.id)}
-              />
-            ))}
-          </>
-        )}
-
-        {/* Open Matches */}
-        <Text style={styles.sectionTitle}>Open Matches Near You</Text>
-        {!loading && displayedOpenMatches.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons name="people-outline" size={36} color="#d1d5db" />
-            <Text style={styles.emptyText}>No open matches</Text>
-            <Text style={styles.emptySubText}>Be the first to organize one</Text>
-          </View>
-        )}
-        {displayedOpenMatches.map((m) => (
-          <OpenMatchCard
-            key={m.id}
-            match={m}
-            isJoined={false}
-            joining={joining === m.id}
-            onPress={() => setSelectedMatch(m)}
-            onJoin={() => handleJoinMatch(m.id)}
-            onLeave={() => handleLeaveMatch(m.id)}
-          />
-        ))}
-
-        {/* Past: games that have started or been played */}
-        {(pastMatches.length > 0 || pastBookings.length > 0) && (
-          <>
-            <Text style={styles.sectionTitle}>Past Matches</Text>
-            {(showAllPast ? pastMatches : pastMatches.slice(0, PAST_PREVIEW)).map((m) => (
-              <MatchCard key={m.id} match={m} onPress={() => setSelectedMatch(m)} />
-            ))}
-            {pastBookings.length > 0 && (
-              <>
-                <Text style={styles.subSectionTitle}>Past Bookings</Text>
-                {(showAllPast ? pastBookings : pastBookings.slice(0, PAST_PREVIEW)).map((b) => (
-                  <BookingCard key={b.id} booking={b} onPress={() => setSelectedBooking(b)} />
-                ))}
-              </>
-            )}
-            {(pastMatches.length > PAST_PREVIEW || pastBookings.length > PAST_PREVIEW) && (
-              <TouchableOpacity style={styles.showAllBtn} onPress={() => setShowAllPast((v) => !v)}>
-                <Text style={styles.showAllText}>
-                  {showAllPast ? 'Show less' : `Show all (${pastMatches.length + pastBookings.length})`}
-                </Text>
+        {/* Upcoming · Near me · Past */}
+        <View style={styles.tabBar} accessibilityRole="tablist">
+          {TABS.map((t) => {
+            const on = tab === t.key;
+            return (
+              <TouchableOpacity
+                key={t.key}
+                style={[styles.tabBtn, on && styles.tabBtnActive]}
+                onPress={() => setTab(t.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+              >
+                <Text style={[styles.tabText, on && styles.tabTextActive]}>{t.label}</Text>
+                {t.count > 0 && (
+                  <View style={[styles.tabCount, on && styles.tabCountActive]}>
+                    <Text style={[styles.tabCountText, on && styles.tabCountTextActive]}>{t.count}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
-            )}
-          </>
+            );
+          })}
+        </View>
+
+        {loading && <ActivityIndicator color="#16a34a" style={{ marginVertical: 12 }} />}
+
+        {/* ── Upcoming: my bookings, matches and events ── */}
+        {tab === 'upcoming' && !loading && (
+          upcomingCount === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="calendar-outline" size={36} color="#9ca3af" />
+              <Text style={styles.emptyCardTitle}>Nothing coming up</Text>
+              <Text style={styles.emptyCardText}>Book a venue, organize a match or join an event and it will show here.</Text>
+              <View style={styles.emptyActions}>
+                <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push('/(tabs)/book')}>
+                  <Text style={styles.emptyBtnText}>Book a venue</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowCreateMatch(true)}>
+                  <Text style={styles.emptyBtnText}>Organize a match</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.emptyBtn} onPress={() => setTab('near')}>
+                  <Text style={styles.emptyBtnText}>Find a game</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <>
+              {upcomingBookings.length > 0 && (
+                <>
+                  <Text style={styles.sectionTitle}>Bookings</Text>
+                  {upcomingBookings.map((b) => (
+                    <BookingCard key={b.id} booking={b} onPress={() => setSelectedBooking(b)} />
+                  ))}
+                </>
+              )}
+
+              {upcomingMatches.length > 0 && (
+                <>
+                  <View style={styles.sectionRow}>
+                    <Text style={styles.sectionTitle}>My Matches</Text>
+                    <TouchableOpacity style={styles.addBtn} onPress={() => setShowCreateMatch(true)}>
+                      <Ionicons name="add" size={16} color="#16a34a" />
+                      <Text style={styles.addBtnText}>Organize</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {upcomingMatches.map((m) => (
+                    <MatchCard key={m.id} match={m} onPress={() => setSelectedMatch(m)} />
+                  ))}
+                </>
+              )}
+
+              {upcomingJoinedMatches.length > 0 && (
+                <>
+                  <Text style={styles.sectionTitle}>Joined Matches</Text>
+                  {upcomingJoinedMatches.map((m) => (
+                    <JoinedMatchCard
+                      key={m.id}
+                      match={m}
+                      joining={joining === m.id}
+                      onPress={() => setSelectedMatch(m)}
+                      onLeave={() => handleLeaveMatch(m.id)}
+                    />
+                  ))}
+                </>
+              )}
+
+              {upcomingEvents.length > 0 && (
+                <>
+                  <Text style={styles.sectionTitle}>My Events</Text>
+                  {upcomingEvents.map((event) => (
+                    <EarnEventCard
+                      key={event.id}
+                      event={event}
+                      onOpen={() => router.push({ pathname: '/tournament', params: { id: event.id } })}
+                      onLeave={() => handleLeaveEvent(event.id)}
+                    />
+                  ))}
+                </>
+              )}
+            </>
+          )
         )}
 
-        {/* Quick Actions */}
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <View style={styles.quickGrid}>
-          {[
-            { icon: 'calendar-outline' as const,  label: 'New Booking',    color: '#16a34a', onPress: () => router.push('/(tabs)/book') },
-            { icon: 'football-outline' as const,  label: 'Organize Match', color: '#3b82f6', onPress: () => setShowCreateMatch(true) },
-            { icon: 'trophy-outline' as const,    label: 'My Tournaments', color: '#f59e0b', onPress: () => router.push('/my-tournaments') },
-            { icon: 'people-outline' as const,    label: 'My Teams',       color: '#8b5cf6', onPress: () => router.push('/my-teams') },
-            { icon: 'flash-outline' as const,     label: 'Challenges',     color: '#f97316', onPress: () => router.push('/challenges') },
-            { icon: 'podium-outline' as const,    label: 'Play to Earn',   color: '#0ea5e9', onPress: () => router.push('/(tabs)/earn') },
-          ].map((action) => (
-            <TouchableOpacity key={action.label} style={styles.quickBtn} onPress={action.onPress}>
-              <View style={[styles.quickIcon, { backgroundColor: action.color + '20' }]}>
-                <Ionicons name={action.icon} size={24} color={action.color} />
+        {/* ── Near me: open matches + friendly events to join ── */}
+        {tab === 'near' && !loading && (
+          displayedOpenMatches.length === 0 && friendlyEvents.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="people-outline" size={36} color="#9ca3af" />
+              <Text style={styles.emptyCardTitle}>Nothing open right now</Text>
+              <Text style={styles.emptyCardText}>Be the first — organize a match or host a friendly event and players can join.</Text>
+              <View style={styles.emptyActions}>
+                <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowCreateMatch(true)}>
+                  <Text style={styles.emptyBtnText}>Organize a match</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowCreateEvent(true)}>
+                  <Text style={styles.emptyBtnText}>Host a friendly event</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.quickLabel}>{action.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+            </View>
+          ) : (
+            <>
+              {displayedOpenMatches.length > 0 && <Text style={styles.sectionTitle}>Open Matches</Text>}
+              {displayedOpenMatches.map((m) => (
+                <OpenMatchCard
+                  key={m.id}
+                  match={m}
+                  isJoined={false}
+                  joining={joining === m.id}
+                  onPress={() => setSelectedMatch(m)}
+                  onJoin={() => handleJoinMatch(m.id)}
+                  onLeave={() => handleLeaveMatch(m.id)}
+                />
+              ))}
+              {friendlyEvents.length > 0 && (
+                <View style={styles.sectionRow}>
+                  <Text style={styles.sectionTitle}>🤝 Friendly Events</Text>
+                  <TouchableOpacity style={styles.addBtn} onPress={() => setShowCreateEvent(true)}>
+                    <Ionicons name="add" size={16} color="#16a34a" />
+                    <Text style={styles.addBtnText}>Host</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {friendlyEvents.map((event) => (
+                <EarnEventCard
+                  key={event.id}
+                  event={event}
+                  registered={false}
+                  onOpen={() => router.push({ pathname: '/tournament', params: { id: event.id } })}
+                />
+              ))}
+            </>
+          )
+        )}
+
+        {/* ── Past: games and events that have started or been played ── */}
+        {tab === 'past' && !loading && (
+          pastCount === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="time-outline" size={36} color="#9ca3af" />
+              <Text style={styles.emptyCardTitle}>No past games yet</Text>
+              <Text style={styles.emptyCardText}>Matches, events and bookings move here once they’ve been played.</Text>
+            </View>
+          ) : (
+            <>
+              {pastMatches.length > 0 && <Text style={styles.sectionTitle}>Matches</Text>}
+              {pastMatches.map((m) => (
+                <MatchCard key={m.id} match={m} onPress={() => setSelectedMatch(m)} />
+              ))}
+              {pastEvents.length > 0 && <Text style={styles.sectionTitle}>Events</Text>}
+              {pastEvents.map((event) => (
+                <EarnEventCard
+                  key={event.id}
+                  event={event}
+                  onOpen={() => router.push({ pathname: '/tournament', params: { id: event.id } })}
+                />
+              ))}
+              {pastBookings.length > 0 && <Text style={styles.sectionTitle}>Bookings</Text>}
+              {pastBookings.map((b) => (
+                <BookingCard key={b.id} booking={b} onPress={() => setSelectedBooking(b)} />
+              ))}
+            </>
+          )
+        )}
         <View style={{ height: 20 }} />
       </ScrollView>
 
@@ -890,6 +993,13 @@ export default function MyTurfScreen() {
         </View>
       </Modal>
 
+      <CreateEventModal
+        visible={showCreateEvent}
+        category="friendly"
+        onClose={() => setShowCreateEvent(false)}
+        onCreated={(saved) => { setAllEvents((prev) => [saved, ...prev]); setTab('near'); }}
+      />
+
       {/* Location Picker */}
       <LocationPickerModal
         visible={showLocationPicker}
@@ -934,7 +1044,7 @@ function BookingCard({ booking, onPress }: { booking: Booking; onPress: () => vo
           <Text style={styles.bookingVenue} numberOfLines={1}>{booking.venueName}</Text>
           <Text style={styles.bookingMeta}>{booking.date} · {booking.time}</Text>
           <Text style={styles.bookingPrice}>CAD {booking.price.toLocaleString()}</Text>
-          <Text style={styles.categoryText}>{categoryLabel(booking)}</Text>
+          {eventCategory(booking) === 'prize' && <Text style={styles.categoryText}>{categoryLabel(booking)}</Text>}
         </View>
       </View>
       <StatusBadge status={booking.status} />
@@ -968,7 +1078,7 @@ function MatchCard({ match, onPress }: { match: MatchItem; onPress: () => void }
         <View style={{ flex: 1 }}>
           <Text style={styles.matchTitle} numberOfLines={1}>{match.title}</Text>
           <Text style={styles.matchMeta}>{match.players} · {match.date}</Text>
-          <Text style={styles.categoryText}>{categoryLabel(match)}</Text>
+          {eventCategory(match) === 'prize' && <Text style={styles.categoryText}>{categoryLabel(match)}</Text>}
           <Text style={styles.matchMeta}>{match.location}</Text>
           {match.maxPlayers != null && (
             <Text style={styles.matchSlotText}>
@@ -998,7 +1108,7 @@ function JoinedMatchCard({ match, joining, onPress, onLeave }: {
         <View style={{ flex: 1 }}>
           <Text style={styles.matchTitle} numberOfLines={1}>{match.title}</Text>
           <Text style={styles.matchMeta}>{match.players} · {match.date}</Text>
-          <Text style={styles.categoryText}>{categoryLabel(match)}</Text>
+          {eventCategory(match) === 'prize' && <Text style={styles.categoryText}>{categoryLabel(match)}</Text>}
           <Text style={styles.matchMeta} numberOfLines={1}>{match.location}</Text>
           {match.maxPlayers != null && (
             <Text style={styles.matchSlotText}>
@@ -1042,7 +1152,7 @@ function OpenMatchCard({ match, isJoined, joining, onPress, onJoin, onLeave }: {
         <View style={{ flex: 1 }}>
           <Text style={styles.matchTitle} numberOfLines={1}>{match.title}</Text>
           <Text style={styles.matchMeta}>{match.players} · {match.date}</Text>
-          <Text style={styles.categoryText}>{categoryLabel(match)}</Text>
+          {eventCategory(match) === 'prize' && <Text style={styles.categoryText}>{categoryLabel(match)}</Text>}
           <View style={styles.slotTrack}>
             <View style={[styles.slotFill, { width: `${pct}%` }]} />
           </View>
@@ -1092,7 +1202,11 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   match:      'Match',
 };
 
-function EarnEventCard({ event, onOpen, onLeave }: { event: Tournament; onOpen: () => void; onLeave: () => void }) {
+function EarnEventCard({ event, onOpen, onLeave, registered = true }: {
+  event: Tournament; onOpen: () => void; onLeave?: () => void;
+  /** false = an event I can still join (Near me): show spots left + "View & join" */
+  registered?: boolean;
+}) {
   const typeColor = EVENT_TYPE_COLORS[event.type] ?? '#16a34a';
   const typeLabel = EVENT_TYPE_LABELS[event.type] ?? event.type;
   const open = (event.status ?? 'active') === 'active';
@@ -1111,9 +1225,7 @@ function EarnEventCard({ event, onOpen, onLeave }: { event: Tournament; onOpen: 
             {event.date}{event.location ? `  ·  ${event.location}` : ''}
           </Text>
           <View style={styles.earnFooter}>
-            {eventCategory(event) === 'friendly' && (
-              <Text style={styles.earnFee}>🤝 Friendly</Text>
-            )}
+            {eventCategory(event) === 'friendly' && <Text style={styles.earnFee}>Free to join</Text>}
             {event.entryFee > 0 && (
               <Text style={styles.earnFee}>Entry: CAD {event.entryFee.toLocaleString()}</Text>
             )}
@@ -1123,6 +1235,17 @@ function EarnEventCard({ event, onOpen, onLeave }: { event: Tournament; onOpen: 
           </View>
         </View>
       </View>
+      {!registered ? (
+        <View style={styles.earnActions}>
+          <Text style={styles.earnFee}>
+            {event.participants}/{event.maxParticipants} signed up
+            {event.maxParticipants > event.participants ? ` · ${event.maxParticipants - event.participants} left` : ' · Full'}
+          </Text>
+          <View style={styles.joinBtn}>
+            <Text style={styles.joinBtnText}>View & join</Text>
+          </View>
+        </View>
+      ) : (
       <View style={styles.earnActions}>
         <View style={styles.registeredBadge}>
           <Ionicons name={open ? 'checkmark-circle' : 'git-network-outline'} size={14} color="#16a34a" />
@@ -1130,12 +1253,13 @@ function EarnEventCard({ event, onOpen, onLeave }: { event: Tournament; onOpen: 
             {open ? 'Registered' : event.status === 'completed' ? 'Finished · See results' : 'Live · See bracket'}
           </Text>
         </View>
-        {open && (
+        {open && onLeave && (
           <TouchableOpacity style={styles.earnLeaveBtn} onPress={onLeave}>
             <Text style={styles.earnLeaveBtnText}>Leave</Text>
           </TouchableOpacity>
         )}
       </View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -1176,10 +1300,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 17, fontWeight: '700', color: '#fff', marginBottom: 10, marginTop: 6 },
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: '#f0fdf4', borderRadius: 8, borderWidth: 1, borderColor: '#bbf7d0' },
   addBtnText: { color: '#16a34a', fontWeight: '600', fontSize: 13 },
-  emptyState: { alignItems: 'center', paddingVertical: 28, gap: 6 },
-  emptyText:   { color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '600' },
   emptySubText:{ color: 'rgba(255,255,255,0.45)', fontSize: 12 },
-  emptyAction: { color: '#16a34a', fontWeight: '600', fontSize: 13, marginTop: 2 },
   bookingCard: {
     backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 12,
@@ -1243,7 +1364,6 @@ const styles = StyleSheet.create({
   matchSlotText: { color: '#16a34a', fontSize: 11, fontWeight: '600', marginTop: 4 },
   matchFinalText: { color: '#92400e', fontSize: 12, fontWeight: '800', marginTop: 4 },
   matchActionText: { color: '#7c3aed', fontSize: 12, fontWeight: '700', marginTop: 4 },
-  subSectionTitle: { fontSize: 14, fontWeight: '700', color: '#6b7280', marginBottom: 8, marginTop: 6 },
   joinedMatchBorder: { borderLeftWidth: 3, borderLeftColor: '#16a34a' },
   leaveBtn: {
     borderWidth: 1.5,
@@ -1312,26 +1432,24 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   fullText: { color: '#9ca3af', fontWeight: '600', fontSize: 13 },
-  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  quickScroll: { marginHorizontal: -16, marginBottom: 12 },
+  quickRow: { paddingHorizontal: 16, gap: 8 },
   quickBtn: {
-    width: '47%',
+    width: 84,
     backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 14,
-    padding: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
   },
   quickIcon: {
-    width: 48, height: 48,
-    borderRadius: 24,
+    width: 40, height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  quickLabel: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  quickLabel: { fontSize: 11, fontWeight: '700', color: '#374151', textAlign: 'center', lineHeight: 14 },
   // Sheet / Modals
   sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: {
@@ -1489,9 +1607,30 @@ const styles = StyleSheet.create({
   earnTypeBadgeText: { fontSize: 11, fontWeight: '700' },
   earnMeta: { color: '#6b7280', fontSize: 12, marginBottom: 6 },
   earnFooter: { flexDirection: 'row', gap: 12 },
-  showAllBtn: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 16, marginBottom: 8 },
-  showAllText: { color: '#fff', fontWeight: '700', fontSize: 13, textDecorationLine: 'underline' },
-  categoryText: { color: '#6b7280', fontSize: 12, fontWeight: '600', marginTop: 2 },
+  tabBar: {
+    flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.93)', borderRadius: 14, padding: 4, gap: 4, marginBottom: 14,
+  },
+  tabBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 10, borderRadius: 10,
+  },
+  tabBtnActive: { backgroundColor: '#16a34a' },
+  tabText: { fontSize: 14, fontWeight: '700', color: '#374151' },
+  tabTextActive: { color: '#fff' },
+  tabCount: { minWidth: 20, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 10, backgroundColor: '#e5e7eb', alignItems: 'center' },
+  tabCountActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
+  tabCountText: { fontSize: 11, fontWeight: '800', color: '#374151' },
+  tabCountTextActive: { color: '#fff' },
+  emptyCard: {
+    alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.93)', borderRadius: 16,
+    paddingVertical: 24, paddingHorizontal: 18, marginBottom: 12,
+  },
+  emptyCardTitle: { fontSize: 16, fontWeight: '800', color: '#111827' },
+  emptyCardText: { fontSize: 13, color: '#6b7280', textAlign: 'center', lineHeight: 18 },
+  emptyActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 8 },
+  emptyBtn: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  emptyBtnText: { color: '#16a34a', fontWeight: '700', fontSize: 13 },
+  categoryText: { color: '#a16207', fontSize: 12, fontWeight: '700', marginTop: 2 },
   earnFee: { color: '#374151', fontSize: 12, fontWeight: '600' },
   earnPrize: { color: '#16a34a', fontSize: 12, fontWeight: '700' },
   earnActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

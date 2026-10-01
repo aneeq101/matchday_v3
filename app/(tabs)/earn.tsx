@@ -6,13 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
   Modal,
-  TextInput,
   ImageBackground,
   StatusBar,
   Platform,
   ActivityIndicator,
   RefreshControl,
-  KeyboardAvoidingView,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,20 +18,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
-import { TOURNAMENTS, type Tournament, type EventType, type EventCategory } from '../../data/mockData';
+import { TOURNAMENTS, type Tournament, type EventType } from '../../data/mockData';
 import { useAuth } from '../../lib/AuthContext';
 import {
   fetchTournaments,
   fetchRegisteredIds,
   registerForTournament,
   unregisterFromTournament,
-  createTournament as dbCreateTournament, eventCategory, categoryMoney, CATEGORY_INFO,
+  eventCategory, eventIsPast,
 } from '../../lib/tournaments';
-import { getFormatsForSport, eventRules, entrantNouns, MIN_ENTRANTS } from '../../lib/sportRules';
-import DatePickerField from '../../components/DatePickerField';
-import CategoryPicker from '../../components/CategoryPicker';
-import LocationPickerModal from '../../components/LocationPickerModal';
-import { toISODate } from '../../lib/matchday';
+import { entrantNouns } from '../../lib/sportRules';
+import CreateEventModal from '../../components/CreateEventModal';
 
 
 const TYPE_COLORS: Record<EventType, string> = {
@@ -50,19 +45,13 @@ const TYPE_LABELS: Record<EventType, string> = {
 
 const FILTER_TABS: Array<{ key: string; label: string }> = [
   { key: 'All', label: 'All' },
-  { key: 'tournament', label: 'Tournament' },
-  { key: 'league', label: 'League' },
-  { key: 'match', label: 'Match' },
+  { key: 'tournament', label: 'Tournaments' },
+  { key: 'league', label: 'Leagues' },
+  { key: 'match', label: 'Matches' },
 ];
 
-const CATEGORY_FILTERS: Array<{ key: 'all' | EventCategory; label: string }> = [
-  { key: 'all', label: 'All' },
-  { key: 'friendly', label: '🤝 Friendly' },
-  { key: 'prize', label: '💰 Prize money' },
-];
 
-const SPORTS = ['Football', 'Cricket', 'Tennis', 'Basketball', 'Badminton', 'Baseball'];
-const EVENT_TYPES: EventType[] = ['tournament', 'league', 'match'];
+
 
 export default function EarnScreen() {
   const router = useRouter();
@@ -74,30 +63,10 @@ export default function EarnScreen() {
   const [leaveEvent, setLeaveEvent] = useState<Tournament | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showPast, setShowPast] = useState(false);
   const [registeredIds, setRegisteredIds] = useState<Set<string>>(new Set());
   const [registerSuccess, setRegisterSuccess] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  // Create event form
-  const [newType, setNewType] = useState<EventType>('tournament');
-  const [newName, setNewName] = useState('');
-  const [newSport, setNewSport] = useState('Football');
-  const [newFormat, setNewFormat] = useState('3v3');
-  const [newMaxParticipants, setNewMaxParticipants] = useState(6);
-  const [newDate, setNewDate] = useState<Date | null>(null);
-  const [newLocation, setNewLocation] = useState('');
-  const [newCoord, setNewCoord] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [showLocationPicker, setShowLocationPicker] = useState(false);
-  const [newCategory, setNewCategory] = useState<EventCategory>('friendly');
-  const [categoryFilter, setCategoryFilter] = useState<'all' | EventCategory>('all');
-  const [newFee, setNewFee] = useState('');
-  const [newPrize, setNewPrize] = useState('');
-  const hasBracket = newType === 'tournament' || newType === 'league';
-  // Who signs up + sensible limits follow from sport, format and event type
-  const rules = eventRules(newSport, newType === 'league' ? 'league' : 'tournament', newFormat);
-  const [newMin, setNewMin] = useState(rules.defMin);
-  const [newMax, setNewMax] = useState(rules.defMax);
 
   const [events, setEvents] = useState<Tournament[]>(TOURNAMENTS);
 
@@ -112,29 +81,20 @@ export default function EarnScreen() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  useEffect(() => {
-    const formats = getFormatsForSport(newSport);
-    if (formats.length > 0) {
-      setNewFormat(formats[0].format);
-      setNewMaxParticipants(formats[0].maxPlayers);
-    }
-  }, [newSport]);
-
-  // Reset limits to sensible defaults when what's being organised changes
-  useEffect(() => {
-    setNewMin(rules.defMin);
-    setNewMax(rules.defMax);
-  }, [rules.defMin, rules.defMax, rules.entrant, rules.noun]);
-
   const onRefresh = async () => {
     setRefreshing(true);
     await loadData();
     setRefreshing(false);
   };
 
+  // Play to Earn is prize money only — friendly events live in My Turf → Near me
   const filtered = events
-    .filter((e) => activeFilter === 'All' || e.type === activeFilter)
-    .filter((e) => categoryFilter === 'all' || eventCategory(e) === categoryFilter);
+    .filter((e) => eventCategory(e) === 'prize')
+    .filter((e) => activeFilter === 'All' || e.type === activeFilter);
+  // Finished / gone-by events sit in a collapsed "Past events" list under the open ones
+  const upcoming = filtered.filter((e) => !eventIsPast(e));
+  const past     = filtered.filter(eventIsPast);
+  const filtersOn = activeFilter !== 'All';
 
   const handleRegister = async () => {
     if (!registerEvent || registering) return;
@@ -201,88 +161,6 @@ export default function EarnScreen() {
     setLeaveEvent(null);
   };
 
-  const handleCreate = async () => {
-    if (!newName.trim()) {
-      Alert.alert('Name required', 'Please enter an event name.');
-      return;
-    }
-    if (newDate) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const selected = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate());
-      if (selected < today) {
-        Alert.alert('Invalid date', 'Event date cannot be in the past.');
-        return;
-      }
-    }
-    if (hasBracket) {
-      if (newMin < rules.min || newMax > rules.max || newMin > newMax) {
-        Alert.alert(
-          'Check sign-up limits',
-          `You need at least ${rules.min} ${rules.nouns}, and at most ${rules.max}.`,
-        );
-        return;
-      }
-    }
-    const { entryFee: fee, prizePool: prize, error: moneyError } = categoryMoney(newCategory, newFee, newPrize);
-    if (moneyError) {
-      Alert.alert('Add a prize pool', moneyError);
-      return;
-    }
-    setSaving(true);
-    try {
-      const formattedDate = newDate
-        ? newDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
-        : 'TBD';
-      const saved = await dbCreateTournament(
-        {
-          name: newName.trim(),
-          type: newType,
-          sport: newSport,
-          date: formattedDate,
-          location: newLocation || '',
-          latitude: newCoord?.latitude ?? null,
-          longitude: newCoord?.longitude ?? null,
-          entryFee: fee,
-          prizePool: prize,
-          category: newCategory,
-          maxParticipants: hasBracket ? newMax : newMaxParticipants,
-          // A single match needs its full line-up (e.g. 5v5 → 10 players)
-          minParticipants: hasBracket ? newMin : newMaxParticipants,
-          entrantType: hasBracket ? rules.entrant : 'player',
-          format: newFormat,
-          startsOn: newDate ? toISODate(newDate) : null,
-        },
-        user?.id ?? null
-      );
-
-      if (!saved) {
-        Alert.alert('Error', 'Failed to save event. Please try again.');
-        setSaving(false);
-        return;
-      }
-
-      setEvents((prev) => [saved, ...prev]);
-      setShowCreateModal(false);
-      // Show the new event straight away — including its empty bracket
-      if (hasBracket) router.push({ pathname: '/tournament', params: { id: saved.id } });
-      setNewName('');
-      setNewType('tournament');
-      setNewSport('Football');
-      setNewFormat('3v3');
-      setNewMaxParticipants(6);
-      setNewDate(null);
-      setNewLocation('');
-      setNewCoord(null);
-      setNewFee('');
-      setNewPrize('');
-      setNewCategory('friendly');
-    } catch (e) {
-      Alert.alert('Error', 'Something went wrong. Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <ImageBackground source={{ uri: FIELD_IMAGE }} style={styles.root} resizeMode="cover">
@@ -294,8 +172,9 @@ export default function EarnScreen() {
             <SafeAreaView edges={['top']}>
               <View style={styles.header}>
                 <Text style={styles.headerTitle}>Play to Earn</Text>
-                <TouchableOpacity onPress={() => setShowCreateModal(true)}>
-                  <Ionicons name="add-circle-outline" size={26} color="#fff" />
+                <TouchableOpacity style={styles.createBtn} onPress={() => setShowCreateModal(true)} accessibilityRole="button">
+                  <Ionicons name="add" size={18} color="#16a34a" />
+                  <Text style={styles.createBtnText}>Create</Text>
                 </TouchableOpacity>
               </View>
             </SafeAreaView>
@@ -303,30 +182,23 @@ export default function EarnScreen() {
         </View>
       </View>
 
-      {/* Filter Tabs */}
+      {/* Filter by event type */}
       <View style={styles.filterBar}>
-        {FILTER_TABS.map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[styles.filterTab, activeFilter === tab.key && styles.filterTabActive]}
-            onPress={() => setActiveFilter(tab.key)}
-          >
-            <Text style={[styles.filterTabText, activeFilter === tab.key && styles.filterTabTextActive]}>
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <View style={styles.categoryBar}>
-        {CATEGORY_FILTERS.map((c) => (
-          <TouchableOpacity
-            key={c.key}
-            style={[styles.categoryChip, categoryFilter === c.key && styles.categoryChipActive]}
-            onPress={() => setCategoryFilter(c.key)}
-          >
-            <Text style={[styles.categoryChipText, categoryFilter === c.key && styles.categoryChipTextActive]}>{c.label}</Text>
-          </TouchableOpacity>
-        ))}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {FILTER_TABS.map((tab) => {
+            const on = activeFilter === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[styles.filterTab, on && styles.filterTabActive]}
+                onPress={() => setActiveFilter(tab.key)}
+                accessibilityState={{ selected: on }}
+              >
+                <Text style={[styles.filterTabText, on && styles.filterTabTextActive]}>{tab.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       <ScrollView
@@ -334,13 +206,57 @@ export default function EarnScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />}
       >
-        {filtered.length === 0 && (
-          <View style={styles.emptyState}>
-            <Ionicons name="trophy-outline" size={48} color="#d1d5db" />
-            <Text style={styles.emptyText}>No events in this category yet</Text>
+        {upcoming.length === 0 && (
+          <View style={styles.emptyCard}>
+            <Ionicons name="trophy-outline" size={40} color="#9ca3af" />
+            <Text style={styles.emptyTitle}>{filtersOn ? 'No events match these filters' : 'No upcoming events'}</Text>
+            <Text style={styles.emptyText}>
+              {filtersOn ? 'Try another filter, or create the event you’re looking for.' : 'Start one — players nearby get an alert. Looking for a free game? See My Turf → Near me.'}
+            </Text>
+            <View style={styles.emptyActions}>
+              {filtersOn && (
+                <TouchableOpacity style={styles.emptyBtn} onPress={() => setActiveFilter('All')}>
+                  <Text style={styles.emptyBtnText}>Clear filters</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowCreateModal(true)}>
+                <Text style={styles.emptyBtnText}>Create event</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
-        {filtered.map((event) => (
+        {upcoming.map((event) => (
+          <EventCard
+            key={event.id}
+            event={event}
+            registered={registeredIds.has(event.id)}
+            onOpen={() => router.push({ pathname: '/tournament', params: { id: event.id } })}
+            onRegister={() => {
+              if (event.entrantType === 'team') {
+                router.push({ pathname: '/tournament', params: { id: event.id, join: '1' } });
+              } else {
+                setRegisterError('');
+                setRegisterEvent(event);
+              }
+            }}
+            onLeave={() => setLeaveEvent(event)}
+          />
+        ))}
+
+        {/* Past events — only shown when tapped */}
+        {past.length > 0 && (
+          <TouchableOpacity
+            style={styles.pastToggle}
+            onPress={() => setShowPast((v) => !v)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showPast }}
+          >
+            <Ionicons name="time-outline" size={18} color="#374151" />
+            <Text style={styles.pastToggleText}>Past events ({past.length})</Text>
+            <Ionicons name={showPast ? 'chevron-up' : 'chevron-down'} size={18} color="#374151" />
+          </TouchableOpacity>
+        )}
+        {showPast && past.map((event) => (
           <EventCard
             key={event.id}
             event={event}
@@ -381,12 +297,6 @@ export default function EarnScreen() {
                   </View>
                 </View>
 
-                {eventCategory(registerEvent) === 'friendly' ? (
-                  <View style={styles.friendlyNote}>
-                    <Text style={{ fontSize: 18 }}>🤝</Text>
-                    <Text style={styles.friendlyNoteText}>Friendly event — free to join, no prize money.</Text>
-                  </View>
-                ) : (
                 <View style={styles.feeBox}>
                   <Text style={styles.feeTitle}>Fee Breakdown</Text>
                   <View style={styles.feeRow}>
@@ -402,7 +312,6 @@ export default function EarnScreen() {
                     <Text style={styles.feeTotalVal}>CAD {registerEvent.entryFee.toLocaleString()}</Text>
                   </View>
                 </View>
-                )}
 
                 <View style={styles.paymentNote}>
                   <Ionicons name="information-circle-outline" size={16} color="#3b82f6" />
@@ -486,180 +395,13 @@ export default function EarnScreen() {
         </View>
       </Modal>
 
-      {/* Create Event Modal */}
-      <Modal visible={showCreateModal} animationType="slide" transparent>
-        <View style={styles.sheetOverlay}>
-          <KeyboardAvoidingView
-            style={styles.createSheet}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          >
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Create Event</Text>
-              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                <Ionicons name="close" size={24} color="#111827" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formContent}>
-              <Text style={styles.fieldLabel}>Event Type</Text>
-              <View style={styles.typeRow}>
-                {EVENT_TYPES.map((t) => (
-                  <TouchableOpacity
-                    key={t}
-                    style={[
-                      styles.typeChip,
-                      newType === t && { backgroundColor: TYPE_COLORS[t], borderColor: TYPE_COLORS[t] },
-                    ]}
-                    onPress={() => setNewType(t)}
-                  >
-                    <Text style={[styles.typeChipText, newType === t && { color: '#fff' }]}>
-                      {TYPE_LABELS[t]}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <CategoryPicker
-                value={newCategory}
-                onChange={setNewCategory}
-                entryFee={newFee}
-                prizePool={newPrize}
-                onEntryFee={setNewFee}
-                onPrizePool={setNewPrize}
-                spots={hasBracket ? newMax : newMaxParticipants}
-                what={newType === 'match' ? 'match' : newType}
-              />
-
-              <Text style={styles.fieldLabel}>Event Name</Text>
-              <TextInput
-                style={styles.formInput}
-                placeholder="e.g. GTA Summer Cup"
-                placeholderTextColor="#9ca3af"
-                value={newName}
-                onChangeText={setNewName}
-              />
-
-              <Text style={styles.fieldLabel}>Sport</Text>
-              <View style={styles.sportGrid}>
-                {SPORTS.map((s) => (
-                  <TouchableOpacity
-                    key={s}
-                    style={[styles.sportChip, newSport === s && styles.sportChipActive]}
-                    onPress={() => setNewSport(s)}
-                  >
-                    <Text style={[styles.sportChipText, newSport === s && styles.sportChipTextActive]}>{s}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={styles.fieldLabel}>Format</Text>
-              <View style={styles.sportGrid}>
-                {getFormatsForSport(newSport).map((f) => (
-                  <TouchableOpacity
-                    key={f.format}
-                    style={[styles.sportChip, newFormat === f.format && styles.sportChipActive]}
-                    onPress={() => { setNewFormat(f.format); setNewMaxParticipants(f.maxPlayers); }}
-                  >
-                    <Text style={[styles.sportChipText, newFormat === f.format && styles.sportChipTextActive]}>{f.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {hasBracket ? (
-                <>
-                  <Text style={styles.formatHint}>Format of each game</Text>
-
-                  <View style={styles.whoRow}>
-                    <Ionicons name={rules.entrant === 'player' ? 'person' : 'people'} size={16} color="#16a34a" />
-                    <Text style={styles.whoText}>{rules.who}</Text>
-                  </View>
-
-                  <View style={styles.twoCol}>
-                    <Stepper
-                      label={`Minimum ${rules.nouns}`}
-                      value={newMin}
-                      min={rules.min}
-                      max={newMax}
-                      onChange={setNewMin}
-                    />
-                    <Stepper
-                      label={`Maximum ${rules.nouns}`}
-                      value={newMax}
-                      min={Math.max(newMin, MIN_ENTRANTS)}
-                      max={rules.max}
-                      onChange={setNewMax}
-                    />
-                  </View>
-                  <View style={styles.bracketHint}>
-                    <Ionicons name="git-network-outline" size={16} color="#8b5cf6" />
-                    <Text style={styles.bracketHintText}>
-                      {newType === 'league'
-                        ? `Needs at least ${newMin} ${rules.nouns}. Fixtures are created when you start the league — everyone plays everyone once.`
-                        : `Needs at least ${newMin} ${rules.nouns} (a knockout needs semi-finals and a final). The bracket is drawn randomly when you start it; extra places become byes.`}
-                    </Text>
-                  </View>
-                </>
-              ) : (
-                <Text style={styles.formatHint}>
-                  Needs the full line-up: {newMaxParticipants} players
-                </Text>
-              )}
-
-              <Text style={styles.fieldLabel}>Date</Text>
-              <DatePickerField
-                value={newDate}
-                onChange={setNewDate}
-                placeholder="Select event date"
-              />
-
-              <Text style={styles.fieldLabel}>Location</Text>
-              <TouchableOpacity
-                style={styles.locationTrigger}
-                onPress={() => setShowLocationPicker(true)}
-              >
-                <Ionicons name="location-outline" size={18} color={newLocation ? '#111827' : '#9ca3af'} />
-                <Text style={[styles.locationTriggerText, !newLocation && { color: '#9ca3af' }]} numberOfLines={1}>
-                  {newLocation || 'Pick location from map'}
-                </Text>
-                <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.confirmBtn} onPress={handleCreate} disabled={saving}>
-                {saving
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <><Ionicons name="add-circle-outline" size={18} color="#fff" /><Text style={styles.confirmBtnText}>Create Event</Text></>}
-              </TouchableOpacity>
-              <View style={{ height: 20 }} />
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      <LocationPickerModal
-        visible={showLocationPicker}
-        sport={newSport}
-        onSelect={(loc, coord) => { setNewLocation(loc); setNewCoord(coord ?? null); setShowLocationPicker(false); }}
-        onClose={() => setShowLocationPicker(false)}
+      <CreateEventModal
+        visible={showCreateModal}
+        category="prize"
+        onClose={() => setShowCreateModal(false)}
+        onCreated={(saved) => setEvents((prev) => [saved, ...prev])}
       />
     </ImageBackground>
-  );
-}
-
-function Stepper({ label, value, min, max, onChange }: {
-  label: string; value: number; min: number; max: number; onChange: (n: number) => void;
-}) {
-  return (
-    <View style={{ flex: 1, marginBottom: 14 }}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={styles.stepper}>
-        <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(Math.max(min, value - 1))} disabled={value <= min}>
-          <Ionicons name="remove" size={18} color={value <= min ? '#d1d5db' : '#111827'} />
-        </TouchableOpacity>
-        <Text style={styles.stepValue}>{value}</Text>
-        <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(Math.min(max, value + 1))} disabled={value >= max}>
-          <Ionicons name="add" size={18} color={value >= max ? '#d1d5db' : '#111827'} />
-        </TouchableOpacity>
-      </View>
-    </View>
   );
 }
 
@@ -682,23 +424,22 @@ function EventCard({
   const status = event.status ?? 'active';
   const who = entrantNouns(event.entrantType, event.format).nouns;
   const hasDraw = event.type === 'tournament' || event.type === 'league';
-  const category = eventCategory(event);
 
   return (
     <TouchableOpacity style={styles.eventCard} onPress={onOpen} activeOpacity={0.85}>
       <View style={styles.eventTop}>
         <Text style={styles.eventEmoji}>{event.sportEmoji}</Text>
         <View style={{ flex: 1 }}>
-          <View style={styles.eventTitleRow}>
-            <Text style={styles.eventName} numberOfLines={1}>{event.name}</Text>
-            <View style={[styles.typeBadge, { backgroundColor: CATEGORY_INFO[category].bg }]}>
-              <Text style={[styles.typeBadgeText, { color: CATEGORY_INFO[category].color }]}>
-                {CATEGORY_INFO[category].emoji} {category === 'prize' ? 'Prize' : 'Friendly'}
-              </Text>
-            </View>
+          <Text style={styles.eventName} numberOfLines={2}>{event.name}</Text>
+          <View style={styles.badgeRow}>
             <View style={[styles.typeBadge, { backgroundColor: typeColor + '20' }]}>
               <Text style={[styles.typeBadgeText, { color: typeColor }]}>{TYPE_LABELS[event.type]}</Text>
             </View>
+            {!!event.format && (
+              <View style={[styles.typeBadge, { backgroundColor: '#f3f4f6' }]}>
+                <Text style={[styles.typeBadgeText, { color: '#4b5563' }]}>{event.format}</Text>
+              </View>
+            )}
           </View>
           <View style={styles.eventMeta}>
             <Ionicons name="calendar-outline" size={12} color="#9ca3af" />
@@ -725,23 +466,17 @@ function EventCard({
           {event.participants >= (event.minParticipants ?? 2)
             ? `✓ Enough ${who} to start`
             : `Needs ${event.minParticipants} ${who} to start`}
-          {'  ·  '}
-          <Text style={{ color: typeColor, fontWeight: '700' }}>
-            {event.type === 'league' ? 'View details ›' : 'View bracket ›'}
-          </Text>
         </Text>
       )}
 
       <View style={styles.eventFooter}>
         <View>
-          {category === 'friendly' ? (
-            <Text style={styles.feeLabel}>Free · <Text style={styles.feeAmount}>Friendly</Text></Text>
-          ) : (
-            <Text style={styles.feeLabel}>Entry: <Text style={styles.feeAmount}>{event.entryFee > 0 ? `CAD ${event.entryFee.toLocaleString()}` : 'Free'}</Text></Text>
-          )}
           {event.prizePool > 0 && (
-            <Text style={styles.prizeLabel}>Prize: <Text style={styles.prizeAmount}>CAD {event.prizePool.toLocaleString()}</Text></Text>
+            <Text style={styles.prizeAmount}>🏆 CAD {event.prizePool.toLocaleString()} prize</Text>
           )}
+          <Text style={styles.feeLabel}>
+            {event.entryFee > 0 ? `Entry CAD ${event.entryFee.toLocaleString()}` : 'Free entry'}
+          </Text>
         </View>
         {status === 'completed' ? (
           <View style={[styles.statusBadge, { backgroundColor: '#fef3c7' }]}>
@@ -797,42 +532,43 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
   },
   headerTitle: { color: '#fff', fontSize: 22, fontWeight: '800' },
+  createBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff',
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18,
+  },
+  createBtnText: { color: '#16a34a', fontWeight: '800', fontSize: 14 },
   filterBar: {
-    flexDirection: 'row',
     backgroundColor: 'rgba(255,255,255,0.93)',
-    paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
-    gap: 6,
   },
+  filterRow: { paddingHorizontal: 12, gap: 6, alignItems: 'center' },
   filterTab: {
-    flex: 1,
+    paddingHorizontal: 14,
     paddingVertical: 7,
-    borderRadius: 8,
-    alignItems: 'center',
+    borderRadius: 16,
     backgroundColor: '#f3f4f6',
   },
   filterTabActive: { backgroundColor: '#16a34a' },
-  categoryBar: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingBottom: 10 },
-  categoryChip: {
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.85)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.9)',
+  pastToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.93)',
+    borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14,
   },
-  categoryChipActive: { backgroundColor: '#111827', borderColor: '#111827' },
-  categoryChipText: { fontSize: 12, fontWeight: '700', color: '#374151' },
-  categoryChipTextActive: { color: '#fff' },
-  friendlyNote: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#e0f2fe',
-    borderRadius: 12, padding: 12, marginBottom: 16,
+  pastToggleText: { flex: 1, fontSize: 15, fontWeight: '700', color: '#111827' },
+  emptyCard: {
+    alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.93)', borderRadius: 16,
+    paddingVertical: 28, paddingHorizontal: 18,
   },
-  friendlyNoteText: { flex: 1, fontSize: 13, color: '#075985', fontWeight: '600', lineHeight: 18 },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: '#111827', marginTop: 4 },
+  emptyActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 8 },
+  emptyBtn: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  emptyBtnText: { color: '#16a34a', fontWeight: '700', fontSize: 13 },
   filterTabText: { color: '#6b7280', fontSize: 13, fontWeight: '600' },
   filterTabTextActive: { color: '#fff' },
   scroll: { flex: 1 },
   content: { padding: 14, gap: 12 },
-  emptyState: { alignItems: 'center', paddingVertical: 60 },
-  emptyText: { color: '#9ca3af', fontSize: 14, marginTop: 12 },
+  emptyText: { color: '#6b7280', fontSize: 13, textAlign: 'center', lineHeight: 18 },
   eventCard: {
     backgroundColor: 'rgba(255,255,255,0.93)',
     borderRadius: 14,
@@ -844,8 +580,8 @@ const styles = StyleSheet.create({
   },
   eventTop: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   eventEmoji: { fontSize: 36, paddingTop: 2 },
-  eventTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  eventName: { flex: 1, fontWeight: '700', color: '#111827', fontSize: 14 },
+  eventName: { fontWeight: '800', color: '#111827', fontSize: 15, lineHeight: 20 },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6, marginBottom: 4 },
   typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   typeBadgeText: { fontSize: 11, fontWeight: '700' },
   eventMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
@@ -856,9 +592,7 @@ const styles = StyleSheet.create({
   participantsText: { color: '#6b7280', fontSize: 12 },
   eventFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   feeLabel: { color: '#6b7280', fontSize: 13 },
-  feeAmount: { color: '#374151', fontWeight: '700' },
-  prizeLabel: { color: '#6b7280', fontSize: 12, marginTop: 2 },
-  prizeAmount: { color: '#16a34a', fontWeight: '700' },
+  prizeAmount: { color: '#16a34a', fontWeight: '800', fontSize: 14, marginBottom: 2 },
   registerBtn: {
     paddingHorizontal: 14,
     paddingVertical: 9,
@@ -917,12 +651,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '92%',
-  },
-  createSheet: {
-    backgroundColor: 'rgba(255,255,255,0.98)',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    height: '88%',
   },
   sheetHandle: {
     width: 40,
@@ -990,65 +718,6 @@ const styles = StyleSheet.create({
   registerErrorText: { color: '#ef4444', fontSize: 13, textAlign: 'center', marginBottom: 12 },
   successRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16 },
   successText: { color: '#16a34a', fontWeight: '700', fontSize: 16 },
-  formContent: { padding: 16 },
-  locationTrigger: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.95)', paddingHorizontal: 12, paddingVertical: 13,
-    marginBottom: 14,
-  },
-  locationTriggerText: { flex: 1, fontSize: 14, color: '#111827' },
-  fieldLabel: { fontWeight: '700', color: '#111827', fontSize: 14, marginBottom: 8 },
-  typeRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  typeChip: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#f9fafb',
-    alignItems: 'center',
-  },
-  typeChipText: { color: '#6b7280', fontWeight: '600', fontSize: 13 },
-  formInput: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#111827',
-    marginBottom: 14,
-  },
-  sportGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
-  sportChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#f9fafb',
-  },
-  sportChipActive: { backgroundColor: '#16a34a', borderColor: '#16a34a' },
-  sportChipText: { color: '#6b7280', fontSize: 13 },
-  sportChipTextActive: { color: '#fff' },
-  formatHint: { color: '#6b7280', fontSize: 12, marginTop: -6, marginBottom: 14 },
-  twoCol: { flexDirection: 'row', gap: 10 },
-  stepper: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 4,
-  },
-  stepBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
-  stepValue: { fontSize: 17, fontWeight: '800', color: '#111827' },
-  whoRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f0fdf4',
-    borderRadius: 10, padding: 10, marginBottom: 14,
-  },
-  whoText: { flex: 1, color: '#166534', fontSize: 13, fontWeight: '600' },
-  bracketHint: {
-    flexDirection: 'row', gap: 8, backgroundColor: '#f5f3ff', borderRadius: 10, padding: 12, marginBottom: 14,
-  },
-  bracketHintText: { flex: 1, color: '#5b21b6', fontSize: 12, lineHeight: 18 },
   minText: { color: '#6b7280', fontSize: 12, marginTop: -6, marginBottom: 12 },
   statusBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, maxWidth: 180 },
   statusBadgeText: { fontWeight: '700', fontSize: 12 },
