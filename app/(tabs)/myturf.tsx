@@ -44,6 +44,9 @@ import NotifBell from '../../components/NotifBell';
 import { toISODate, canRecordFinal, isPastGame, gameStart } from '../../lib/matchday';
 import MatchDayPanel from '../../components/MatchDayPanel';
 import { createNotification } from '../../lib/notifications';
+import { useUserLocation } from '../../hooks/useUserLocation';
+import { fetchSettings, EVENT_ALERT_RADII } from '../../lib/settings';
+import { distanceKm, formatDistance, type Coord } from '../../utils/geo';
 
 const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
 
@@ -109,6 +112,9 @@ function dbToBooking(row: Record<string, unknown>): Booking {
 
 type TurfTab = 'upcoming' | 'near' | 'past';
 
+// Same steps as Nearby Event Alerts; starts at the player's alert distance
+const NEAR_RADII = EVENT_ALERT_RADII;
+
 export default function MyTurfScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -137,6 +143,15 @@ export default function MyTurfScreen() {
 
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [tab, setTab]                         = useState<TurfTab>('upcoming');
+  const { location: myLocation, loading: locating } = useUserLocation();
+  const [nearRadius, setNearRadius]           = useState(25);
+  const [showUnplaced, setShowUnplaced]       = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    fetchSettings(user.id)
+      .then((st) => { if (NEAR_RADII.includes(st.eventAlertRadiusKm)) setNearRadius(st.eventAlertRadiusKm); })
+      .catch(() => {});
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selectedMatch, setSelectedMatch]     = useState<MatchItem | null>(null);
   const [cancellingBooking, setCancellingBooking] = useState(false);
 
@@ -393,6 +408,29 @@ export default function MyTurfScreen() {
   const friendlyEvents = allEvents.filter((t) =>
     eventCategory(t) === 'friendly' && (t.status ?? 'active') === 'active'
     && !eventIsPast(t) && !registeredEventIds.has(t.id));
+
+  // Near me: within the chosen distance of my GPS position, nearest first. Games
+  // with no map point (typed-in place) can't be measured — offered separately.
+  // Without GPS everything is listed, as before.
+  const distTo = (c?: Coord | null) => (myLocation && c ? distanceKm(myLocation, c) : null);
+  const nearFilter = <T extends { coord?: Coord | null }>(list: T[]) => {
+    if (!myLocation) return { inRange: list, unplaced: [] as T[] };
+    return {
+      inRange: list
+        .filter((x) => x.coord && distTo(x.coord)! <= nearRadius)
+        .sort((a, b) => distTo(a.coord)! - distTo(b.coord)!),
+      unplaced: list.filter((x) => !x.coord),
+    };
+  };
+  const nearMatches = nearFilter(displayedOpenMatches);
+  const nearEvents  = nearFilter(friendlyEvents);
+  const unplacedCount = nearMatches.unplaced.length + nearEvents.unplaced.length;
+  const nearMatchList = showUnplaced ? [...nearMatches.inRange, ...nearMatches.unplaced] : nearMatches.inRange;
+  const nearEventList = showUnplaced ? [...nearEvents.inRange, ...nearEvents.unplaced] : nearEvents.inRange;
+  const distLabel = (c?: Coord | null) => {
+    const d = distTo(c);
+    return d == null ? undefined : formatDistance(d);
+  };
   const upcomingCount = upcomingBookings.length + upcomingMatches.length + upcomingJoinedMatches.length + upcomingEvents.length;
 
   const QUICK_ACTIONS = [
@@ -406,7 +444,7 @@ export default function MyTurfScreen() {
   ];
   const TABS: Array<{ key: TurfTab; label: string; count: number }> = [
     { key: 'upcoming', label: 'Upcoming', count: upcomingCount },
-    { key: 'near',     label: 'Near me',  count: displayedOpenMatches.length + friendlyEvents.length },
+    { key: 'near',     label: 'Near me',  count: nearMatches.inRange.length + nearEvents.inRange.length },
     { key: 'past',     label: 'Past',     count: pastCount },
   ];
 
@@ -574,14 +612,52 @@ export default function MyTurfScreen() {
           )
         )}
 
-        {/* ── Near me: open matches + friendly events to join ── */}
+        {/* ── Near me: open matches + friendly events within a distance ── */}
+        {tab === 'near' && (
+          <View style={styles.nearBar}>
+            {myLocation ? (
+              <>
+                <Ionicons name="navigate" size={14} color="#16a34a" />
+                <Text style={styles.nearBarLabel}>Within</Text>
+                {NEAR_RADII.map((km) => (
+                  <TouchableOpacity
+                    key={km}
+                    style={[styles.radiusChip, nearRadius === km && styles.radiusChipActive]}
+                    onPress={() => setNearRadius(km)}
+                    accessibilityState={{ selected: nearRadius === km }}
+                  >
+                    <Text style={[styles.radiusChipText, nearRadius === km && styles.radiusChipTextActive]}>{km} km</Text>
+                  </TouchableOpacity>
+                ))}
+              </>
+            ) : (
+              <>
+                <Ionicons name="location-outline" size={14} color="#6b7280" />
+                <Text style={styles.nearBarHint}>
+                  {locating ? 'Finding your location…' : 'Turn on location to see games near you — showing everything for now.'}
+                </Text>
+              </>
+            )}
+          </View>
+        )}
         {tab === 'near' && !loading && (
-          displayedOpenMatches.length === 0 && friendlyEvents.length === 0 ? (
+          nearMatchList.length === 0 && nearEventList.length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons name="people-outline" size={36} color="#9ca3af" />
-              <Text style={styles.emptyCardTitle}>Nothing open right now</Text>
-              <Text style={styles.emptyCardText}>Be the first — organize a match or host a friendly event and players can join.</Text>
+              <Text style={styles.emptyCardTitle}>
+                {myLocation ? `Nothing open within ${nearRadius} km` : 'Nothing open right now'}
+              </Text>
+              <Text style={styles.emptyCardText}>
+                {myLocation && nearRadius < NEAR_RADII[NEAR_RADII.length - 1]
+                  ? 'Try a bigger distance, or be the first — organize a match or host a friendly event.'
+                  : 'Be the first — organize a match or host a friendly event and players can join.'}
+              </Text>
               <View style={styles.emptyActions}>
+                {myLocation && nearRadius < NEAR_RADII[NEAR_RADII.length - 1] && (
+                  <TouchableOpacity style={styles.emptyBtn} onPress={() => setNearRadius(NEAR_RADII[NEAR_RADII.length - 1])}>
+                    <Text style={styles.emptyBtnText}>Show up to {NEAR_RADII[NEAR_RADII.length - 1]} km</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity style={styles.emptyBtn} onPress={() => setShowCreateMatch(true)}>
                   <Text style={styles.emptyBtnText}>Organize a match</Text>
                 </TouchableOpacity>
@@ -592,11 +668,12 @@ export default function MyTurfScreen() {
             </View>
           ) : (
             <>
-              {displayedOpenMatches.length > 0 && <Text style={styles.sectionTitle}>Open Matches</Text>}
-              {displayedOpenMatches.map((m) => (
+              {nearMatchList.length > 0 && <Text style={styles.sectionTitle}>Open Matches</Text>}
+              {nearMatchList.map((m) => (
                 <OpenMatchCard
                   key={m.id}
                   match={m}
+                  distance={distLabel(m.coord)}
                   isJoined={false}
                   joining={joining === m.id}
                   onPress={() => setSelectedMatch(m)}
@@ -604,7 +681,7 @@ export default function MyTurfScreen() {
                   onLeave={() => handleLeaveMatch(m.id)}
                 />
               ))}
-              {friendlyEvents.length > 0 && (
+              {nearEventList.length > 0 && (
                 <View style={styles.sectionRow}>
                   <Text style={styles.sectionTitle}>🤝 Friendly Events</Text>
                   <TouchableOpacity style={styles.addBtn} onPress={() => setShowCreateEvent(true)}>
@@ -613,16 +690,26 @@ export default function MyTurfScreen() {
                   </TouchableOpacity>
                 </View>
               )}
-              {friendlyEvents.map((event) => (
+              {nearEventList.map((event) => (
                 <EarnEventCard
                   key={event.id}
                   event={event}
+                  distance={distLabel(event.coord)}
                   registered={false}
                   onOpen={() => router.push({ pathname: '/tournament', params: { id: event.id } })}
                 />
               ))}
             </>
           )
+        )}
+        {tab === 'near' && !loading && unplacedCount > 0 && (
+          <TouchableOpacity style={styles.unplacedBtn} onPress={() => setShowUnplaced((v) => !v)}>
+            <Text style={styles.unplacedText}>
+              {showUnplaced
+                ? 'Hide games with no map location'
+                : `+ ${unplacedCount} game${unplacedCount === 1 ? '' : 's'} with no map location (distance unknown)`}
+            </Text>
+          </TouchableOpacity>
         )}
 
         {/* ── Past: games and events that have started or been played ── */}
@@ -1132,8 +1219,9 @@ function JoinedMatchCard({ match, joining, onPress, onLeave }: {
   );
 }
 
-function OpenMatchCard({ match, isJoined, joining, onPress, onJoin, onLeave }: {
+function OpenMatchCard({ match, distance, isJoined, joining, onPress, onJoin, onLeave }: {
   match: MatchItem;
+  distance?: string;
   isJoined: boolean;
   joining: boolean;
   onPress: () => void;
@@ -1152,6 +1240,7 @@ function OpenMatchCard({ match, isJoined, joining, onPress, onJoin, onLeave }: {
         <View style={{ flex: 1 }}>
           <Text style={styles.matchTitle} numberOfLines={1}>{match.title}</Text>
           <Text style={styles.matchMeta}>{match.players} · {match.date}</Text>
+          {!!distance && <Text style={styles.distanceText}>📍 {distance} away</Text>}
           {eventCategory(match) === 'prize' && <Text style={styles.categoryText}>{categoryLabel(match)}</Text>}
           <View style={styles.slotTrack}>
             <View style={[styles.slotFill, { width: `${pct}%` }]} />
@@ -1202,8 +1291,10 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   match:      'Match',
 };
 
-function EarnEventCard({ event, onOpen, onLeave, registered = true }: {
+function EarnEventCard({ event, onOpen, onLeave, registered = true, distance }: {
   event: Tournament; onOpen: () => void; onLeave?: () => void;
+  /** "2.4 km" — shown on Near me */
+  distance?: string;
   /** false = an event I can still join (Near me): show spots left + "View & join" */
   registered?: boolean;
 }) {
@@ -1224,6 +1315,7 @@ function EarnEventCard({ event, onOpen, onLeave, registered = true }: {
           <Text style={styles.earnMeta}>
             {event.date}{event.location ? `  ·  ${event.location}` : ''}
           </Text>
+          {!!distance && <Text style={styles.distanceText}>📍 {distance} away</Text>}
           <View style={styles.earnFooter}>
             {eventCategory(event) === 'friendly' && <Text style={styles.earnFee}>Free to join</Text>}
             {event.entryFee > 0 && (
@@ -1607,6 +1699,19 @@ const styles = StyleSheet.create({
   earnTypeBadgeText: { fontSize: 11, fontWeight: '700' },
   earnMeta: { color: '#6b7280', fontSize: 12, marginBottom: 6 },
   earnFooter: { flexDirection: 'row', gap: 12 },
+  nearBar: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.93)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12,
+  },
+  nearBarLabel: { fontSize: 13, fontWeight: '700', color: '#374151', marginRight: 2 },
+  nearBarHint: { flex: 1, fontSize: 12, color: '#6b7280', lineHeight: 16 },
+  radiusChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, backgroundColor: '#f3f4f6' },
+  radiusChipActive: { backgroundColor: '#16a34a' },
+  radiusChipText: { fontSize: 12, fontWeight: '700', color: '#374151' },
+  radiusChipTextActive: { color: '#fff' },
+  distanceText: { fontSize: 12, fontWeight: '700', color: '#16a34a', marginTop: 2 },
+  unplacedBtn: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 12 },
+  unplacedText: { color: '#fff', fontSize: 12, fontWeight: '600', textDecorationLine: 'underline', textAlign: 'center' },
   tabBar: {
     flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.93)', borderRadius: 14, padding: 4, gap: 4, marginBottom: 14,
   },

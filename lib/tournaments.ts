@@ -37,6 +37,9 @@ function dbToTournament(row: Record<string, unknown>): Tournament {
     resultNote: (row.result_note as string) ?? null,
     resultSummary: (row.result_summary as string) ?? null,
     category: (row.category as EventCategory) ?? undefined,
+    coord: row.latitude != null && row.longitude != null
+      ? { latitude: Number(row.latitude), longitude: Number(row.longitude) }
+      : null,
   };
 }
 

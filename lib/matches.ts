@@ -27,6 +27,9 @@ function rowToMatchItem(row: Record<string, unknown>): MatchItem {
     category:       (row.category as EventCategory) ?? undefined,
     entryFee:       Number(row.entry_fee ?? 0),
     prizePool:      Number(row.prize_pool ?? 0),
+    coord:          row.latitude != null && row.longitude != null
+      ? { latitude: Number(row.latitude), longitude: Number(row.longitude) }
+      : null,
   };
 }
 

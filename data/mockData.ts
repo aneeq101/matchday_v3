@@ -81,6 +81,7 @@ export interface Tournament {
   resultNote?: string | null;
   resultSummary?: string | null;  // "Aneeq won", "Draw", "Aneeq’s side won"
   category?: EventCategory;       // friendly (no money) or prize money
+  coord?: { latitude: number; longitude: number } | null;  // venue point (Near me distance)
 }
 
 /** 'friendly' = just for fun, no fee or prize; 'prize' = prize money (+ optional entry fee) */
@@ -128,6 +129,7 @@ export interface MatchItem {
   category?: EventCategory;       // friendly game or prize money
   entryFee?: number;              // CAD per player (prize only)
   prizePool?: number;             // CAD (prize only)
+  coord?: { latitude: number; longitude: number } | null;  // venue point (Near me distance)
 }
 
 export interface Conversation {
