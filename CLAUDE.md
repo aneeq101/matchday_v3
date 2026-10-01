@@ -320,6 +320,7 @@ Full plan in `PLAN.md`. Summary:
 | 2026-10-01 | Technical README.md, local SQL replay harness (`lib/db/testing`) | `757a22f` |
 | 2026-10-01 | First-run sports setup (welcome flow), sport editor on Profile | `c17f8f9` |
 | 2026-10-01 | Challenge popups (new + accepted/declined/called off/result), rating requests | `ba743de` |
+| 2026-10-01 | Rating popups (request, new/updated rating, badge), fix for missing rated-you alert | `199b783` |
 
 **SQL status:** everything up to `patch_rating_requests.sql` has been run in Supabase (2026-10-01, verified live). **Pending: `patch_rating_popups.sql`** — until run, rating-request and badge popups work but "X rated you" popups don't appear (old notifications lack `rating_id`).
 
