@@ -392,6 +392,7 @@ Posts with optional media (Storage), likes/comments with trigger-maintained coun
   - **Enforced:** trigger `trg_tournaments_category` checks it on save; new events saved with money but no category become `prize`.
   - **In the app:** `eventCategory()` / `CATEGORY_INFO` in `lib/tournaments.ts`, plus badges and a Friendly / Prize filter in Play to Earn.
   - **Nearby alerts:** single matches alert only when they're `prize`.
+  - **Also on Organize Match and venue bookings:** `matches` and `bookings` have the same `category` / `entry_fee` / `prize_pool` columns and trigger. All three forms use `components/CategoryPicker.tsx`, and `categoryMoney()` validates the input.
 - **Entry rules** (`eventRules()`; DB `trg_tournaments_validate`): knockouts/leagues need ≥ 4 entrants. Tennis/Badminton singles → players; doubles → pairs (2-player teams, the captain signs the pair up); other sports → teams.
 - **Lifecycle:** `active` (sign-ups open) → organiser taps Start → the app shuffles and generates the draw (`lib/bracket.ts`: byes for non-powers of two, round-robin fixtures) → `start_tournament()` saves `tournament_matches` → `in_progress` → `record_match_result()` per match. Knockout winners auto-advance, and a knockout result can't be edited once the next round is played. The event becomes `completed` with `champion_name`.
 - `tournament_matches` has no client write policies; changes only happen through the RPCs.
