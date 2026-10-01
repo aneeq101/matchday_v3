@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../lib/AuthContext';
 import { registerForPush, setupNotificationHandlers } from '../lib/push';
 import { shouldShowWelcome, claimWelcomeOpen } from '../lib/onboarding';
+import ChallengePopup from '../components/ChallengePopup';
 
 function RootNavigator() {
   const { session, loading } = useAuth();
@@ -42,6 +43,10 @@ function RootNavigator() {
     let cleanup = () => {};
     setupNotificationHandlers((data) => {
       if (data.type === 'new_message') router.push('/messages');
+      else if (typeof data.rating_request_id === 'string') router.push({ pathname: '/ratings', params: {
+        kind: String(data.rate_kind ?? 'player'), id: String(data.rate_id ?? ''),
+        name: String(data.rate_name ?? ''), rate: String(data.sport ?? ''),
+      } });
       else if (typeof data.team_id === 'string') router.push({ pathname: '/team', params: { id: data.team_id } });
       else if (typeof data.tournament_id === 'string') router.push({ pathname: '/tournament', params: { id: data.tournament_id } });
       else if (typeof data.challenge_id === 'string') router.push('/challenges');
@@ -52,6 +57,7 @@ function RootNavigator() {
   }, [userId]);
 
   return (
+    <>
     <Stack>
       <Stack.Screen name="(auth)"   options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)"   options={{ headerShown: false }} />
@@ -78,6 +84,9 @@ function RootNavigator() {
       <Stack.Screen name="welcome" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
     </Stack>
+    {/* Incoming challenges pop up over any screen while signed in */}
+    {userId && <ChallengePopup userId={userId} />}
+    </>
   );
 }
 

@@ -32,12 +32,18 @@ export async function setupNotificationHandlers(onTap: (data: Record<string, unk
     const Notifications = await import('expo-notifications');
     if (!handlerSet) {
       Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowBanner: true,
-          shouldShowList: true,
-          shouldPlaySound: true,
-          shouldSetBadge: false,
-        }),
+        handleNotification: async (n) => {
+          // App is open: new challenges and challenge updates already appear as
+          // in-app popups (components/ChallengePopup.tsx), so don't also show a banner.
+          const type = (n.request.content.data as { type?: string } | undefined)?.type;
+          const inAppPopup = type === 'challenge' || type === 'challenge_update';
+          return {
+            shouldShowBanner: !inAppPopup,
+            shouldShowList: true,
+            shouldPlaySound: !inAppPopup,
+            shouldSetBadge: false,
+          };
+        },
       });
       handlerSet = true;
     }

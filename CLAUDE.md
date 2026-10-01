@@ -75,6 +75,8 @@ components/
   BracketView.tsx          # Knockout bracket drawing with connector lines
   ChallengeModal.tsx       # New challenge sheet
   NotifBell.tsx            # Bell icon with unread count
+  ChallengePopup.tsx       # In-app popups: new challenges + updates (accepted/declined/called off/result); Realtime + on-foreground check
+  AskRatingsModal.tsx      # Ask people you've played with to rate you / your team
   RatingsSection.tsx       # Ratings summary, badge progress, skill bars, reviews (profile modal, team page, ratings screen)
   RateModal.tsx            # Rate a player/team: overall 1–10, per-skill 1–10, conduct stars, review
   BadgeChip.tsx            # Bronze/Silver/Gold/Platinum/Diamond pill
@@ -90,10 +92,11 @@ lib/                       # Service layer — screens never call Supabase direc
   challenges.ts            # challenge RPC wrappers
   ratingRules.ts           # pure: 1–10 level scale, NTRP map, skills per sport (player + team), badge tiers/rules
   ratings.ts               # rating_summary / submit_rating RPC wrappers, ratings list, delete
+  ratingRequests.ts        # request_ratings / suggestions / decline wrappers
   sportProfile.ts          # pure: profile sports, skill levels, per-sport fields, self-rating skills, summarizeDetails()
   onboarding.ts            # when to show the welcome flow (user_metadata.onboarding_done)
   sportRules.ts            # sport formats, booking limits, event entry rules (min 4, singles/doubles/teams), TEAM_FORMATS squad sizes
-  db/                      # SQL migrations / patches (all run in Supabase as of 2026-10-01)
+  db/                      # SQL migrations / patches (all run in Supabase except patch_challenge_popup.sql + patch_rating_requests.sql)
 
 data/
   mockData.ts              # All types + mock/demo data + venue helpers
@@ -288,6 +291,13 @@ Full plan in `PLAN.md`. Summary:
 - Stored in `profile_sports.skill` + `details` jsonb (labels as keys, multi-select joined with ", "). Self-ratings are only shown as a "Strengths: …" line (`summarizeDetails`) — they don't affect ratings/badges.
 - Profile tab: tap a sport card to edit it (same editor), long-press to remove; Add Sport sheet uses the same editor (old NTRP/Role-only fields replaced; old saved details still display).
 
+## Challenge popup + rating requests (2026-10-01) — `lib/db/patch_challenge_popup.sql` + `lib/db/patch_rating_requests.sql` ⚠️ NOT YET RUN in Supabase
+
+- **Challenge popup** (`components/ChallengePopup.tsx`, mounted in `app/_layout.tsx` while signed in): Realtime INSERT on `challenges` (filter `opponent_user_id`) + check on start/foreground for pending, unseen (`opponent_seen_at` null), last-7-days challenges. Accept / Decline (confirm) / Decide later (`mark_challenge_seen`); accepted → Message challenger / My challenges. Queue for several. `respond_challenge` now also sets `opponent_seen_at`. **Update popups** for the other side when a challenge is accepted / declined / called off / given a result: driven by unread `challenge_update` notifications (Realtime on `notifications` + check on start/foreground, last 7 days), closing marks them read; updates on one challenge collapse to its latest state; demo auto-accepts skipped (`isDemoOpponent`). Foreground push banners suppressed for `challenge` + `challenge_update` (`lib/push.ts`). `challenges` and `notifications` added to `supabase_realtime`.
+- **Rating requests:** `rating_requests` table; `request_ratings()` (subject = yourself or a team you captain; skips self, demo, own team members, anyone asked in 30 days / pending; ≤10 per send, ≤20/day), `rating_request_suggestions()` (played together → teammates → follows), `decline_rating_request()`, trigger `trg_ratings_complete_requests` marks a request done when that person rates. Notification `rating_request` → `/ratings?kind&id&name&rate=<sport>` (banner + auto-open RateModal). Entry points: Profile tap sport → "Ask players to rate my …", Ratings & Badges screen, team page (captain).
+- Profile tab: tapping a sport card already opens Edit (level, positions, self-rating) since `c17f8f9`.
+- SQL tested with `lib/db/testing/replay.sh` (incl. re-run); app type-checks and bundles for web + Android; not clicked through.
+
 ## Progress log
 
 | Date | What was done | Commit |
@@ -301,7 +311,7 @@ Full plan in `PLAN.md`. Summary:
 | 2026-10-01 | Technical README.md, local SQL replay harness (`lib/db/testing`) | `757a22f` |
 | 2026-10-01 | First-run sports setup (welcome flow), sport editor on Profile | `c17f8f9` |
 
-**SQL status:** every file in `lib/db/` has been run in Supabase (latest: `patch_team_sizes_event_alerts.sql`, 2026-10-01 — verified live: all teams have formats, all 8 events have coordinates). Nothing pending.
+**SQL status:** everything up to `patch_team_sizes_event_alerts.sql` has been run in Supabase (2026-10-01, verified live). **Pending: `patch_challenge_popup.sql`, then `patch_rating_requests.sql`** — until run, the challenge popup and rating requests fail quietly (no popup / "Something went wrong").
 
 ## Your to-do list (things only the owner can do)
 

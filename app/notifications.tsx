@@ -51,7 +51,12 @@ export default function NotificationsScreen() {
       markRead(n.id);
     }
     // Jump to what the notification is about
-    if (typeof n.data.team_id === 'string') {
+    if (typeof n.data.rating_request_id === 'string') {
+      router.push({ pathname: '/ratings', params: {
+        kind: String(n.data.rate_kind ?? 'player'), id: String(n.data.rate_id ?? ''),
+        name: String(n.data.rate_name ?? ''), rate: String(n.data.sport ?? ''),
+      } });
+    } else if (typeof n.data.team_id === 'string') {
       router.push({ pathname: '/team', params: { id: n.data.team_id } });
     } else if (typeof n.data.tournament_id === 'string') {
       router.push({ pathname: '/tournament', params: { id: n.data.tournament_id } });

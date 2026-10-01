@@ -129,3 +129,57 @@ export async function recordChallengeResult(
   });
   return error ? { ok: false, error: friendlyError(error.message) } : { ok: true };
 }
+
+// ── Incoming-challenge popup (components/ChallengePopup.tsx) ──
+// A challenge pops up for the person who has to answer it while it is
+// pending and they haven't seen it yet (opponent_seen_at, see
+// lib/db/patch_challenge_popup.sql).
+
+/** Pending challenges waiting for this user that haven't popped up yet (newest first, last 7 days). */
+export async function fetchUnseenIncoming(userId: string): Promise<Challenge[]> {
+  const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('challenges')
+    .select('*')
+    .eq('opponent_user_id', userId)
+    .eq('status', 'pending')
+    .is('opponent_seen_at', null)
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(10);
+  if (error || !data) return [];
+  return data.map((r) => rowToChallenge(r as Record<string, unknown>));
+}
+
+/** "Decide later": stop it popping up again (it stays in Challenges). */
+export async function markChallengeSeen(id: string): Promise<void> {
+  await supabase.rpc('mark_challenge_seen', { p_id: id });
+}
+
+/** Calls onNew whenever a new challenge for this user is created. Returns an unsubscribe function. */
+export function subscribeToIncomingChallenges(userId: string, onNew: (c: Challenge) => void): () => void {
+  const channel = supabase
+    .channel(`incoming-challenges:${userId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'challenges', filter: `opponent_user_id=eq.${userId}` },
+      (payload) => {
+        const c = rowToChallenge(payload.new as Record<string, unknown>);
+        if (c.status === 'pending') onNew(c);
+      },
+    )
+    .subscribe();
+  return () => { supabase.removeChannel(channel); };
+}
+
+export async function fetchChallenge(id: string): Promise<Challenge | null> {
+  const { data, error } = await supabase.from('challenges').select('*').eq('id', id).maybeSingle();
+  if (error || !data) return null;
+  return rowToChallenge(data as Record<string, unknown>);
+}
+
+/** Demo opponents accept instantly (the Challenges screen already says so) — no popup needed. */
+export async function isDemoOpponent(c: Challenge): Promise<boolean> {
+  const { data } = await supabase.from('profiles').select('is_demo').eq('id', c.opponentUserId).maybeSingle();
+  return !!(data as { is_demo?: boolean } | null)?.is_demo;
+}

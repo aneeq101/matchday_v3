@@ -26,11 +26,19 @@ interface Props {
   full?: boolean;
   /** Lets the parent show badges in its own header. */
   onSummary?: (s: RatingSummary[]) => void;
+  /** Your own profile / your team: show "Ask for ratings". */
+  onAsk?: () => void;
+  /** Open the rating sheet straight away for this sport (from a rating request). */
+  autoRateSport?: string;
+  /** Bump to open the sheet again for the same sport. */
+  autoRateKey?: number;
+  /** Called after this user saves a rating. */
+  onRated?: () => void;
 }
 
 const PREVIEW_REVIEWS = 2;
 
-export default function RatingsSection({ kind, id, name, sports, canRate, full, onSummary }: Props) {
+export default function RatingsSection({ kind, id, name, sports, canRate, full, onSummary, onAsk, autoRateSport, autoRateKey, onRated }: Props) {
   const router = useRouter();
   const { user } = useAuth();
   const [summary, setSummary]   = useState<RatingSummary[]>([]);
@@ -53,6 +61,10 @@ export default function RatingsSection({ kind, id, name, sports, canRate, full, 
 
   useEffect(() => { setLoading(true); setSport(''); load(); }, [load]);
 
+  useEffect(() => {
+    if (autoRateSport && canRate) setShowRate(true);
+  }, [autoRateSport, autoRateKey, canRate]);
+
   const current = summary.find((s) => s.sport === sport);
   const sportRatings = ratings.filter((r) => r.sport === sport);
   const reviews = sportRatings.filter((r) => r.review || full);
@@ -61,7 +73,8 @@ export default function RatingsSection({ kind, id, name, sports, canRate, full, 
   // Rating sheet: player's own sports first; fall back to every sport we have skills for
   const rateSports = (() => {
     const own = sports.filter((s) => RATEABLE_SPORTS.includes(s));
-    return own.length ? own : kind === 'team' ? sports : RATEABLE_SPORTS;
+    const list = own.length ? own : kind === 'team' ? sports : RATEABLE_SPORTS;
+    return autoRateSport && !list.includes(autoRateSport) ? [autoRateSport, ...list] : list;
   })();
 
   const confirmDelete = async () => {
@@ -81,6 +94,12 @@ export default function RatingsSection({ kind, id, name, sports, canRate, full, 
           <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
         </TouchableOpacity>
         <View style={{ flex: 1 }} />
+        {onAsk && (
+          <TouchableOpacity style={styles.askBtn} onPress={onAsk}>
+            <Ionicons name="paper-plane-outline" size={14} color="#16a34a" />
+            <Text style={styles.askBtnText}>Ask for ratings</Text>
+          </TouchableOpacity>
+        )}
         {canRate && (
           <TouchableOpacity style={styles.rateBtn} onPress={() => setShowRate(true)}>
             <Ionicons name="star" size={14} color="#fff" />
@@ -95,6 +114,9 @@ export default function RatingsSection({ kind, id, name, sports, canRate, full, 
         <View style={styles.emptyBox}>
           <Ionicons name="star-half-outline" size={30} color="#d1d5db" />
           <Text style={styles.emptyText}>No ratings yet</Text>
+          {onAsk && (
+            <Text style={styles.emptySub}>Ask people you’ve played with to rate {kind === 'team' ? 'your team' : 'your game'} — it builds trust and earns badges.</Text>
+          )}
           {canRate && (
             <Text style={styles.emptySub}>Played with or against {name}? Be the first to rate {kind === 'team' ? 'them' : 'their game'}.</Text>
           )}
@@ -154,9 +176,9 @@ export default function RatingsSection({ kind, id, name, sports, canRate, full, 
           targetId={id}
           targetName={name}
           sports={rateSports}
-          initialSport={sport || undefined}
+          initialSport={autoRateSport || sport || undefined}
           onClose={() => setShowRate(false)}
-          onSaved={load}
+          onSaved={() => { load(); onRated?.(); }}
         />
       )}
 
@@ -328,6 +350,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#16a34a', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14,
   },
   rateBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  askBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderWidth: 1, borderColor: '#bbf7d0', backgroundColor: '#f0fdf4',
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14,
+  },
+  askBtnText: { color: '#16a34a', fontWeight: '700', fontSize: 13 },
   emptyBox: {
     alignItems: 'center', gap: 6, paddingVertical: 18, paddingHorizontal: 16,
     backgroundColor: '#f9fafb', borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb',

@@ -28,6 +28,7 @@ import { SPORT_STAT_FIELDS } from '../../lib/sportStats';
 const FIELD_IMAGE = 'https://image.pollinations.ai/prompt/close%20up%20ground%20level%20shot%20real%20football%20pitch%20grass%20sharp%20green%20grass%20blades%20foreground%20white%20painted%20center%20circle%20line%20shallow%20depth%20of%20field%20bokeh%20golden%20hour%20lighting%20photorealistic%20ultra%20detailed%20grass%20texture%20dew%20drops%20cinematic%20dark%20moody%20tone%20portrait%20no%20people?width=1080&height=1920&seed=42&nologo=true&model=flux';
 import { useRouter, useFocusEffect } from 'expo-router';
 import SportDetailsEditor from '../../components/SportDetailsEditor';
+import AskRatingsModal from '../../components/AskRatingsModal';
 import { summarizeDetails } from '../../lib/sportProfile';
 
 const SKILL_COLORS: Record<string, string> = {
@@ -81,6 +82,7 @@ export default function ProfileScreen() {
   const [newSkill, setNewSkill] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Intermediate');
   const [newDetails, setNewDetails] = useState<Record<string, string>>({});
   const [editingSport, setEditingSport] = useState(false);   // sheet opened by tapping an existing sport
+  const [askSport, setAskSport] = useState<string | null>(null);
 
   // Record Stats modal
   const [showRecordStats, setShowRecordStats] = useState(false);
@@ -770,6 +772,20 @@ export default function ProfileScreen() {
               />
               <View style={{ height: 18 }} />
 
+              {editingSport && (
+                <TouchableOpacity
+                  style={styles.askRatingsBtn}
+                  onPress={() => { setShowAddSport(false); setAskSport(newSport); }}
+                >
+                  <Ionicons name="paper-plane-outline" size={18} color="#16a34a" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.askRatingsTitle}>Ask players to rate my {newSport}</Text>
+                    <Text style={styles.askRatingsSub}>Ratings from people you’ve played earn badges and build trust</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#16a34a" />
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity style={styles.saveBtn} onPress={handleAddSport} disabled={addingSport}>
                 {addingSport
                   ? <ActivityIndicator size="small" color="#fff" />
@@ -782,6 +798,17 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+      {user && (
+        <AskRatingsModal
+          visible={!!askSport}
+          kind="player"
+          subjectId={user.id}
+          subjectName={displayName}
+          sports={mySports.map((s) => s.name)}
+          initialSport={askSport ?? undefined}
+          onClose={() => setAskSport(null)}
+        />
+      )}
     </ImageBackground>
   );
 }
@@ -993,6 +1020,12 @@ const styles = StyleSheet.create({
   },
   logoutConfirmText: { color: '#fff', fontWeight: '700' },
   longPressHint: { color: '#9ca3af', fontSize: 11, textAlign: 'center', marginTop: 4 },
+  askRatingsBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14,
+    backgroundColor: '#f0fdf4', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#bbf7d0',
+  },
+  askRatingsTitle: { fontSize: 14, fontWeight: '700', color: '#166534' },
+  askRatingsSub: { fontSize: 12, color: '#4b5563', marginTop: 1 },
   setupCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10,
     backgroundColor: '#f0fdf4', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: '#bbf7d0',

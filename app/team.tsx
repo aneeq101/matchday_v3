@@ -18,6 +18,7 @@ import { createNotification } from '../lib/notifications';
 import TeamFormModal, { TEAM_SPORT_EMOJI } from '../components/TeamFormModal';
 import type { Player } from '../data/mockData';
 import RatingsSection from '../components/RatingsSection';
+import AskRatingsModal from '../components/AskRatingsModal';
 import BadgeChip from '../components/BadgeChip';
 import type { RatingSummary } from '../lib/ratings';
 
@@ -42,6 +43,7 @@ export default function TeamScreen() {
   const [addingId, setAddingId]     = useState<string | null>(null);
   const [profile, setProfile]       = useState<Player | null>(null);
   const [ratingSummary, setRatingSummary] = useState<RatingSummary[]>([]);
+  const [showAsk, setShowAsk] = useState(false);
 
   const openProfile = async (userId: string) => {
     if (userId === user?.id) return;
@@ -283,6 +285,7 @@ export default function TeamScreen() {
             sports={[team.sport]}
             canRate={!!user && !isMember}
             onSummary={setRatingSummary}
+            onAsk={isCaptain ? () => setShowAsk(true) : undefined}
           />
         </View>
 
@@ -410,6 +413,17 @@ export default function TeamScreen() {
           </View>
         </View>
       </Modal>
+
+      {isCaptain && (
+        <AskRatingsModal
+          visible={showAsk}
+          kind="team"
+          subjectId={team.id}
+          subjectName={team.name}
+          sports={[team.sport]}
+          onClose={() => setShowAsk(false)}
+        />
+      )}
 
       <PlayerProfileModal
         player={profile}
